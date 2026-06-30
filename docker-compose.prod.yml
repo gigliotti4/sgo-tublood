@@ -1,0 +1,23 @@
+services:
+  app:
+    build:
+      context: .
+      target: app
+    restart: unless-stopped
+    # Sin volume mounts en prod: el código está copiado en la imagen
+
+  nginx:
+    restart: unless-stopped
+
+  db:
+    restart: unless-stopped
+
+  queue:
+    build:
+      context: .
+      target: app
+    restart: always
+
+  # Vite no corre en producción: los assets están compilados en la imagen
+  vite:
+    profiles: ["dev-only"]  # excluye este servicio en prod
