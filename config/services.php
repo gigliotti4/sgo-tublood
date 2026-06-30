@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    'rpsistemas' => [
+        'base_url'  => env('RPSISTEMAS_API_BASE_URL', 'https://api.comprobantesonline.com.ar/v2'),
+        'token'     => env('RPSISTEMAS_API_TOKEN'),
+        'page_size' => (int) env('RPSISTEMAS_API_PAGE_SIZE', 100),
+    ],
+
 ];

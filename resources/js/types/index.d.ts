@@ -27,6 +27,29 @@ export interface Permission {
     name: string
 }
 
+export interface Cliente {
+    id: number
+    numero: string
+    razon_social: string
+    nombre_fantasia: string | null
+    cuit: string | null
+    codigo_iva: string | null
+    descripcion_iva: string | null
+    telefono: string | null
+    mail: string | null
+    contacto: string | null
+    domicilio: string | null
+    localidad: string | null
+    codigo_provincia: string | null
+    descripcion_provincia: string | null
+    porcen_descuen: string | null
+    usuario_web: string | null
+    codigo_vendedor: string | null
+    nombre_vendedor: string | null
+    codigo_postal: string | null
+    synced_at: string | null
+}
+
 export interface PaginatedData<T> {
     data: T[]
     current_page: number
