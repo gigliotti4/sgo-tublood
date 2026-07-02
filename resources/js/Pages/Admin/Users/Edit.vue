@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { Head, Link, useForm } from '@inertiajs/vue3'
+import Input from '@/Components/Input.vue'
+import Button from '@/Components/Button.vue'
 
 interface RoleOption { id: number; name: string }
 interface UserData { id: number; name: string; email: string; roles: { name: string }[] }
@@ -22,36 +24,24 @@ const submit = () => form.put(route('users.update', props.user.id))
 
     <AppLayout>
         <div class="flex items-center gap-3 mb-6">
-            <Link :href="route('users.index')" class="text-gray-400 hover:text-gray-600">← Volver</Link>
-            <h1 class="text-2xl font-bold text-gray-800">Editar usuario</h1>
+            <Link :href="route('users.index')" class="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">← Volver</Link>
+            <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-100">Editar usuario</h1>
         </div>
 
-        <div class="bg-white rounded-xl shadow p-6 max-w-lg">
+        <div class="bg-white dark:bg-slate-800 rounded-xl shadow p-6 max-w-lg">
             <form @submit.prevent="submit" class="space-y-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
-                    <input v-model="form.name" type="text" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
-                    <p v-if="form.errors.name" class="text-red-500 text-xs mt-1">{{ form.errors.name }}</p>
-                </div>
+                <Input v-model="form.name" label="Nombre" :error="form.errors.name" />
+                <Input v-model="form.email" type="email" label="Email" :error="form.errors.email" />
+                <Input v-model="form.password" type="password" :error="form.errors.password">
+                    <template #label>
+                        Nueva contraseña <span class="text-gray-400 dark:text-gray-500 font-normal">(dejar vacío para no cambiar)</span>
+                    </template>
+                </Input>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                    <input v-model="form.email" type="email" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
-                    <p v-if="form.errors.email" class="text-red-500 text-xs mt-1">{{ form.errors.email }}</p>
-                </div>
-
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">
-                        Nueva contraseña <span class="text-gray-400 font-normal">(dejar vacío para no cambiar)</span>
-                    </label>
-                    <input v-model="form.password" type="password" class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
-                    <p v-if="form.errors.password" class="text-red-500 text-xs mt-1">{{ form.errors.password }}</p>
-                </div>
-
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Roles</label>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Roles</label>
                     <div class="space-y-1">
-                        <label v-for="role in roles" :key="role.id" class="flex items-center gap-2 text-sm">
+                        <label v-for="role in roles" :key="role.id" class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                             <input type="checkbox" :value="role.name" v-model="form.roles" class="rounded" />
                             {{ role.name }}
                         </label>
@@ -59,14 +49,8 @@ const submit = () => form.put(route('users.update', props.user.id))
                 </div>
 
                 <div class="flex gap-3 pt-2">
-                    <button
-                        type="submit"
-                        :disabled="form.processing"
-                        class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-indigo-700 disabled:opacity-50"
-                    >
-                        Guardar cambios
-                    </button>
-                    <Link :href="route('users.index')" class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">
+                    <Button type="submit" variant="primary" :disabled="form.processing">Guardar cambios</Button>
+                    <Link :href="route('users.index')" class="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">
                         Cancelar
                     </Link>
                 </div>

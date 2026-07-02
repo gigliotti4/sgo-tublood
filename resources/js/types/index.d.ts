@@ -50,6 +50,23 @@ export interface Cliente {
     synced_at: string | null
 }
 
+export interface Observacion {
+    id: number
+    numero: string
+    tipo: string
+    estado: string
+    origen: string
+    titulo: string
+    descripcion: string
+    contacto_nombre: string
+    contacto_email: string
+    contacto_telefono: string | null
+    responsable_id: number | null
+    responsable: { id: number; name: string } | null
+    cliente: { id: number; numero: string; razon_social: string; mail: string | null; telefono: string | null } | null
+    created_at: string
+}
+
 export interface PaginatedData<T> {
     data: T[]
     current_page: number

@@ -1,9 +1,12 @@
 <?php
 
-use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Admin\ClienteController;
-use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Admin\ObservacionController as AdminObservacionController;
 use App\Http\Controllers\Admin\RoleController;
+use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Auth\AuthenticatedSessionController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\Portal\ObservacionController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', fn () => redirect()->route('login'));
@@ -13,10 +16,16 @@ Route::middleware('guest')->group(function () {
     Route::post('/login', [AuthenticatedSessionController::class, 'store']);
 });
 
+Route::controller(ObservacionController::class)->group(function () {
+    Route::get('/cargar-observacion', 'create')->name('observaciones.public.create');
+    Route::post('/cargar-observacion', 'store')->name('observaciones.public.store');
+    Route::get('/observacion-enviada', 'confirmacion')->name('observaciones.public.confirmacion');
+});
+
 Route::middleware(['auth'])->group(function () {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
 
-    Route::get('/dashboard', fn () => inertia('Dashboard'))->name('dashboard');
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     // Usuarios
     Route::middleware('can:users.view')->group(function () {
@@ -40,6 +49,14 @@ Route::middleware(['auth'])->group(function () {
     });
     Route::middleware('can:clientes.sync')->group(function () {
         Route::post('/clientes/sync', [ClienteController::class, 'sync'])->name('clientes.sync');
+    });
+
+    // Observaciones
+    Route::middleware('can:observaciones.view')->group(function () {
+        Route::get('/observaciones', [AdminObservacionController::class, 'index'])->name('observaciones.index');
+    });
+    Route::middleware('can:observaciones.edit')->group(function () {
+        Route::put('/observaciones/{observacion}', [AdminObservacionController::class, 'update'])->name('observaciones.update');
     });
 
     // Roles

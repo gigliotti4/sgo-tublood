@@ -3,9 +3,11 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Link, router, usePage } from '@inertiajs/vue3'
 import { route } from 'ziggy-js'
 import { usePermissions } from '@/composables/usePermissions'
+import { useDarkMode } from '@/composables/useDarkMode'
 import type { PageProps } from '@/types'
 
 const { user, hasPermission } = usePermissions()
+const { isDark, toggleTheme } = useDarkMode()
 const page = usePage<PageProps>()
 
 const sidebarCollapsed = ref(false)
@@ -33,6 +35,7 @@ const menuSections: MenuSection[] = [
     {
         title: 'Gestión',
         items: [
+            { label: 'Observaciones', route: 'observaciones.index', permission: 'observaciones.view', icon: 'document' },
             { label: 'Clientes', route: 'clientes.index', permission: 'clientes.view', icon: 'building' },
         ]
     },
@@ -71,16 +74,19 @@ const icons: Record<string, string> = {
     users: 'M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z',
     shield: 'M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z',
     building: 'M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008z',
+    document: 'M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m3.75 9h3.75M12 15.75h5.25M8.25 9h1.5m-1.5 3.75h1.5m-1.5 3.75h1.5M6.75 3h6.879a2.25 2.25 0 011.591.659l4.121 4.121a2.25 2.25 0 01.659 1.591V19.5a2.25 2.25 0 01-2.25 2.25H6.75a2.25 2.25 0 01-2.25-2.25V5.25A2.25 2.25 0 016.75 3z',
     bell: 'M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0',
     logout: 'M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9',
     chevron: 'M8.25 4.5l7.5 7.5-7.5 7.5',
     menu: 'M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5',
     x: 'M6 18L18 6M6 6l12 12',
+    sun: 'M12 3v1.5m0 15V21m9-9h-1.5M4.5 12H3m15.364 6.364l-1.06-1.06M6.696 6.696l-1.06-1.06m12.728 0l-1.06 1.06M6.696 17.304l-1.06 1.06M16.5 12a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z',
+    moon: 'M21.752 15.002A9.72 9.72 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z',
 }
 </script>
 
 <template>
-    <div class="min-h-screen bg-slate-50 flex">
+    <div class="min-h-screen bg-slate-50 dark:bg-slate-900 flex">
 
         <!-- Overlay mobile -->
         <Transition name="fade">
@@ -188,7 +194,7 @@ const icons: Record<string, string> = {
 
             <!-- Collapse toggle (desktop) -->
             <button
-                class="hidden lg:flex absolute -right-3 top-20 w-6 h-6 rounded-full bg-white shadow-md border border-slate-200 items-center justify-center text-slate-500 hover:text-slate-700 transition-colors"
+                class="hidden lg:flex absolute -right-3 top-20 w-6 h-6 rounded-full bg-white dark:bg-slate-700 shadow-md border border-slate-200 dark:border-slate-600 items-center justify-center text-slate-500 dark:text-slate-300 hover:text-slate-700 dark:hover:text-white transition-colors"
                 @click="sidebarCollapsed = !sidebarCollapsed"
             >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3 h-3 transition-transform" :class="sidebarCollapsed ? 'rotate-0' : 'rotate-180'">
@@ -203,10 +209,10 @@ const icons: Record<string, string> = {
             :class="sidebarCollapsed ? 'lg:pl-16' : 'lg:pl-64'"
         >
             <!-- Header -->
-            <header class="sticky top-0 z-20 h-16 bg-white border-b border-slate-200 flex items-center gap-4 px-4 lg:px-6 shrink-0">
+            <header class="sticky top-0 z-20 h-16 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center gap-4 px-4 lg:px-6 shrink-0">
                 <!-- Mobile toggle -->
                 <button
-                    class="lg:hidden text-slate-500 hover:text-slate-700"
+                    class="lg:hidden text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                     @click="mobileSidebarOpen = !mobileSidebarOpen"
                 >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
@@ -216,7 +222,7 @@ const icons: Record<string, string> = {
 
                 <!-- Page title from Inertia -->
                 <div class="flex-1">
-                    <h1 class="text-sm font-semibold text-slate-800">
+                    <h1 class="text-sm font-semibold text-slate-800 dark:text-slate-100">
                         {{ page.props.auth.user ? 'Panel Administrativo' : '' }}
                     </h1>
                 </div>
@@ -225,15 +231,29 @@ const icons: Record<string, string> = {
                 <Transition name="fade">
                     <span
                         v-if="page.props.flash.success"
-                        class="hidden sm:inline-flex items-center gap-1.5 text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-full"
+                        class="hidden sm:inline-flex items-center gap-1.5 text-xs bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 rounded-full"
                     >
                         <svg class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd" /></svg>
                         {{ page.props.flash.success }}
                     </span>
                 </Transition>
 
+                <!-- Dark mode toggle -->
+                <button
+                    class="text-slate-400 dark:text-slate-300 hover:text-slate-600 dark:hover:text-white transition-colors"
+                    :title="isDark ? 'Modo claro' : 'Modo oscuro'"
+                    @click="toggleTheme"
+                >
+                    <svg v-if="isDark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" class="w-5 h-5">
+                        <path stroke-linecap="round" stroke-linejoin="round" :d="icons.sun" />
+                    </svg>
+                    <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" class="w-5 h-5">
+                        <path stroke-linecap="round" stroke-linejoin="round" :d="icons.moon" />
+                    </svg>
+                </button>
+
                 <!-- Notification bell -->
-                <button class="relative text-slate-400 hover:text-slate-600 transition-colors">
+                <button class="relative text-slate-400 dark:text-slate-300 hover:text-slate-600 dark:hover:text-white transition-colors">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" class="w-5 h-5">
                         <path stroke-linecap="round" stroke-linejoin="round" :d="icons.bell" />
                     </svg>
@@ -245,15 +265,15 @@ const icons: Record<string, string> = {
                         {{ user?.name?.charAt(0)?.toUpperCase() ?? 'U' }}
                     </div>
                     <div class="hidden sm:block">
-                        <p class="text-xs font-semibold text-slate-700 leading-tight">{{ user?.name }}</p>
-                        <p class="text-[11px] text-slate-400 leading-tight">{{ user?.roles[0] ?? '' }}</p>
+                        <p class="text-xs font-semibold text-slate-700 dark:text-slate-200 leading-tight">{{ user?.name }}</p>
+                        <p class="text-[11px] text-slate-400 dark:text-slate-500 leading-tight">{{ user?.roles[0] ?? '' }}</p>
                     </div>
                 </div>
             </header>
 
             <!-- Flash error banner -->
             <Transition name="slide-down">
-                <div v-if="page.props.flash.error" class="bg-red-50 border-b border-red-200 px-6 py-3 flex items-center gap-2 text-sm text-red-700">
+                <div v-if="page.props.flash.error" class="bg-red-50 dark:bg-red-900/30 border-b border-red-200 dark:border-red-800 px-6 py-3 flex items-center gap-2 text-sm text-red-700 dark:text-red-300">
                     <svg class="w-4 h-4 shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clip-rule="evenodd" /></svg>
                     {{ page.props.flash.error }}
                 </div>

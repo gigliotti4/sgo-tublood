@@ -1,195 +1,234 @@
 <script setup lang="ts">
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { Head } from '@inertiajs/vue3'
-import { ref } from 'vue'
-import MetricCard from '@/Components/Dashboard/MetricCard.vue'
-import QuickActionCard from '@/Components/Dashboard/QuickActionCard.vue'
-import RecentActivity from '@/Components/Dashboard/RecentActivity.vue'
-import AlertPanel from '@/Components/Dashboard/AlertPanel.vue'
-import ChartCard from '@/Components/Dashboard/ChartCard.vue'
-import { usePermissions } from '@/composables/usePermissions'
-import type { Alert } from '@/Components/Dashboard/AlertPanel.vue'
-import type { Activity } from '@/Components/Dashboard/RecentActivity.vue'
 import { route } from 'ziggy-js'
+import Badge from '@/Components/Badge.vue'
+import Button from '@/Components/Button.vue'
 
-const { hasPermission } = usePermissions()
-
-// ── Datos mock — reemplazar con props desde el controlador ──────────────────
-
-const metrics = [
-    {
-        title: 'Total Usuarios',
-        value: '128',
-        change: 12,
-        subtitle: 'vs mes anterior',
-        icon: 'users',
-        color: 'primary' as const,
-        sparkline: [40, 55, 48, 70, 62, 85, 80],
-    },
-    {
-        title: 'Roles Activos',
-        value: '5',
-        change: 0,
-        subtitle: 'sin cambios',
-        icon: 'shield',
-        color: 'info' as const,
-        sparkline: [3, 3, 4, 4, 5, 5, 5],
-    },
-    {
-        title: 'Permisos',
-        value: '24',
-        change: 4,
-        subtitle: 'nuevos este mes',
-        icon: 'key',
-        color: 'success' as const,
-        sparkline: [18, 18, 20, 20, 22, 22, 24],
-    },
-    {
-        title: 'Sesiones Hoy',
-        value: '37',
-        change: -8,
-        subtitle: 'vs ayer',
-        icon: 'lightning',
-        color: 'warning' as const,
-        sparkline: [50, 40, 35, 45, 42, 38, 37],
-    },
-]
-
-const alerts: Alert[] = [
-    {
-        id: 1,
-        type: 'warning',
-        title: 'Caché pendiente de limpiar',
-        message: 'El caché de configuración tiene más de 7 días. Ejecutá php artisan optimize:clear.',
-        dismissible: true,
-    },
-    {
-        id: 2,
-        type: 'info',
-        title: 'Sistema actualizado',
-        message: 'Se actualizó correctamente a la versión 1.0.0 el 26/06/2026.',
-        dismissible: true,
-    },
-]
-
-const chartData = {
-    labels: ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'],
-    datasets: [
-        { label: 'Accesos', data: [22, 35, 28, 45, 40, 18, 12] },
-    ],
+interface EstadoCount {
+    estado: string
+    label: string
+    count: number
 }
 
-const activities: Activity[] = [
-    { id: 1, user: 'Super Admin',   action: 'creó el usuario',    target: 'juan@empresa.com',   time: 'hace 5 min',  type: 'create' },
-    { id: 2, user: 'Super Admin',   action: 'editó el rol',       target: 'Admin',              time: 'hace 18 min', type: 'update' },
-    { id: 3, user: 'María López',   action: 'inició sesión',      target: '',                   time: 'hace 32 min', type: 'login'  },
-    { id: 4, user: 'Carlos Ruiz',   action: 'eliminó el usuario', target: 'test@test.com',      time: 'hace 1 h',   type: 'delete' },
-    { id: 5, user: 'Super Admin',   action: 'asignó el permiso',  target: 'users.edit → Admin', time: 'hace 2 h',   type: 'update' },
-    { id: 6, user: 'Ana Gómez',     action: 'inició sesión',      target: '',                   time: 'hace 3 h',   type: 'login'  },
-]
+interface UltimaObservacion {
+    id: number
+    numero: string
+    tipo: string
+    estado: string
+    titulo: string
+    created_at: string
+}
 
-const loading = ref(false)
+const props = defineProps<{
+    stats: {
+        total: number
+        abiertas: number
+        resueltas: number
+        asignadasAMi: number
+        nc: number
+        ncAbiertas: number
+    }
+    kpis: {
+        tiempoSla: number | null
+        tecnovigilancia: number
+        critica: number
+        sinClasificar: number
+    }
+    porEstado: EstadoCount[]
+    porSector: { sector: string; count: number }[]
+    asignadas: UltimaObservacion[]
+    ultimas: UltimaObservacion[]
+}>()
 
-// ── Acciones rápidas según permisos ────────────────────────────────────────
-const quickActions = [
-    {
-        title: 'Nuevo usuario',
-        description: 'Crear y asignar roles a un nuevo miembro',
-        icon: 'user-plus',
-        href: route('users.create'),
-        color: 'primary' as const,
-        permission: 'users.create',
-    },
-    {
-        title: 'Gestionar roles',
-        description: 'Editar permisos de los roles existentes',
-        icon: 'shield',
-        href: route('roles.index'),
-        color: 'info' as const,
-        permission: 'roles.view',
-    },
-    {
-        title: 'Ver usuarios',
-        description: 'Listado completo de usuarios del sistema',
-        icon: 'users',
-        href: route('users.index'),
-        color: 'success' as const,
-        permission: 'users.view',
-    },
-    {
-        title: 'Nuevo rol',
-        description: 'Definir un rol con permisos personalizados',
-        icon: 'cog',
-        href: route('roles.create'),
-        color: 'warning' as const,
-        permission: 'roles.create',
-    },
-].filter(a => !a.permission || hasPermission(a.permission))
+const tipoLabels: Record<string, string> = {
+    falla_producto: 'Falla de Producto',
+    disconformidad_servicio: 'Disconformidad de Servicio',
+}
+
+const estadoVariant: Record<string, 'amber' | 'blue' | 'indigo' | 'purple' | 'emerald' | 'slate' | 'red'> = {
+    pendiente_clasificacion: 'amber',
+    clasificada: 'blue',
+    en_proceso: 'indigo',
+    derivada: 'purple',
+    resuelta: 'emerald',
+    cerrada: 'slate',
+    cancelada: 'red',
+}
+
+const estadoLabel = (estado: string) =>
+    props.porEstado.find(e => e.estado === estado)?.label ?? estado
+
+const formatFecha = (d: string) =>
+    new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+
+const barWidth = (count: number) =>
+    props.stats.total > 0 ? Math.round((count / props.stats.total) * 100) : 0
 </script>
 
 <template>
     <Head title="Dashboard" />
 
     <AppLayout>
-        <!-- Page header -->
+        <!-- Header -->
         <div class="flex items-center justify-between mb-6">
             <div>
-                <h1 class="text-xl font-bold text-slate-800">Dashboard</h1>
-                <p class="text-sm text-slate-500 mt-0.5">
-                    {{ new Date().toLocaleDateString('es-AR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) }}
-                </p>
+                <h1 class="text-xl font-bold text-slate-800 dark:text-slate-100">Panel de control</h1>
+                <p class="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Resumen del sistema</p>
             </div>
-            <div class="flex items-center gap-2">
-                <span class="inline-flex items-center gap-1.5 text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-full font-medium">
-                    <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                    Sistema operativo
-                </span>
+            <Button variant="primary" disabled title="Próximamente">+ Nueva</Button>
+        </div>
+
+        <!-- Stat cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 mb-4">
+            <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 border-l-4 border-l-blue-500 px-4 py-3.5">
+                <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Observaciones</p>
+                <p class="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">{{ stats.total }}</p>
+            </div>
+            <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 border-l-4 border-l-orange-500 px-4 py-3.5">
+                <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Abiertas</p>
+                <p class="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">{{ stats.abiertas }}</p>
+            </div>
+            <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 border-l-4 border-l-emerald-500 px-4 py-3.5">
+                <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Resueltas</p>
+                <p class="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">{{ stats.resueltas }}</p>
+            </div>
+            <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 border-l-4 border-l-indigo-500 px-4 py-3.5">
+                <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Asignadas a mí</p>
+                <p class="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">{{ stats.asignadasAMi }}</p>
+            </div>
+            <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 border-l-4 border-l-purple-500 px-4 py-3.5">
+                <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">NC</p>
+                <p class="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">{{ stats.nc }}</p>
+                <p class="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{{ stats.ncAbiertas }} abiertas</p>
             </div>
         </div>
 
-        <!-- Alerts -->
-        <div v-if="alerts.length" class="mb-5">
-            <AlertPanel :alerts="alerts" />
+        <!-- KPI row -->
+        <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-slate-100 dark:divide-slate-700 mb-4">
+            <div class="px-5 py-4 border-l-4 border-l-rose-500">
+                <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">KPI: Tiempo &lt;72h</p>
+                <p class="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-1">{{ kpis.tiempoSla ?? 0 }}%</p>
+                <p class="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Meta &gt; 85%</p>
+            </div>
+            <div class="px-5 py-4">
+                <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Tecnovigilancia</p>
+                <p class="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">{{ kpis.tecnovigilancia }}</p>
+            </div>
+            <div class="px-5 py-4">
+                <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Crítica</p>
+                <p class="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">{{ kpis.critica }}</p>
+            </div>
+            <div class="px-5 py-4">
+                <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Sin clasificar</p>
+                <p class="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1">{{ kpis.sinClasificar }}</p>
+            </div>
         </div>
 
-        <!-- Metrics -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
-            <MetricCard
-                v-for="m in metrics"
-                :key="m.title"
-                v-bind="m"
-                :loading="loading"
-            />
-        </div>
-
-        <!-- Chart + Quick actions -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-            <!-- Chart (2/3) -->
-            <div class="lg:col-span-2">
-                <ChartCard
-                    title="Accesos al sistema"
-                    subtitle="Sesiones iniciadas por día"
-                    :labels="chartData.labels"
-                    :datasets="chartData.datasets"
-                    :loading="loading"
-                />
+        <!-- Por sector / Por estado -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+            <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+                <h2 class="text-sm font-semibold text-slate-700 dark:text-slate-200 pb-3 border-b border-slate-100 dark:border-slate-700 mb-4">Por sector</h2>
+                <div v-if="porSector.length === 0" class="flex items-center justify-center h-40 text-sm text-slate-400 dark:text-slate-500">
+                    Sin datos
+                </div>
+                <div v-else class="space-y-2">
+                    <div v-for="s in porSector" :key="s.sector" class="flex items-center justify-between text-sm">
+                        <span class="text-slate-600 dark:text-slate-300">{{ s.sector }}</span>
+                        <span class="font-semibold text-slate-800 dark:text-slate-100">{{ s.count }}</span>
+                    </div>
+                </div>
             </div>
 
-            <!-- Quick actions (1/3) -->
-            <div class="flex flex-col gap-3">
-                <h3 class="text-sm font-semibold text-slate-700 px-1">Acciones rápidas</h3>
-                <div class="grid grid-cols-2 gap-3 flex-1">
-                    <QuickActionCard
-                        v-for="action in quickActions"
-                        :key="action.title"
-                        v-bind="action"
-                    />
+            <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+                <h2 class="text-sm font-semibold text-slate-700 dark:text-slate-200 pb-3 border-b border-slate-100 dark:border-slate-700 mb-4">Por estado</h2>
+                <div class="space-y-3">
+                    <div v-for="e in porEstado" :key="e.estado" class="flex items-center gap-3 text-sm">
+                        <span class="w-32 shrink-0 text-slate-600 dark:text-slate-300">{{ e.label }}</span>
+                        <div class="flex-1 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                            <div class="h-full bg-indigo-500 rounded-full" :style="{ width: barWidth(e.count) + '%' }" />
+                        </div>
+                        <span class="w-6 text-right font-semibold text-slate-800 dark:text-slate-100">{{ e.count }}</span>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Recent activity -->
-        <RecentActivity :activities="activities" :loading="loading" />
+        <!-- Asignadas a mí -->
+        <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 mb-4">
+            <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-700">
+                <h2 class="text-sm font-semibold text-slate-700 dark:text-slate-200">Asignadas a mí</h2>
+                <a :href="route('observaciones.index')" class="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300">
+                    Ver todas →
+                </a>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-left text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide bg-slate-50 dark:bg-slate-700/40">
+                            <th class="px-5 py-2.5">N°</th>
+                            <th class="px-5 py-2.5">Tipo</th>
+                            <th class="px-5 py-2.5">Sector</th>
+                            <th class="px-5 py-2.5">Título</th>
+                            <th class="px-5 py-2.5">Estado</th>
+                            <th class="px-5 py-2.5">Fecha</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
+                        <tr v-if="asignadas.length === 0">
+                            <td colspan="6" class="px-5 py-8 text-center text-sm text-slate-400 dark:text-slate-500">
+                                No tenés observaciones asignadas.
+                            </td>
+                        </tr>
+                        <tr v-for="o in asignadas" :key="o.id" class="hover:bg-slate-50 dark:hover:bg-slate-700/40">
+                            <td class="px-5 py-2.5 font-mono text-xs text-slate-500 dark:text-slate-400">{{ o.numero }}</td>
+                            <td class="px-5 py-2.5 text-slate-600 dark:text-slate-300">{{ tipoLabels[o.tipo] ?? o.tipo }}</td>
+                            <td class="px-5 py-2.5 text-slate-400 dark:text-slate-500">—</td>
+                            <td class="px-5 py-2.5 text-slate-800 dark:text-slate-100">{{ o.titulo }}</td>
+                            <td class="px-5 py-2.5">
+                                <Badge :variant="estadoVariant[o.estado] ?? 'slate'">{{ estadoLabel(o.estado) }}</Badge>
+                            </td>
+                            <td class="px-5 py-2.5 text-slate-500 dark:text-slate-400">{{ formatFecha(o.created_at) }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
 
+        <!-- Últimas observaciones -->
+        <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+            <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-700">
+                <h2 class="text-sm font-semibold text-slate-700 dark:text-slate-200">Últimas observaciones</h2>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-left text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide bg-slate-50 dark:bg-slate-700/40">
+                            <th class="px-5 py-2.5">N°</th>
+                            <th class="px-5 py-2.5">Tipo</th>
+                            <th class="px-5 py-2.5">Título</th>
+                            <th class="px-5 py-2.5">Estado</th>
+                            <th class="px-5 py-2.5">Fecha</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
+                        <tr v-if="ultimas.length === 0">
+                            <td colspan="5" class="px-5 py-8 text-center text-sm text-slate-400 dark:text-slate-500">
+                                Todavía no se cargaron observaciones.
+                            </td>
+                        </tr>
+                        <tr v-for="o in ultimas" :key="o.id" class="hover:bg-slate-50 dark:hover:bg-slate-700/40">
+                            <td class="px-5 py-2.5 font-mono text-xs text-slate-500 dark:text-slate-400">{{ o.numero }}</td>
+                            <td class="px-5 py-2.5 text-slate-600 dark:text-slate-300">{{ tipoLabels[o.tipo] ?? o.tipo }}</td>
+                            <td class="px-5 py-2.5 text-slate-800 dark:text-slate-100">{{ o.titulo }}</td>
+                            <td class="px-5 py-2.5">
+                                <Badge :variant="estadoVariant[o.estado] ?? 'slate'">{{ estadoLabel(o.estado) }}</Badge>
+                            </td>
+                            <td class="px-5 py-2.5 text-slate-500 dark:text-slate-400">{{ formatFecha(o.created_at) }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </AppLayout>
 </template>

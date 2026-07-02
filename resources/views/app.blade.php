@@ -6,6 +6,11 @@
     {{-- favicon --}}
     <link rel="icon" href="{{ asset('img/iso.png') }}">
     <title inertia>{{ config('app.name') }}</title>
+    <script>
+        if (localStorage.getItem('theme') === 'dark') {
+            document.documentElement.classList.add('dark');
+        }
+    </script>
     @routes
     @vite(['resources/js/app.ts'])
     @inertiaHead
