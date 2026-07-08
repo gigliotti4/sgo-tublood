@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Cliente extends Model
 {
@@ -25,11 +26,18 @@ class Cliente extends Model
         'codigo_vendedor',
         'nombre_vendedor',
         'codigo_postal',
+        'fecha_vencimiento',
         'synced_at',
     ];
 
     protected $casts = [
         'porcen_descuen' => 'decimal:2',
-        'synced_at'      => 'datetime',
+        'fecha_vencimiento' => 'date',
+        'synced_at' => 'datetime',
     ];
+
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(ClienteAttachment::class);
+    }
 }

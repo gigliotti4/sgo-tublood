@@ -23,14 +23,18 @@ class ObservacionPublicaTest extends TestCase
             'contacto_telefono' => '11-4444-5555',
             'titulo' => 'Producto llegó dañado',
             'descripcion' => 'El producto presenta un defecto de fábrica.',
-            'cantidad_afectada' => 5,
-            'lote' => 'L-2026-01',
-            'fecha_vencimiento' => '2027-01-01',
-            'numero_remito' => 'R-0001',
-            'tipo_comprobante' => 'remito',
             'institucion' => 'Hospital de Prueba',
             'provincia' => 'Buenos Aires',
-            'producto' => 'Set de infusión',
+            'productos' => [
+                [
+                    'producto' => 'Set de infusión',
+                    'cantidad_afectada' => 5,
+                    'lote' => 'L-2026-01',
+                    'fecha_vencimiento' => '2027-01-01',
+                    'numero_remito' => 'R-0001',
+                    'tipo_comprobante' => 'remito',
+                ],
+            ],
         ];
     }
 
@@ -57,6 +61,8 @@ class ObservacionPublicaTest extends TestCase
         $this->assertSame('externa', $observacion->origen);
         $this->assertMatchesRegularExpression('/^\d{4}-\d{2}$/', $observacion->numero);
         $this->assertCount(1, $observacion->attachments);
+        $this->assertCount(1, $observacion->productos);
+        $this->assertSame('Set de infusión', $observacion->productos->first()->producto);
 
         Storage::disk('local')->assertExists($observacion->attachments->first()->path);
 
@@ -73,12 +79,31 @@ class ObservacionPublicaTest extends TestCase
     public function test_falla_producto_requiere_campos_condicionales(): void
     {
         $data = $this->datosFallaProducto();
-        unset($data['lote']);
+        unset($data['productos'][0]['lote']);
 
         $this->post('/cargar-observacion', $data)
-            ->assertSessionHasErrors('lote');
+            ->assertSessionHasErrors('productos.0.lote');
 
         $this->assertDatabaseCount('observations', 0);
+    }
+
+    public function test_permite_cargar_multiples_productos(): void
+    {
+        $data = $this->datosFallaProducto();
+        $data['productos'][] = [
+            'producto' => 'Catéter venoso',
+            'cantidad_afectada' => 2,
+            'lote' => 'L-2026-02',
+            'fecha_vencimiento' => '2027-03-01',
+            'numero_remito' => 'R-0002',
+            'tipo_comprobante' => 'factura',
+        ];
+
+        $this->post('/cargar-observacion', $data);
+
+        $observacion = Observacion::first();
+        $this->assertCount(2, $observacion->productos);
+        $this->assertSame(['Set de infusión', 'Catéter venoso'], $observacion->productos->pluck('producto')->all());
     }
 
     public function test_confirmacion_sin_sesion_redirige_al_formulario(): void

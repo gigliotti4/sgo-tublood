@@ -2,16 +2,19 @@
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { Head, Link, useForm } from '@inertiajs/vue3'
 import Input from '@/Components/Input.vue'
+import Select from '@/Components/Select.vue'
 import Button from '@/Components/Button.vue'
 
 interface RoleOption { id: number; name: string }
+interface SectorOption { id: number; nombre: string }
 
-defineProps<{ roles: RoleOption[] }>()
+defineProps<{ roles: RoleOption[]; sectors: SectorOption[] }>()
 
 const form = useForm({
     name: '',
     email: '',
     password: '',
+    sector_id: null as number | null,
     roles: [] as string[],
 })
 
@@ -32,6 +35,13 @@ const submit = () => form.post(route('users.store'))
                 <Input v-model="form.name" label="Nombre" :error="form.errors.name" />
                 <Input v-model="form.email" type="email" label="Email" :error="form.errors.email" />
                 <Input v-model="form.password" type="password" label="Contraseña" :error="form.errors.password" />
+
+                <Select v-model="form.sector_id" label="Sector" :error="form.errors.sector_id">
+                    <option :value="null">— Sin sector —</option>
+                    <option v-for="sector in sectors" :key="sector.id" :value="sector.id">
+                        {{ sector.nombre }}
+                    </option>
+                </Select>
 
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Roles</label>

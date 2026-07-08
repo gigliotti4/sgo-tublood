@@ -4,10 +4,28 @@ import { ref } from 'vue'
 
 interface TipoOption { value: string; label: string }
 
+interface ProductoForm {
+    producto: string
+    cantidad_afectada: number | null
+    lote: string
+    fecha_vencimiento: string
+    numero_remito: string
+    tipo_comprobante: string
+}
+
 const props = defineProps<{
     provincias: string[]
     tipoOptions: TipoOption[]
 }>()
+
+const nuevoProducto = (): ProductoForm => ({
+    producto: '',
+    cantidad_afectada: null,
+    lote: '',
+    fecha_vencimiento: '',
+    numero_remito: '',
+    tipo_comprobante: '',
+})
 
 const form = useForm({
     tipo: '',
@@ -17,18 +35,19 @@ const form = useForm({
     contacto_telefono: '',
     titulo: '',
     descripcion: '',
-    cantidad_afectada: null as number | null,
-    lote: '',
-    fecha_vencimiento: '',
-    numero_remito: '',
-    tipo_comprobante: '',
     institucion: '',
     provincia: '',
-    producto: '',
     equipamiento: '',
     ejecutivo_cuenta: '',
+    productos: [nuevoProducto()] as ProductoForm[],
     attachments: [] as File[],
 })
+
+const agregarProducto = () => form.productos.push(nuevoProducto())
+const quitarProducto = (index: number) => form.productos.splice(index, 1)
+
+const errorProducto = (index: number, campo: keyof ProductoForm) =>
+    (form.errors as Record<string, string>)[`productos.${index}.${campo}`]
 
 const isDragging = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
@@ -175,82 +194,6 @@ const submit = () => form.post(route('observaciones.public.store'), { forceFormD
 
                     <div class="grid sm:grid-cols-2 gap-4">
                         <div class="space-y-1.5">
-                            <label for="cantidad_afectada" class="block text-sm font-medium text-slate-700">
-                                Cantidad afectada <span class="text-red-500">*</span>
-                            </label>
-                            <input
-                                id="cantidad_afectada"
-                                v-model.number="form.cantidad_afectada"
-                                type="number"
-                                min="1"
-                                class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                :class="form.errors.cantidad_afectada ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
-                            />
-                            <p v-if="form.errors.cantidad_afectada" class="text-red-500 text-xs">{{ form.errors.cantidad_afectada }}</p>
-                        </div>
-
-                        <div class="space-y-1.5">
-                            <label for="lote" class="block text-sm font-medium text-slate-700">
-                                Lote <span class="text-red-500">*</span>
-                            </label>
-                            <input
-                                id="lote"
-                                v-model="form.lote"
-                                type="text"
-                                class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                :class="form.errors.lote ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
-                            />
-                            <p v-if="form.errors.lote" class="text-red-500 text-xs">{{ form.errors.lote }}</p>
-                        </div>
-
-                        <div class="space-y-1.5">
-                            <label for="fecha_vencimiento" class="block text-sm font-medium text-slate-700">
-                                Fecha de vencimiento <span class="text-red-500">*</span>
-                            </label>
-                            <input
-                                id="fecha_vencimiento"
-                                v-model="form.fecha_vencimiento"
-                                type="date"
-                                class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                :class="form.errors.fecha_vencimiento ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
-                            />
-                            <p v-if="form.errors.fecha_vencimiento" class="text-red-500 text-xs">{{ form.errors.fecha_vencimiento }}</p>
-                        </div>
-
-                        <div class="space-y-1.5">
-                            <label for="numero_remito" class="block text-sm font-medium text-slate-700">
-                                N° de remito <span class="text-red-500">*</span>
-                            </label>
-                            <input
-                                id="numero_remito"
-                                v-model="form.numero_remito"
-                                type="text"
-                                class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                :class="form.errors.numero_remito ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
-                            />
-                            <p v-if="form.errors.numero_remito" class="text-red-500 text-xs">{{ form.errors.numero_remito }}</p>
-                        </div>
-                    </div>
-
-                    <div class="space-y-1.5">
-                        <span class="block text-sm font-medium text-slate-700">
-                            Tipo de comprobante <span class="text-red-500">*</span>
-                        </span>
-                        <div class="flex gap-6">
-                            <label class="flex items-center gap-2 text-sm text-slate-700">
-                                <input v-model="form.tipo_comprobante" type="radio" value="factura" class="text-indigo-600 focus:ring-indigo-500" />
-                                Factura
-                            </label>
-                            <label class="flex items-center gap-2 text-sm text-slate-700">
-                                <input v-model="form.tipo_comprobante" type="radio" value="remito" class="text-indigo-600 focus:ring-indigo-500" />
-                                Remito
-                            </label>
-                        </div>
-                        <p v-if="form.errors.tipo_comprobante" class="text-red-500 text-xs">{{ form.errors.tipo_comprobante }}</p>
-                    </div>
-
-                    <div class="grid sm:grid-cols-2 gap-4">
-                        <div class="space-y-1.5">
                             <label for="institucion" class="block text-sm font-medium text-slate-700">
                                 Institución <span class="text-red-500">*</span>
                             </label>
@@ -281,20 +224,6 @@ const submit = () => form.post(route('observaciones.public.store'), { forceFormD
                         </div>
 
                         <div class="space-y-1.5">
-                            <label for="producto" class="block text-sm font-medium text-slate-700">
-                                Producto <span class="text-red-500">*</span>
-                            </label>
-                            <input
-                                id="producto"
-                                v-model="form.producto"
-                                type="text"
-                                class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                :class="form.errors.producto ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
-                            />
-                            <p v-if="form.errors.producto" class="text-red-500 text-xs">{{ form.errors.producto }}</p>
-                        </div>
-
-                        <div class="space-y-1.5">
                             <label for="equipamiento" class="block text-sm font-medium text-slate-700">Equipamiento utilizado</label>
                             <input
                                 id="equipamiento"
@@ -313,6 +242,125 @@ const submit = () => form.post(route('observaciones.public.store'), { forceFormD
                                 class="w-full px-3 py-2.5 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                             />
                         </div>
+                    </div>
+
+                    <!-- Productos -->
+                    <div class="space-y-4 pt-2">
+                        <div
+                            v-for="(producto, index) in form.productos"
+                            :key="index"
+                            class="rounded-xl border border-slate-200 p-4 space-y-4"
+                        >
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Producto {{ index + 1 }}</span>
+                                <button
+                                    v-if="form.productos.length > 1"
+                                    type="button"
+                                    class="text-xs text-red-500 hover:text-red-600"
+                                    @click="quitarProducto(index)"
+                                >
+                                    Quitar
+                                </button>
+                            </div>
+
+                            <div class="grid sm:grid-cols-2 gap-4">
+                                <div class="space-y-1.5">
+                                    <label :for="`producto-${index}-producto`" class="block text-sm font-medium text-slate-700">
+                                        Producto <span class="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        :id="`producto-${index}-producto`"
+                                        v-model="producto.producto"
+                                        type="text"
+                                        class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                        :class="errorProducto(index, 'producto') ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
+                                    />
+                                    <p v-if="errorProducto(index, 'producto')" class="text-red-500 text-xs">{{ errorProducto(index, 'producto') }}</p>
+                                </div>
+
+                                <div class="space-y-1.5">
+                                    <label :for="`producto-${index}-cantidad`" class="block text-sm font-medium text-slate-700">
+                                        Cantidad afectada <span class="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        :id="`producto-${index}-cantidad`"
+                                        v-model.number="producto.cantidad_afectada"
+                                        type="number"
+                                        min="1"
+                                        class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                        :class="errorProducto(index, 'cantidad_afectada') ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
+                                    />
+                                    <p v-if="errorProducto(index, 'cantidad_afectada')" class="text-red-500 text-xs">{{ errorProducto(index, 'cantidad_afectada') }}</p>
+                                </div>
+
+                                <div class="space-y-1.5">
+                                    <label :for="`producto-${index}-lote`" class="block text-sm font-medium text-slate-700">
+                                        Lote <span class="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        :id="`producto-${index}-lote`"
+                                        v-model="producto.lote"
+                                        type="text"
+                                        class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                        :class="errorProducto(index, 'lote') ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
+                                    />
+                                    <p v-if="errorProducto(index, 'lote')" class="text-red-500 text-xs">{{ errorProducto(index, 'lote') }}</p>
+                                </div>
+
+                                <div class="space-y-1.5">
+                                    <label :for="`producto-${index}-vencimiento`" class="block text-sm font-medium text-slate-700">
+                                        Fecha de vencimiento <span class="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        :id="`producto-${index}-vencimiento`"
+                                        v-model="producto.fecha_vencimiento"
+                                        type="date"
+                                        class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                        :class="errorProducto(index, 'fecha_vencimiento') ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
+                                    />
+                                    <p v-if="errorProducto(index, 'fecha_vencimiento')" class="text-red-500 text-xs">{{ errorProducto(index, 'fecha_vencimiento') }}</p>
+                                </div>
+
+                                <div class="space-y-1.5">
+                                    <label :for="`producto-${index}-remito`" class="block text-sm font-medium text-slate-700">
+                                        N° de remito <span class="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        :id="`producto-${index}-remito`"
+                                        v-model="producto.numero_remito"
+                                        type="text"
+                                        class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                        :class="errorProducto(index, 'numero_remito') ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
+                                    />
+                                    <p v-if="errorProducto(index, 'numero_remito')" class="text-red-500 text-xs">{{ errorProducto(index, 'numero_remito') }}</p>
+                                </div>
+                            </div>
+
+                            <div class="space-y-1.5">
+                                <span class="block text-sm font-medium text-slate-700">
+                                    Tipo de comprobante <span class="text-red-500">*</span>
+                                </span>
+                                <div class="flex gap-6">
+                                    <label class="flex items-center gap-2 text-sm text-slate-700">
+                                        <input v-model="producto.tipo_comprobante" type="radio" value="factura" class="text-indigo-600 focus:ring-indigo-500" />
+                                        Factura
+                                    </label>
+                                    <label class="flex items-center gap-2 text-sm text-slate-700">
+                                        <input v-model="producto.tipo_comprobante" type="radio" value="remito" class="text-indigo-600 focus:ring-indigo-500" />
+                                        Remito
+                                    </label>
+                                </div>
+                                <p v-if="errorProducto(index, 'tipo_comprobante')" class="text-red-500 text-xs">{{ errorProducto(index, 'tipo_comprobante') }}</p>
+                            </div>
+                        </div>
+
+                        <button
+                            type="button"
+                            class="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+                            @click="agregarProducto"
+                        >
+                            + Agregar producto
+                        </button>
                     </div>
                 </section>
 

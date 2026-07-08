@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Sector;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rules\Password;
@@ -15,8 +16,8 @@ class UserController extends Controller
         $this->authorize('users.view');
 
         return inertia('Admin/Users/Index', [
-            'users' => User::with('roles')
-                ->select('id', 'name', 'email', 'created_at')
+            'users' => User::with(['roles', 'sector:id,nombre'])
+                ->select('id', 'name', 'email', 'sector_id', 'created_at')
                 ->latest()
                 ->paginate(15),
         ]);
@@ -28,6 +29,7 @@ class UserController extends Controller
 
         return inertia('Admin/Users/Create', [
             'roles' => Role::orderBy('name')->get(['id', 'name']),
+            'sectors' => Sector::where('activo', true)->orderBy('nombre')->get(['id', 'nombre']),
         ]);
     }
 
@@ -36,17 +38,19 @@ class UserController extends Controller
         $this->authorize('users.create');
 
         $data = $request->validate([
-            'name'     => ['required', 'string', 'max:255'],
-            'email'    => ['required', 'email', 'unique:users'],
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'unique:users'],
             'password' => ['required', Password::defaults()],
-            'roles'    => ['array'],
-            'roles.*'  => ['exists:roles,name'],
+            'sector_id' => ['nullable', 'exists:sectors,id'],
+            'roles' => ['array'],
+            'roles.*' => ['exists:roles,name'],
         ]);
 
         $user = User::create([
-            'name'     => $data['name'],
-            'email'    => $data['email'],
+            'name' => $data['name'],
+            'email' => $data['email'],
             'password' => $data['password'],
+            'sector_id' => $data['sector_id'] ?? null,
         ]);
 
         $user->syncRoles($data['roles'] ?? []);
@@ -60,8 +64,9 @@ class UserController extends Controller
         $this->authorize('users.edit');
 
         return inertia('Admin/Users/Edit', [
-            'user'  => $user->load('roles'),
+            'user' => $user->load('roles', 'sector'),
             'roles' => Role::orderBy('name')->get(['id', 'name']),
+            'sectors' => Sector::where('activo', true)->orderBy('nombre')->get(['id', 'nombre']),
         ]);
     }
 
@@ -70,16 +75,18 @@ class UserController extends Controller
         $this->authorize('users.edit');
 
         $data = $request->validate([
-            'name'     => ['required', 'string', 'max:255'],
-            'email'    => ['required', 'email', "unique:users,email,{$user->id}"],
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', "unique:users,email,{$user->id}"],
             'password' => ['nullable', Password::defaults()],
-            'roles'    => ['array'],
-            'roles.*'  => ['exists:roles,name'],
+            'sector_id' => ['nullable', 'exists:sectors,id'],
+            'roles' => ['array'],
+            'roles.*' => ['exists:roles,name'],
         ]);
 
         $user->update([
-            'name'  => $data['name'],
+            'name' => $data['name'],
             'email' => $data['email'],
+            'sector_id' => $data['sector_id'] ?? null,
             ...($data['password'] ? ['password' => $data['password']] : []),
         ]);
 

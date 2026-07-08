@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { Head, router } from '@inertiajs/vue3'
+import { Head, Link, router } from '@inertiajs/vue3'
 import { route } from 'ziggy-js'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { usePermissions } from '@/composables/usePermissions'
@@ -45,6 +45,13 @@ const formatDate = (d: string | null) => {
     return new Date(d).toLocaleString('es-AR', {
         day: '2-digit', month: '2-digit', year: 'numeric',
         hour: '2-digit', minute: '2-digit',
+    })
+}
+
+const formatFechaVencimiento = (d: string | null) => {
+    if (!d) return '—'
+    return new Date(d).toLocaleDateString('es-AR', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
     })
 }
 </script>
@@ -101,11 +108,13 @@ const formatDate = (d: string | null) => {
                                 <th class="px-4 py-3">Localidad</th>
                                 <th class="px-4 py-3">Teléfono</th>
                                 <th class="px-4 py-3">Mail</th>
+                                <th class="px-4 py-3">Vencimiento</th>
+                                <th v-if="hasPermission('clientes.edit')" class="px-4 py-3" />
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
                             <tr v-if="clientes.data.length === 0">
-                                <td colspan="7" class="px-4 py-12 text-center text-slate-400 dark:text-slate-500 text-sm">
+                                <td colspan="9" class="px-4 py-12 text-center text-slate-400 dark:text-slate-500 text-sm">
                                     <template v-if="search">
                                         No se encontraron clientes para "<span class="font-medium">{{ search }}</span>".
                                     </template>
@@ -137,6 +146,15 @@ const formatDate = (d: string | null) => {
                                         {{ cliente.mail }}
                                     </a>
                                     <span v-else>—</span>
+                                </td>
+                                <td class="px-4 py-3 text-slate-500 dark:text-slate-400 text-xs">{{ formatFechaVencimiento(cliente.fecha_vencimiento) }}</td>
+                                <td v-if="hasPermission('clientes.edit')" class="px-4 py-3 text-right">
+                                    <Link
+                                        :href="route('clientes.edit', cliente.id)"
+                                        class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 text-xs font-medium"
+                                    >
+                                        Editar
+                                    </Link>
                                 </td>
                             </tr>
                         </tbody>

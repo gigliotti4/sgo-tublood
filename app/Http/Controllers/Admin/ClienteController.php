@@ -5,9 +5,12 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Jobs\SyncClientesJob;
 use App\Models\Cliente;
+use App\Models\ClienteAttachment;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class ClienteController extends Controller
 {
@@ -20,9 +23,9 @@ class ClienteController extends Controller
         $clientes = Cliente::query()
             ->when($search, function ($q) use ($search) {
                 $q->where('razon_social', 'like', "%{$search}%")
-                  ->orWhere('cuit', 'like', "%{$search}%")
-                  ->orWhere('numero', 'like', "%{$search}%")
-                  ->orWhere('mail', 'like', "%{$search}%");
+                    ->orWhere('cuit', 'like', "%{$search}%")
+                    ->orWhere('numero', 'like', "%{$search}%")
+                    ->orWhere('mail', 'like', "%{$search}%");
             })
             ->orderBy('razon_social')
             ->paginate(50)
@@ -32,7 +35,7 @@ class ClienteController extends Controller
 
         return inertia('Admin/Clientes/Index', [
             'clientes' => $clientes,
-            'filters'  => ['search' => $search],
+            'filters' => ['search' => $search],
             'lastSync' => $lastSync,
         ]);
     }
@@ -45,5 +48,70 @@ class ClienteController extends Controller
 
         return redirect()->route('clientes.index')
             ->with('success', 'Sincronización iniciada. Los datos se actualizarán en breve.');
+    }
+
+    public function edit(Cliente $cliente): Response
+    {
+        $this->authorize('clientes.edit');
+
+        return inertia('Admin/Clientes/Edit', [
+            'cliente' => $cliente->load('attachments'),
+        ]);
+    }
+
+    public function update(Request $request, Cliente $cliente): RedirectResponse
+    {
+        $this->authorize('clientes.edit');
+
+        $data = $request->validate([
+            'fecha_vencimiento' => ['nullable', 'date'],
+        ]);
+
+        $cliente->update($data);
+
+        return redirect()->route('clientes.edit', $cliente)
+            ->with('success', 'Cliente actualizado correctamente.');
+    }
+
+    public function uploadArchivo(Request $request, Cliente $cliente): RedirectResponse
+    {
+        $this->authorize('clientes.edit');
+
+        $data = $request->validate([
+            'archivos' => ['required', 'array'],
+            'archivos.*' => ['file', 'mimes:jpg,jpeg,png,pdf,doc,docx,xls,xlsx', 'max:10240'],
+        ]);
+
+        foreach ($data['archivos'] as $file) {
+            $path = $file->store('clientes', 'local');
+
+            $cliente->attachments()->create([
+                'path' => $path,
+                'original_name' => $file->getClientOriginalName(),
+                'mime_type' => $file->getClientMimeType(),
+                'size' => $file->getSize(),
+            ]);
+        }
+
+        return redirect()->route('clientes.edit', $cliente)
+            ->with('success', 'Archivos subidos correctamente.');
+    }
+
+    public function downloadArchivo(Cliente $cliente, ClienteAttachment $attachment): BinaryFileResponse
+    {
+        $this->authorize('clientes.view');
+
+        return Storage::disk('local')->download($attachment->path, $attachment->original_name);
+    }
+
+    public function destroyArchivo(Cliente $cliente, ClienteAttachment $attachment): RedirectResponse
+    {
+        $this->authorize('clientes.edit');
+
+        Storage::disk('local')->delete($attachment->path);
+        $attachment->delete();
+
+        return redirect()->route('clientes.edit', $cliente)
+            ->with('success', 'Archivo eliminado correctamente.');
     }
 }

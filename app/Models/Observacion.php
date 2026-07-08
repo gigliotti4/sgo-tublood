@@ -39,14 +39,8 @@ class Observacion extends Model
         'contacto_telefono',
         'titulo',
         'descripcion',
-        'cantidad_afectada',
-        'lote',
-        'fecha_vencimiento',
-        'numero_remito',
-        'tipo_comprobante',
         'institucion',
         'provincia',
-        'producto',
         'equipamiento',
         'ejecutivo_cuenta',
         'prioridad',
@@ -55,13 +49,17 @@ class Observacion extends Model
     ];
 
     protected $casts = [
-        'fecha_vencimiento' => 'date',
         'tecnovigilancia' => 'boolean',
     ];
 
     public function attachments(): HasMany
     {
         return $this->hasMany(ObservationAttachment::class, 'observation_id');
+    }
+
+    public function productos(): HasMany
+    {
+        return $this->hasMany(ObservationProduct::class, 'observation_id');
     }
 
     public function cliente(): BelongsTo

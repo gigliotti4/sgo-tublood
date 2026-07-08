@@ -17,7 +17,9 @@ defineProps<{
     usuarios: UsuarioOption[]
 }>()
 
-const { hasPermission } = usePermissions()
+const { isSuperAdmin, user } = usePermissions()
+
+const puedeEditar = (o: Observacion) => isSuperAdmin.value || o.responsable_id === user.value?.id
 
 const origenLabels: Record<string, string> = {
     interna: 'Interna',
@@ -98,7 +100,7 @@ const guardar = () => {
                                 <th class="px-4 py-3">Responsable</th>
                                 <th class="px-4 py-3">Estado</th>
                                 <th class="px-4 py-3">Fecha</th>
-                                <th v-if="hasPermission('observaciones.edit')" class="px-4 py-3" />
+                                <th class="px-4 py-3" />
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
@@ -124,8 +126,9 @@ const guardar = () => {
                                     <Badge :variant="estadoVariant[o.estado] ?? 'slate'">{{ estadoLabels[o.estado] ?? o.estado }}</Badge>
                                 </td>
                                 <td class="px-4 py-3 text-slate-500 dark:text-slate-400 text-xs">{{ formatFecha(o.created_at) }}</td>
-                                <td v-if="hasPermission('observaciones.edit')" class="px-4 py-3 text-right">
+                                <td class="px-4 py-3 text-right">
                                     <button
+                                        v-if="puedeEditar(o)"
                                         class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 text-xs font-medium cursor-pointer"
                                         @click="abrirEdicion(o)"
                                     >
@@ -164,6 +167,35 @@ const guardar = () => {
                     <div>
                         <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Descripción</p>
                         <p class="text-sm text-slate-600 dark:text-slate-300 mt-0.5 whitespace-pre-line">{{ observacionEnEdicion.descripcion }}</p>
+                    </div>
+                </div>
+
+                <!-- Productos -->
+                <div v-if="observacionEnEdicion.productos.length" class="rounded-lg border border-slate-200 dark:border-slate-600 p-4 mb-5">
+                    <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-2">Productos</p>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-xs">
+                            <thead>
+                                <tr class="text-left text-slate-400 dark:text-slate-500">
+                                    <th class="pr-4 py-1">Producto</th>
+                                    <th class="pr-4 py-1">Cantidad</th>
+                                    <th class="pr-4 py-1">Lote</th>
+                                    <th class="pr-4 py-1">Vencimiento</th>
+                                    <th class="pr-4 py-1">Remito</th>
+                                    <th class="py-1">Comprobante</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
+                                <tr v-for="p in observacionEnEdicion.productos" :key="p.id" class="text-slate-600 dark:text-slate-300">
+                                    <td class="pr-4 py-1.5">{{ p.producto }}</td>
+                                    <td class="pr-4 py-1.5">{{ p.cantidad_afectada }}</td>
+                                    <td class="pr-4 py-1.5">{{ p.lote }}</td>
+                                    <td class="pr-4 py-1.5">{{ formatFecha(p.fecha_vencimiento) }}</td>
+                                    <td class="pr-4 py-1.5">{{ p.numero_remito }}</td>
+                                    <td class="py-1.5 capitalize">{{ p.tipo_comprobante }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
 

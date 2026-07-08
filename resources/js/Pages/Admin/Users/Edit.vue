@@ -2,17 +2,20 @@
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { Head, Link, useForm } from '@inertiajs/vue3'
 import Input from '@/Components/Input.vue'
+import Select from '@/Components/Select.vue'
 import Button from '@/Components/Button.vue'
 
 interface RoleOption { id: number; name: string }
-interface UserData { id: number; name: string; email: string; roles: { name: string }[] }
+interface SectorOption { id: number; nombre: string }
+interface UserData { id: number; name: string; email: string; sector_id: number | null; roles: { name: string }[] }
 
-const props = defineProps<{ user: UserData; roles: RoleOption[] }>()
+const props = defineProps<{ user: UserData; roles: RoleOption[]; sectors: SectorOption[] }>()
 
 const form = useForm({
     name: props.user.name,
     email: props.user.email,
     password: '',
+    sector_id: props.user.sector_id,
     roles: props.user.roles.map(r => r.name),
 })
 
@@ -37,6 +40,13 @@ const submit = () => form.put(route('users.update', props.user.id))
                         Nueva contraseña <span class="text-gray-400 dark:text-gray-500 font-normal">(dejar vacío para no cambiar)</span>
                     </template>
                 </Input>
+
+                <Select v-model="form.sector_id" label="Sector" :error="form.errors.sector_id">
+                    <option :value="null">— Sin sector —</option>
+                    <option v-for="sector in sectors" :key="sector.id" :value="sector.id">
+                        {{ sector.nombre }}
+                    </option>
+                </Select>
 
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Roles</label>

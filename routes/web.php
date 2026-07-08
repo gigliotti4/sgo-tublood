@@ -46,17 +46,27 @@ Route::middleware(['auth'])->group(function () {
     // Clientes
     Route::middleware('can:clientes.view')->group(function () {
         Route::get('/clientes', [ClienteController::class, 'index'])->name('clientes.index');
+        Route::get('/clientes/{cliente}/archivos/{attachment}', [ClienteController::class, 'downloadArchivo'])
+            ->name('clientes.archivos.download')->scopeBindings();
     });
     Route::middleware('can:clientes.sync')->group(function () {
         Route::post('/clientes/sync', [ClienteController::class, 'sync'])->name('clientes.sync');
+    });
+    Route::middleware('can:clientes.edit')->group(function () {
+        Route::get('/clientes/{cliente}/edit', [ClienteController::class, 'edit'])->name('clientes.edit');
+        Route::put('/clientes/{cliente}', [ClienteController::class, 'update'])->name('clientes.update');
+        Route::post('/clientes/{cliente}/archivos', [ClienteController::class, 'uploadArchivo'])
+            ->name('clientes.archivos.store');
+        Route::delete('/clientes/{cliente}/archivos/{attachment}', [ClienteController::class, 'destroyArchivo'])
+            ->name('clientes.archivos.destroy')->scopeBindings();
     });
 
     // Observaciones
     Route::middleware('can:observaciones.view')->group(function () {
         Route::get('/observaciones', [AdminObservacionController::class, 'index'])->name('observaciones.index');
-    });
-    Route::middleware('can:observaciones.edit')->group(function () {
-        Route::put('/observaciones/{observacion}', [AdminObservacionController::class, 'update'])->name('observaciones.update');
+        // Editar: solo el responsable asignado (o super-admin, vía Gate::before) — ver ObservacionPolicy.
+        Route::put('/observaciones/{observacion}', [AdminObservacionController::class, 'update'])
+            ->middleware('can:update,observacion')->name('observaciones.update');
     });
 
     // Roles

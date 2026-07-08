@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Cliente;
 use App\Models\Observacion;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 
 class ObservacionController extends Controller
@@ -42,16 +43,18 @@ class ObservacionController extends Controller
             'titulo' => ['required', 'string', 'max:255'],
             'descripcion' => ['required', 'string'],
 
-            'cantidad_afectada' => ['required_if:tipo,falla_producto', 'nullable', 'integer', 'min:1'],
-            'lote' => ['required_if:tipo,falla_producto', 'nullable', 'string', 'max:255'],
-            'fecha_vencimiento' => ['required_if:tipo,falla_producto', 'nullable', 'date'],
-            'numero_remito' => ['required_if:tipo,falla_producto', 'nullable', 'string', 'max:255'],
-            'tipo_comprobante' => ['required_if:tipo,falla_producto', 'nullable', 'in:factura,remito'],
             'institucion' => ['required_if:tipo,falla_producto', 'nullable', 'string', 'max:255'],
             'provincia' => ['required_if:tipo,falla_producto', 'nullable', 'string', 'max:255'],
-            'producto' => ['required_if:tipo,falla_producto', 'nullable', 'string', 'max:255'],
             'equipamiento' => ['nullable', 'string', 'max:255'],
             'ejecutivo_cuenta' => ['nullable', 'string', 'max:255'],
+
+            'productos' => ['required_if:tipo,falla_producto', 'array'],
+            'productos.*.producto' => ['required', 'string', 'max:255'],
+            'productos.*.cantidad_afectada' => ['required', 'integer', 'min:1'],
+            'productos.*.lote' => ['required', 'string', 'max:255'],
+            'productos.*.fecha_vencimiento' => ['required', 'date'],
+            'productos.*.numero_remito' => ['required', 'string', 'max:255'],
+            'productos.*.tipo_comprobante' => ['required', 'in:factura,remito'],
 
             'attachments' => ['array'],
             'attachments.*' => ['file', 'mimes:jpg,jpeg,png,pdf', 'max:3072'],
@@ -67,7 +70,7 @@ class ObservacionController extends Controller
             }
 
             $observacion = Observacion::create([
-                ...$data,
+                ...Arr::except($data, ['productos', 'attachments']),
                 'numero' => $numero,
                 'anio' => $anio,
                 'estado' => 'pendiente_clasificacion',
@@ -76,7 +79,11 @@ class ObservacionController extends Controller
             ]);
 
             // TODO: asignar a sector Garantía de Calidad + notificar (flujo 8.1)
-            // pendiente de las tablas sectors/notifications.
+            // pendiente de la tabla notifications.
+
+            foreach ($data['productos'] ?? [] as $producto) {
+                $observacion->productos()->create($producto);
+            }
 
             foreach ($request->file('attachments', []) as $file) {
                 $path = $file->store('observaciones', 'local');

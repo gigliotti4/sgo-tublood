@@ -7,6 +7,7 @@ use App\Models\Observacion;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class ObservacionAdminTest extends TestCase
@@ -55,17 +56,12 @@ class ObservacionAdminTest extends TestCase
             );
     }
 
-    public function test_index_incluye_usuarios_solo_con_permiso_de_edicion(): void
+    public function test_index_siempre_incluye_la_lista_de_usuarios(): void
     {
-        $userSinEdicion = $this->userWith('observaciones.view');
+        $user = $this->userWith('observaciones.view');
 
-        $this->actingAs($userSinEdicion)->get('/observaciones')
-            ->assertInertia(fn ($page) => $page->where('usuarios', []));
-
-        $userConEdicion = $this->userWith('observaciones.view', 'observaciones.edit');
-
-        $this->actingAs($userConEdicion)->get('/observaciones')
-            ->assertInertia(fn ($page) => $page->has('usuarios', 2));
+        $this->actingAs($user)->get('/observaciones')
+            ->assertInertia(fn ($page) => $page->has('usuarios', 1));
     }
 
     public function test_index_incluye_datos_del_cliente_vinculado(): void
@@ -98,7 +94,7 @@ class ObservacionAdminTest extends TestCase
             );
     }
 
-    public function test_update_requiere_permiso_observaciones_edit(): void
+    public function test_update_rechaza_a_usuario_no_asignado(): void
     {
         $observacion = Observacion::create([
             'numero' => '0001-26',
@@ -111,13 +107,16 @@ class ObservacionAdminTest extends TestCase
             'descripcion' => 'Descripción de prueba',
         ]);
 
-        $user = $this->userWith('observaciones.view');
+        // Aunque tenga el permiso observaciones.edit, no está asignado como responsable.
+        $user = $this->userWith('observaciones.view', 'observaciones.edit');
 
         $this->actingAs($user)->put("/observaciones/{$observacion->id}", [])->assertStatus(403);
     }
 
-    public function test_update_asigna_responsable(): void
+    public function test_update_permite_al_responsable_asignado(): void
     {
+        $user = $this->userWith('observaciones.view');
+
         $observacion = Observacion::create([
             'numero' => '0001-26',
             'anio' => 2026,
@@ -127,48 +126,31 @@ class ObservacionAdminTest extends TestCase
             'contacto_email' => 'cliente@example.com',
             'titulo' => 'Título de prueba',
             'descripcion' => 'Descripción de prueba',
+            'responsable_id' => $user->id,
         ]);
 
-        $user = $this->userWith('observaciones.view', 'observaciones.edit');
-        $responsable = User::factory()->create();
+        $otroResponsable = User::factory()->create();
 
         $this->actingAs($user)
             ->put("/observaciones/{$observacion->id}", [
-                'responsable_id' => $responsable->id,
-                'estado' => 'pendiente_clasificacion',
-            ])
-            ->assertRedirect(route('observaciones.index'));
-
-        $this->assertSame($responsable->id, $observacion->fresh()->responsable_id);
-    }
-
-    public function test_update_cambia_el_estado(): void
-    {
-        $observacion = Observacion::create([
-            'numero' => '0001-26',
-            'anio' => 2026,
-            'tipo' => 'falla_producto',
-            'estado' => 'pendiente_clasificacion',
-            'contacto_nombre' => 'Cliente Test',
-            'contacto_email' => 'cliente@example.com',
-            'titulo' => 'Título de prueba',
-            'descripcion' => 'Descripción de prueba',
-        ]);
-
-        $user = $this->userWith('observaciones.view', 'observaciones.edit');
-
-        $this->actingAs($user)
-            ->put("/observaciones/{$observacion->id}", [
-                'responsable_id' => null,
+                'responsable_id' => $otroResponsable->id,
                 'estado' => 'en_proceso',
             ])
             ->assertRedirect(route('observaciones.index'));
 
-        $this->assertSame('en_proceso', $observacion->fresh()->estado);
+        $observacion->refresh();
+        $this->assertSame($otroResponsable->id, $observacion->responsable_id);
+        $this->assertSame('en_proceso', $observacion->estado);
     }
 
-    public function test_update_rechaza_estado_invalido(): void
+    public function test_update_permite_a_super_admin_aunque_no_sea_el_responsable(): void
     {
+        $superAdmin = User::factory()->create();
+        Role::firstOrCreate(['name' => 'super-admin']);
+        $superAdmin->assignRole('super-admin');
+
+        $responsable = User::factory()->create();
+
         $observacion = Observacion::create([
             'numero' => '0001-26',
             'anio' => 2026,
@@ -178,9 +160,34 @@ class ObservacionAdminTest extends TestCase
             'contacto_email' => 'cliente@example.com',
             'titulo' => 'Título de prueba',
             'descripcion' => 'Descripción de prueba',
+            'responsable_id' => $responsable->id,
         ]);
 
-        $user = $this->userWith('observaciones.view', 'observaciones.edit');
+        $this->actingAs($superAdmin)
+            ->put("/observaciones/{$observacion->id}", [
+                'responsable_id' => $responsable->id,
+                'estado' => 'resuelta',
+            ])
+            ->assertRedirect(route('observaciones.index'));
+
+        $this->assertSame('resuelta', $observacion->fresh()->estado);
+    }
+
+    public function test_update_rechaza_estado_invalido(): void
+    {
+        $user = $this->userWith('observaciones.view');
+
+        $observacion = Observacion::create([
+            'numero' => '0001-26',
+            'anio' => 2026,
+            'tipo' => 'falla_producto',
+            'estado' => 'pendiente_clasificacion',
+            'contacto_nombre' => 'Cliente Test',
+            'contacto_email' => 'cliente@example.com',
+            'titulo' => 'Título de prueba',
+            'descripcion' => 'Descripción de prueba',
+            'responsable_id' => $user->id,
+        ]);
 
         $this->actingAs($user)
             ->put("/observaciones/{$observacion->id}", ['estado' => 'no_existe'])

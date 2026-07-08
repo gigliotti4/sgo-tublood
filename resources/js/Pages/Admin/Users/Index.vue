@@ -15,6 +15,7 @@ interface UserRow {
     email: string
     created_at: string
     roles: { name: string }[]
+    sector: { id: number; nombre: string } | null
 }
 
 defineProps<{ users: PaginatedData<UserRow> }>()
@@ -54,6 +55,7 @@ const destroy = () => {
                     <tr>
                         <th class="px-6 py-3 text-left">Nombre</th>
                         <th class="px-6 py-3 text-left">Email</th>
+                        <th class="px-6 py-3 text-left">Sector</th>
                         <th class="px-6 py-3 text-left">Roles</th>
                         <th class="px-6 py-3 text-left">Acciones</th>
                     </tr>
@@ -62,6 +64,7 @@ const destroy = () => {
                     <tr v-for="user in users.data" :key="user.id" class="hover:bg-gray-50 dark:hover:bg-slate-700/40">
                         <td class="px-6 py-4 font-medium text-gray-800 dark:text-slate-100">{{ user.name }}</td>
                         <td class="px-6 py-4 text-gray-500 dark:text-slate-400">{{ user.email }}</td>
+                        <td class="px-6 py-4 text-gray-500 dark:text-slate-400">{{ user.sector?.nombre ?? '—' }}</td>
                         <td class="px-6 py-4">
                             <Badge v-for="role in user.roles" :key="role.name" variant="indigo" :pill="false">
                                 {{ role.name }}
@@ -85,7 +88,7 @@ const destroy = () => {
                         </td>
                     </tr>
                     <tr v-if="users.data.length === 0">
-                        <td colspan="4" class="px-6 py-8 text-center text-gray-400 dark:text-slate-500">No hay usuarios.</td>
+                        <td colspan="5" class="px-6 py-8 text-center text-gray-400 dark:text-slate-500">No hay usuarios.</td>
                     </tr>
                 </tbody>
             </table>

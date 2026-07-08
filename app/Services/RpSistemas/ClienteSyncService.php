@@ -18,24 +18,26 @@ class ClienteSyncService
      */
     public function sync(): int
     {
-        $pagina    = 1;
-        $tamano    = config('services.rpsistemas.page_size', 100);
-        $total     = 0;
-        $syncedAt  = Carbon::now();
+        $pagina = 1;
+        $tamano = config('services.rpsistemas.page_size', 100);
+        $total = 0;
+        $syncedAt = Carbon::now();
 
         Log::info('RpSistemas: iniciando sincronización de clientes');
 
         do {
-            $result   = $this->client->getClientes($pagina, $tamano);
-            $datos    = $result['datos'];
+            $result = $this->client->getClientes($pagina, $tamano);
+            $datos = $result['datos'];
             $paginado = $result['paginado'];
 
             if (empty($datos)) {
                 break;
             }
 
-            $lote = array_map(fn($c) => $this->mapear($c, $syncedAt), $datos);
+            $lote = array_map(fn ($c) => $this->mapear($c, $syncedAt), $datos);
 
+            // No incluir 'fecha_vencimiento' aquí: es un campo propio (no gestionado
+            // por el ERP) que el admin edita a mano y la sync nunca debe pisar.
             Cliente::upsert(
                 $lote,
                 ['numero'],
@@ -63,28 +65,28 @@ class ClienteSyncService
         $now = $syncedAt->toDateTimeString();
 
         return [
-            'numero'               => (string) ($c['numero'] ?? ''),
-            'razon_social'         => (string) ($c['razon'] ?? ''),
-            'nombre_fantasia'      => $c['nombre_fantasia'] ?? null,
-            'cuit'                 => $c['cuit'] ?? null,
-            'codigo_iva'           => isset($c['codigo_iva']) ? (string) $c['codigo_iva'] : null,
-            'descripcion_iva'      => $c['descripcion_iva'] ?? null,
-            'telefono'             => $c['telefono'] ?? null,
-            'mail'                 => $c['mail'] ?? null,
-            'contacto'             => $c['contacto'] ?? null,
-            'domicilio'            => $c['domicilio'] ?? null,
-            'localidad'            => $c['localidad'] ?? null,
-            'codigo_provincia'     => $c['codigo_provincia'] ?? null,
-            'descripcion_provincia'=> $c['descripcion_provincia'] ?? null,
-            'porcen_descuen'       => isset($c['porcen_descuen']) && $c['porcen_descuen'] !== '' ? (float) $c['porcen_descuen'] : null,
-            'usuario_web'          => $c['usuario_web'] ?? null,
-            'codigo_vendedor'      => $c['codigo_vendedor'] ?? null,
-            'nombre_vendedor'      => $c['nombre_vendedor'] ?? null,
+            'numero' => (string) ($c['numero'] ?? ''),
+            'razon_social' => (string) ($c['razon'] ?? ''),
+            'nombre_fantasia' => $c['nombre_fantasia'] ?? null,
+            'cuit' => $c['cuit'] ?? null,
+            'codigo_iva' => isset($c['codigo_iva']) ? (string) $c['codigo_iva'] : null,
+            'descripcion_iva' => $c['descripcion_iva'] ?? null,
+            'telefono' => $c['telefono'] ?? null,
+            'mail' => $c['mail'] ?? null,
+            'contacto' => $c['contacto'] ?? null,
+            'domicilio' => $c['domicilio'] ?? null,
+            'localidad' => $c['localidad'] ?? null,
+            'codigo_provincia' => $c['codigo_provincia'] ?? null,
+            'descripcion_provincia' => $c['descripcion_provincia'] ?? null,
+            'porcen_descuen' => isset($c['porcen_descuen']) && $c['porcen_descuen'] !== '' ? (float) $c['porcen_descuen'] : null,
+            'usuario_web' => $c['usuario_web'] ?? null,
+            'codigo_vendedor' => $c['codigo_vendedor'] ?? null,
+            'nombre_vendedor' => $c['nombre_vendedor'] ?? null,
             // La clave llega con tilde: "código_postal"
-            'codigo_postal'        => $c['código_postal'] ?? $c['codigo_postal'] ?? null,
-            'synced_at'            => $now,
-            'created_at'           => $now,
-            'updated_at'           => $now,
+            'codigo_postal' => $c['código_postal'] ?? $c['codigo_postal'] ?? null,
+            'synced_at' => $now,
+            'created_at' => $now,
+            'updated_at' => $now,
         ];
     }
 }

@@ -18,7 +18,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'users.view', 'users.create', 'users.edit', 'users.delete',
             'roles.view', 'roles.create', 'roles.edit', 'roles.delete',
             'permissions.view',
-            'clientes.view', 'clientes.sync',
+            'clientes.view', 'clientes.sync', 'clientes.edit',
             'observaciones.view', 'observaciones.edit',
         ];
 
@@ -33,7 +33,7 @@ class RolesAndPermissionsSeeder extends Seeder
         $admin->syncPermissions([
             'users.view', 'users.create', 'users.edit',
             'roles.view',
-            'clientes.view', 'clientes.sync',
+            'clientes.view', 'clientes.sync', 'clientes.edit',
             'observaciones.view', 'observaciones.edit',
         ]);
 
@@ -41,7 +41,7 @@ class RolesAndPermissionsSeeder extends Seeder
         $viewer->syncPermissions(['users.view', 'roles.view', 'clientes.view', 'observaciones.view']);
 
         $usuarioInterno = Role::firstOrCreate(['name' => 'usuario_interno']);
-        $usuarioInterno->syncPermissions(['clientes.view', 'clientes.sync', 'observaciones.view', 'observaciones.edit']);
+        $usuarioInterno->syncPermissions(['clientes.view', 'clientes.sync', 'clientes.edit', 'observaciones.view', 'observaciones.edit']);
 
         $soloLectura = Role::firstOrCreate(['name' => 'solo_lectura']);
         $soloLectura->syncPermissions(['clientes.view', 'observaciones.view']);

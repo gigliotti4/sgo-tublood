@@ -4,6 +4,22 @@ export interface User {
     email: string
     roles: string[]
     permissions: string[]
+    sector_id?: number | null
+    sector?: Sector | null
+}
+
+export interface Sector {
+    id: number
+    nombre: string
+    slug: string
+    activo: boolean
+}
+
+export interface ClienteVencimiento {
+    id: number
+    numero: string
+    razon_social: string
+    fecha_vencimiento: string
 }
 
 export interface PageProps extends Record<string, unknown> {
@@ -13,6 +29,9 @@ export interface PageProps extends Record<string, unknown> {
     flash: {
         success?: string
         error?: string
+    }
+    notificaciones: {
+        vencimientos: ClienteVencimiento[]
     }
 }
 
@@ -25,6 +44,14 @@ export interface Role {
 export interface Permission {
     id: number
     name: string
+}
+
+export interface ClienteAttachment {
+    id: number
+    original_name: string
+    mime_type: string
+    size: number
+    created_at: string
 }
 
 export interface Cliente {
@@ -47,7 +74,19 @@ export interface Cliente {
     codigo_vendedor: string | null
     nombre_vendedor: string | null
     codigo_postal: string | null
+    fecha_vencimiento: string | null
     synced_at: string | null
+    attachments?: ClienteAttachment[]
+}
+
+export interface ObservationProduct {
+    id: number
+    producto: string
+    cantidad_afectada: number
+    lote: string
+    fecha_vencimiento: string
+    numero_remito: string
+    tipo_comprobante: string
 }
 
 export interface Observacion {
@@ -64,6 +103,7 @@ export interface Observacion {
     responsable_id: number | null
     responsable: { id: number; name: string } | null
     cliente: { id: number; numero: string; razon_social: string; mail: string | null; telefono: string | null } | null
+    productos: ObservationProduct[]
     created_at: string
 }
 

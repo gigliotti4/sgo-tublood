@@ -15,18 +15,18 @@ class ObservacionController extends Controller
 
         return inertia('Admin/Observaciones/Index', [
             'observaciones' => Observacion::query()
-                ->with(['responsable:id,name', 'cliente:id,numero,razon_social,mail,telefono'])
+                ->with(['responsable:id,name', 'cliente:id,numero,razon_social,mail,telefono', 'productos'])
                 ->latest()
                 ->paginate(20),
-            'usuarios' => $request->user()->can('observaciones.edit')
-                ? User::orderBy('name')->get(['id', 'name'])
-                : [],
+            // Cualquiera que vea el listado puede necesitar reasignar responsable
+            // en las filas que sí puede editar (ver ObservacionPolicy::update).
+            'usuarios' => User::orderBy('name')->get(['id', 'name']),
         ]);
     }
 
     public function update(Request $request, Observacion $observacion)
     {
-        $this->authorize('observaciones.edit');
+        $this->authorize('update', $observacion);
 
         $data = $request->validate([
             'responsable_id' => ['nullable', 'exists:users,id'],

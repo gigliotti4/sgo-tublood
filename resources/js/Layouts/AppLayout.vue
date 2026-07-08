@@ -12,6 +12,24 @@ const page = usePage<PageProps>()
 
 const sidebarCollapsed = ref(false)
 const mobileSidebarOpen = ref(false)
+const notificacionesOpen = ref(false)
+
+const vencimientos = computed(() => page.props.notificaciones?.vencimientos ?? [])
+
+const diasParaVencer = (fecha: string) => {
+    const hoy = new Date()
+    hoy.setHours(0, 0, 0, 0)
+    const venc = new Date(fecha)
+    venc.setHours(0, 0, 0, 0)
+    return Math.round((venc.getTime() - hoy.getTime()) / 86400000)
+}
+
+const labelVencimiento = (fecha: string) => {
+    const dias = diasParaVencer(fecha)
+    if (dias < 0) return `Vencido hace ${Math.abs(dias)} día${Math.abs(dias) !== 1 ? 's' : ''}`
+    if (dias === 0) return 'Vence hoy'
+    return `Vence en ${dias} día${dias !== 1 ? 's' : ''}`
+}
 
 interface MenuItem {
     label: string
@@ -253,11 +271,56 @@ const icons: Record<string, string> = {
                 </button>
 
                 <!-- Notification bell -->
-                <button class="relative text-slate-400 dark:text-slate-300 hover:text-slate-600 dark:hover:text-white transition-colors">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" class="w-5 h-5">
-                        <path stroke-linecap="round" stroke-linejoin="round" :d="icons.bell" />
-                    </svg>
-                </button>
+                <div class="relative">
+                    <button
+                        class="relative text-slate-400 dark:text-slate-300 hover:text-slate-600 dark:hover:text-white transition-colors"
+                        @click="notificacionesOpen = !notificacionesOpen"
+                    >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" class="w-5 h-5">
+                            <path stroke-linecap="round" stroke-linejoin="round" :d="icons.bell" />
+                        </svg>
+                        <span
+                            v-if="vencimientos.length > 0"
+                            class="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center"
+                        >
+                            {{ vencimientos.length > 9 ? '9+' : vencimientos.length }}
+                        </span>
+                    </button>
+
+                    <!-- Click-outside overlay -->
+                    <div v-if="notificacionesOpen" class="fixed inset-0 z-30" @click="notificacionesOpen = false" />
+
+                    <Transition name="fade">
+                        <div
+                            v-if="notificacionesOpen"
+                            class="absolute right-0 top-full mt-2 w-80 max-h-96 overflow-y-auto bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 z-40"
+                        >
+                            <div class="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
+                                <p class="text-sm font-semibold text-slate-800 dark:text-slate-100">Clientes por vencer</p>
+                            </div>
+                            <ul v-if="vencimientos.length > 0" class="divide-y divide-slate-100 dark:divide-slate-700">
+                                <li v-for="c in vencimientos" :key="c.id">
+                                    <Link
+                                        :href="route('clientes.index', { search: c.numero })"
+                                        class="block px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors"
+                                        @click="notificacionesOpen = false"
+                                    >
+                                        <p class="text-sm font-medium text-slate-800 dark:text-slate-100 truncate">{{ c.razon_social }}</p>
+                                        <p
+                                            class="text-xs mt-0.5"
+                                            :class="diasParaVencer(c.fecha_vencimiento) < 0 ? 'text-red-500' : 'text-amber-600 dark:text-amber-400'"
+                                        >
+                                            {{ labelVencimiento(c.fecha_vencimiento) }}
+                                        </p>
+                                    </Link>
+                                </li>
+                            </ul>
+                            <p v-else class="px-4 py-6 text-center text-sm text-slate-400 dark:text-slate-500">
+                                No hay clientes por vencer.
+                            </p>
+                        </div>
+                    </Transition>
+                </div>
 
                 <!-- User avatar -->
                 <div class="flex items-center gap-2.5">
