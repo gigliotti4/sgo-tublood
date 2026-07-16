@@ -82,6 +82,7 @@ export interface Cliente {
 export interface ObservationProduct {
     id: number
     producto: string
+    codigo: string | null
     cantidad_afectada: number
     lote: string
     fecha_vencimiento: string
@@ -99,9 +100,16 @@ export interface Observacion {
     descripcion: string
     contacto_nombre: string
     contacto_email: string
+    contacto_numero_cliente: string | null
     contacto_telefono: string | null
     responsable_id: number | null
     responsable: { id: number; name: string } | null
+    sector_id: number | null
+    sector: { id: number; nombre: string } | null
+    prioridad: string | null
+    tipo_caso: string | null
+    tecnovigilancia: boolean
+    datos_especificos: Record<string, string | number | null> | null
     cliente: { id: number; numero: string; razon_social: string; mail: string | null; telefono: string | null } | null
     productos: ObservationProduct[]
     created_at: string

@@ -50,6 +50,7 @@ class ObservacionController extends Controller
 
             'productos' => ['required_if:tipo,falla_producto', 'array'],
             'productos.*.producto' => ['required', 'string', 'max:255'],
+            'productos.*.codigo' => ['required', 'string', 'max:255'],
             'productos.*.cantidad_afectada' => ['required', 'integer', 'min:1'],
             'productos.*.lote' => ['required', 'string', 'max:255'],
             'productos.*.fecha_vencimiento' => ['required', 'date'],

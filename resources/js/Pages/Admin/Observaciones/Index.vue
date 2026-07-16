@@ -11,24 +11,27 @@ import Pagination from '@/Components/Pagination.vue'
 import type { Observacion, PaginatedData } from '@/types'
 
 interface UsuarioOption { id: number; name: string }
+interface SectorOption { id: number; nombre: string }
 
 defineProps<{
     observaciones: PaginatedData<Observacion>
     usuarios: UsuarioOption[]
+    sectores: SectorOption[]
+    tipoLabels: Record<string, string>
+    prioridades: Record<string, string>
+    tiposCaso: string[]
 }>()
 
 const { isSuperAdmin, user } = usePermissions()
 
 const puedeEditar = (o: Observacion) => isSuperAdmin.value || o.responsable_id === user.value?.id
 
+// El cliente ingresó un N° que no matcheó ningún cliente cargado (dato para revisar).
+const clienteNoEncontrado = (o: Observacion) => !o.cliente && !!o.contacto_numero_cliente
+
 const origenLabels: Record<string, string> = {
     interna: 'Interna',
     externa: 'Externa',
-}
-
-const tipoLabels: Record<string, string> = {
-    falla_producto: 'Falla de Producto',
-    disconformidad_servicio: 'Disconformidad de Servicio',
 }
 
 const estadoLabels: Record<string, string> = {
@@ -58,14 +61,20 @@ const observacionEnEdicion = ref<Observacion | null>(null)
 
 const form = useForm({
     responsable_id: null as number | null,
+    sector_id: null as number | null,
     estado: '',
+    prioridad: null as string | null,
+    tipo_caso: null as string | null,
 })
 
 const abrirEdicion = (o: Observacion) => {
     observacionEnEdicion.value = o
     form.clearErrors()
     form.responsable_id = o.responsable_id
+    form.sector_id = o.sector_id
     form.estado = o.estado
+    form.prioridad = o.prioridad
+    form.tipo_caso = o.tipo_caso
 }
 
 const cerrarEdicion = () => { observacionEnEdicion.value = null }
@@ -97,6 +106,7 @@ const guardar = () => {
                                 <th class="px-4 py-3">Origen</th>
                                 <th class="px-4 py-3">Título</th>
                                 <th class="px-4 py-3">Cliente</th>
+                                <th class="px-4 py-3">Sector</th>
                                 <th class="px-4 py-3">Responsable</th>
                                 <th class="px-4 py-3">Estado</th>
                                 <th class="px-4 py-3">Fecha</th>
@@ -105,7 +115,7 @@ const guardar = () => {
                         </thead>
                         <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
                             <tr v-if="observaciones.data.length === 0">
-                                <td colspan="9" class="px-4 py-12 text-center text-slate-400 dark:text-slate-500 text-sm">
+                                <td colspan="10" class="px-4 py-12 text-center text-slate-400 dark:text-slate-500 text-sm">
                                     No hay observaciones cargadas todavía.
                                 </td>
                             </tr>
@@ -120,7 +130,13 @@ const guardar = () => {
                                     <Badge variant="slate">{{ origenLabels[o.origen] ?? o.origen }}</Badge>
                                 </td>
                                 <td class="px-4 py-3 font-medium text-slate-800 dark:text-slate-100">{{ o.titulo }}</td>
-                                <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{{ o.contacto_nombre }}</td>
+                                <td class="px-4 py-3 text-slate-600 dark:text-slate-300">
+                                    <div class="flex items-center gap-2">
+                                        <span>{{ o.contacto_nombre }}</span>
+                                        <Badge v-if="clienteNoEncontrado(o)" variant="amber">N° no encontrado</Badge>
+                                    </div>
+                                </td>
+                                <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{{ o.sector?.nombre ?? '—' }}</td>
                                 <td class="px-4 py-3 text-slate-600 dark:text-slate-300">{{ o.responsable?.name ?? '—' }}</td>
                                 <td class="px-4 py-3">
                                     <Badge :variant="estadoVariant[o.estado] ?? 'slate'">{{ estadoLabels[o.estado] ?? o.estado }}</Badge>
@@ -178,6 +194,7 @@ const guardar = () => {
                             <thead>
                                 <tr class="text-left text-slate-400 dark:text-slate-500">
                                     <th class="pr-4 py-1">Producto</th>
+                                    <th class="pr-4 py-1">Código</th>
                                     <th class="pr-4 py-1">Cantidad</th>
                                     <th class="pr-4 py-1">Lote</th>
                                     <th class="pr-4 py-1">Vencimiento</th>
@@ -188,6 +205,7 @@ const guardar = () => {
                             <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
                                 <tr v-for="p in observacionEnEdicion.productos" :key="p.id" class="text-slate-600 dark:text-slate-300">
                                     <td class="pr-4 py-1.5">{{ p.producto }}</td>
+                                    <td class="pr-4 py-1.5">{{ p.codigo ?? '—' }}</td>
                                     <td class="pr-4 py-1.5">{{ p.cantidad_afectada }}</td>
                                     <td class="pr-4 py-1.5">{{ p.lote }}</td>
                                     <td class="pr-4 py-1.5">{{ formatFecha(p.fecha_vencimiento) }}</td>
@@ -214,33 +232,75 @@ const guardar = () => {
                         </dl>
                     </template>
                     <template v-else>
+                        <div v-if="clienteNoEncontrado(observacionEnEdicion)" class="mb-3 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-3 py-2">
+                            <p class="text-xs font-medium text-amber-700 dark:text-amber-400">
+                                N° ingresado <span class="font-mono">{{ observacionEnEdicion.contacto_numero_cliente }}</span> — no coincide con ningún cliente cargado. Revisar.
+                            </p>
+                        </div>
                         <p class="text-xs text-slate-400 dark:text-slate-500 mb-2">Sin cliente vinculado en RP Sistemas. Datos ingresados por el contacto:</p>
                         <dl class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                             <dt class="text-slate-400 dark:text-slate-500">Nombre</dt>
                             <dd class="text-slate-600 dark:text-slate-300">{{ observacionEnEdicion.contacto_nombre }}</dd>
                             <dt class="text-slate-400 dark:text-slate-500">Email</dt>
                             <dd class="text-slate-600 dark:text-slate-300">{{ observacionEnEdicion.contacto_email }}</dd>
+                            <dt class="text-slate-400 dark:text-slate-500">N° cliente</dt>
+                            <dd class="text-slate-600 dark:text-slate-300 font-mono">{{ observacionEnEdicion.contacto_numero_cliente || '—' }}</dd>
                             <dt class="text-slate-400 dark:text-slate-500">Teléfono</dt>
                             <dd class="text-slate-600 dark:text-slate-300">{{ observacionEnEdicion.contacto_telefono ?? '—' }}</dd>
                         </dl>
                     </template>
                 </div>
 
-                <!-- Estado y responsable -->
+                <!-- Clasificación y asignación -->
                 <form @submit.prevent="guardar" class="space-y-4">
-                    <div class="grid grid-cols-2 gap-4">
-                        <Select v-model="form.estado" label="Estado" :error="form.errors.estado">
-                            <option v-for="(label, estado) in estadoLabels" :key="estado" :value="estado">
-                                {{ label }}
-                            </option>
-                        </Select>
+                    <div>
+                        <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-2">Clasificación</p>
+                        <div class="grid grid-cols-2 gap-4">
+                            <Select v-model="form.prioridad" label="Prioridad" :error="form.errors.prioridad">
+                                <option :value="null">— Sin clasificar —</option>
+                                <option v-for="(label, key) in prioridades" :key="key" :value="key">
+                                    {{ label }}
+                                </option>
+                            </Select>
 
-                        <Select v-model="form.responsable_id" label="Responsable" :error="form.errors.responsable_id">
-                            <option :value="null">— Sin asignar —</option>
-                            <option v-for="usuario in usuarios" :key="usuario.id" :value="usuario.id">
-                                {{ usuario.name }}
-                            </option>
-                        </Select>
+                            <Select v-model="form.tipo_caso" label="Tipo de caso" :error="form.errors.tipo_caso">
+                                <option :value="null">— Sin clasificar —</option>
+                                <option v-for="tc in tiposCaso" :key="tc" :value="tc">
+                                    {{ tc }}
+                                </option>
+                            </Select>
+                        </div>
+                        <p
+                            v-if="observacionEnEdicion.estado === 'pendiente_clasificacion' && form.prioridad && form.tipo_caso"
+                            class="text-xs text-amber-600 dark:text-amber-400 mt-2"
+                        >
+                            Al guardar, la observación pasará a <strong>Clasificada</strong>.
+                        </p>
+                    </div>
+
+                    <div>
+                        <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-2">Asignación</p>
+                        <div class="grid grid-cols-2 gap-4">
+                            <Select v-model="form.estado" label="Estado" :error="form.errors.estado">
+                                <option v-for="(label, estado) in estadoLabels" :key="estado" :value="estado">
+                                    {{ label }}
+                                </option>
+                            </Select>
+
+                            <Select v-model="form.responsable_id" label="Responsable" :error="form.errors.responsable_id">
+                                <option :value="null">— Sin asignar —</option>
+                                <option v-for="usuario in usuarios" :key="usuario.id" :value="usuario.id">
+                                    {{ usuario.name }}
+                                </option>
+                            </Select>
+
+                            <Select v-model="form.sector_id" label="Sector" :error="form.errors.sector_id">
+                                <option :value="null">— Sin asignar —</option>
+                                <option v-for="sector in sectores" :key="sector.id" :value="sector.id">
+                                    {{ sector.nombre }}
+                                </option>
+                            </Select>
+                        </div>
                     </div>
 
                     <div class="flex gap-3 pt-2">

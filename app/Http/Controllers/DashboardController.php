@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Observacion;
+use App\Support\TaxonomiaIncidencias;
 
 class DashboardController extends Controller
 {
@@ -50,6 +51,7 @@ class DashboardController extends Controller
                 ->latest()
                 ->limit(8)
                 ->get(['id', 'numero', 'tipo', 'estado', 'titulo', 'created_at']),
+            'tipoLabels' => TaxonomiaIncidencias::etiquetasTipos(),
         ]);
     }
 }

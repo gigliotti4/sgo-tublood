@@ -36,6 +36,7 @@ class Observacion extends Model
         'contacto_numero_cliente',
         'cliente_id',
         'responsable_id',
+        'sector_id',
         'contacto_telefono',
         'titulo',
         'descripcion',
@@ -46,10 +47,12 @@ class Observacion extends Model
         'prioridad',
         'tipo_caso',
         'tecnovigilancia',
+        'datos_especificos',
     ];
 
     protected $casts = [
         'tecnovigilancia' => 'boolean',
+        'datos_especificos' => 'array',
     ];
 
     public function attachments(): HasMany
@@ -70,6 +73,11 @@ class Observacion extends Model
     public function responsable(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function sector(): BelongsTo
+    {
+        return $this->belongsTo(Sector::class);
     }
 
     public static function generarNumero(int $anio): string

@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { Head, Link, useForm } from '@inertiajs/vue3'
 import { ref } from 'vue'
+import AppLayout from '@/Layouts/AppLayout.vue'
 
 interface TipoOption { value: string; label: string }
+interface SectorOption { id: number; nombre: string }
+interface UsuarioOption { id: number; name: string }
 
 interface ProductoForm {
     producto: string
@@ -15,8 +18,11 @@ interface ProductoForm {
 }
 
 const props = defineProps<{
+    origen: string
     provincias: string[]
     tipoOptions: TipoOption[]
+    sectores: SectorOption[]
+    usuarios: UsuarioOption[]
 }>()
 
 const nuevoProducto = (): ProductoForm => ({
@@ -37,6 +43,8 @@ const form = useForm({
     contacto_telefono: '',
     titulo: '',
     descripcion: '',
+    sector_id: null as number | null,
+    responsable_id: null as number | null,
     institucion: '',
     provincia: '',
     equipamiento: '',
@@ -68,18 +76,17 @@ const removeFile = (index: number) => {
     form.attachments = form.attachments.filter((_, i) => i !== index)
 }
 
-const submit = () => form.post(route('observaciones.public.store'), { forceFormData: true })
+const submit = () => form.post(route('observaciones.store'), { forceFormData: true })
 </script>
 
 <template>
-    <Head title="Cargar observación" />
+    <Head title="Nueva observación externa" />
 
-    <div class="min-h-screen bg-slate-50 px-4 py-10">
-        <div class="max-w-2xl mx-auto">
-            <!-- Encabezado -->
-            <div class="bg-linear-to-br from-indigo-950 via-indigo-900 to-slate-900 rounded-2xl p-8 mb-6 text-center shadow-lg shadow-indigo-900/20">
-                <h1 class="text-white font-bold text-2xl">📋 Cargar observación</h1>
-                <p class="text-indigo-300 text-sm mt-1">Espacio exclusivo para clientes</p>
+    <AppLayout>
+        <div class="max-w-xxl mx-auto">
+            <div class="mb-6">
+                <h1 class="text-xl font-bold text-slate-800">Nueva observación externa</h1>
+                <p class="text-sm text-slate-500 mt-0.5">Reclamo de cliente cargado manualmente</p>
             </div>
 
             <form @submit.prevent="submit" class="bg-white rounded-2xl shadow p-6 sm:p-8 space-y-8">
@@ -103,9 +110,9 @@ const submit = () => form.post(route('observaciones.public.store'), { forceFormD
                     </div>
                 </section>
 
-                <!-- Tus datos -->
+                <!-- Datos del contacto -->
                 <section class="space-y-4">
-                    <h2 class="text-sm font-semibold text-slate-800 border-b border-slate-100 pb-2">Tus datos</h2>
+                    <h2 class="text-sm font-semibold text-slate-800 border-b border-slate-100 pb-2">Datos del contacto</h2>
                     <div class="grid sm:grid-cols-3 gap-4">
                         <div class="space-y-1.5 sm:col-span-1">
                             <label for="contacto_nombre" class="block text-sm font-medium text-slate-700">
@@ -187,6 +194,42 @@ const submit = () => form.post(route('observaciones.public.store'), { forceFormD
                             :class="form.errors.descripcion ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
                         />
                         <p v-if="form.errors.descripcion" class="text-red-500 text-xs">{{ form.errors.descripcion }}</p>
+                    </div>
+                </section>
+
+                <!-- Asignación -->
+                <section class="space-y-4">
+                    <h2 class="text-sm font-semibold text-slate-800 border-b border-slate-100 pb-2">Asignación</h2>
+                    <div class="grid sm:grid-cols-2 gap-4">
+                        <div class="space-y-1.5">
+                            <label for="sector_id" class="block text-sm font-medium text-slate-700">
+                                Sector responsable <span class="text-red-500">*</span>
+                            </label>
+                            <select
+                                id="sector_id"
+                                v-model="form.sector_id"
+                                class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                :class="form.errors.sector_id ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
+                            >
+                                <option :value="null" disabled>— Seleccionar —</option>
+                                <option v-for="s in props.sectores" :key="s.id" :value="s.id">{{ s.nombre }}</option>
+                            </select>
+                            <p v-if="form.errors.sector_id" class="text-red-500 text-xs">{{ form.errors.sector_id }}</p>
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <label for="responsable_id" class="block text-sm font-medium text-slate-700">Responsable</label>
+                            <select
+                                id="responsable_id"
+                                v-model="form.responsable_id"
+                                class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                :class="form.errors.responsable_id ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
+                            >
+                                <option :value="null">— Sin asignar —</option>
+                                <option v-for="u in props.usuarios" :key="u.id" :value="u.id">{{ u.name }}</option>
+                            </select>
+                            <p v-if="form.errors.responsable_id" class="text-red-500 text-xs">{{ form.errors.responsable_id }}</p>
+                        </div>
                     </div>
                 </section>
 
@@ -429,7 +472,7 @@ const submit = () => form.post(route('observaciones.public.store'), { forceFormD
                 <!-- Acciones -->
                 <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
                     <Link
-                        :href="route('login')"
+                        :href="route('observaciones.nuevo')"
                         class="px-4 py-2.5 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition"
                     >
                         ← Volver
@@ -439,10 +482,10 @@ const submit = () => form.post(route('observaciones.public.store'), { forceFormD
                         :disabled="form.processing"
                         class="px-5 py-2.5 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed transition"
                     >
-                        {{ form.processing ? 'Enviando...' : 'Enviar' }}
+                        {{ form.processing ? 'Guardando...' : 'Guardar observación' }}
                     </button>
                 </div>
             </form>
         </div>
-    </div>
+    </AppLayout>
 </template>

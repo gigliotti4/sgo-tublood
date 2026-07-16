@@ -68,6 +68,13 @@ Route::middleware(['auth'])->group(function () {
         Route::put('/observaciones/{observacion}', [AdminObservacionController::class, 'update'])
             ->middleware('can:update,observacion')->name('observaciones.update');
     });
+    Route::middleware('can:observaciones.edit')->group(function () {
+        // Selector "Crear nuevo registro" (externa / interna / No Conformidad).
+        Route::get('/observaciones/nuevo', [AdminObservacionController::class, 'nuevo'])->name('observaciones.nuevo');
+        // Carga manual (externa por ahora): mismo formulario del portal + sector y responsable.
+        Route::get('/observaciones/crear', [AdminObservacionController::class, 'create'])->name('observaciones.create');
+        Route::post('/observaciones', [AdminObservacionController::class, 'store'])->name('observaciones.store');
+    });
 
     // Roles
     Route::middleware('can:roles.view')->group(function () {

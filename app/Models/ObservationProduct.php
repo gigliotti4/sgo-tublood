@@ -10,6 +10,7 @@ class ObservationProduct extends Model
     protected $fillable = [
         'observation_id',
         'producto',
+        'codigo',
         'cantidad_afectada',
         'lote',
         'fecha_vencimiento',

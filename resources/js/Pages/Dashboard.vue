@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import AppLayout from '@/Layouts/AppLayout.vue'
-import { Head } from '@inertiajs/vue3'
+import { Head, Link } from '@inertiajs/vue3'
 import { route } from 'ziggy-js'
 import Badge from '@/Components/Badge.vue'
-import Button from '@/Components/Button.vue'
+import { usePermissions } from '@/composables/usePermissions'
+
+const { hasPermission } = usePermissions()
 
 interface EstadoCount {
     estado: string
@@ -39,12 +41,8 @@ const props = defineProps<{
     porSector: { sector: string; count: number }[]
     asignadas: UltimaObservacion[]
     ultimas: UltimaObservacion[]
+    tipoLabels: Record<string, string>
 }>()
-
-const tipoLabels: Record<string, string> = {
-    falla_producto: 'Falla de Producto',
-    disconformidad_servicio: 'Disconformidad de Servicio',
-}
 
 const estadoVariant: Record<string, 'amber' | 'blue' | 'indigo' | 'purple' | 'emerald' | 'slate' | 'red'> = {
     pendiente_clasificacion: 'amber',
@@ -76,7 +74,13 @@ const barWidth = (count: number) =>
                 <h1 class="text-xl font-bold text-slate-800 dark:text-slate-100">Panel de control</h1>
                 <p class="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Resumen del sistema</p>
             </div>
-            <Button variant="primary" disabled title="Próximamente">+ Nueva</Button>
+            <Link
+                v-if="hasPermission('observaciones.edit')"
+                :href="route('observaciones.nuevo')"
+                class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition"
+            >
+                + Nueva
+            </Link>
         </div>
 
         <!-- Stat cards -->

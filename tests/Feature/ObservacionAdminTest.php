@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Cliente;
 use App\Models\Observacion;
+use App\Models\Sector;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
@@ -171,6 +172,245 @@ class ObservacionAdminTest extends TestCase
             ->assertRedirect(route('observaciones.index'));
 
         $this->assertSame('resuelta', $observacion->fresh()->estado);
+    }
+
+    public function test_create_requiere_permiso_observaciones_edit(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user)->get('/observaciones/crear?origen=externa')->assertStatus(403);
+    }
+
+    public function test_create_rechaza_origen_invalido(): void
+    {
+        $user = $this->userWith('observaciones.edit');
+        $this->actingAs($user)->get('/observaciones/crear?origen=marciano')->assertStatus(404);
+    }
+
+    public function test_store_crea_observacion_externa_con_sector_responsable_y_productos(): void
+    {
+        $user = $this->userWith('observaciones.edit');
+        $sector = Sector::create(['nombre' => 'Garantía de Calidad', 'slug' => 'garantia_calidad']);
+        $responsable = User::factory()->create();
+
+        $this->actingAs($user)
+            ->post('/observaciones', [
+                'tipo' => 'falla_producto',
+                'contacto_nombre' => 'Clínica Test',
+                'contacto_email' => 'contacto@clinicatest.com',
+                'titulo' => 'Producto con falla',
+                'descripcion' => 'El producto llegó dañado.',
+                'sector_id' => $sector->id,
+                'responsable_id' => $responsable->id,
+                'institucion' => 'Clínica Test',
+                'provincia' => 'Córdoba',
+                'productos' => [[
+                    'producto' => 'Guía de infusión',
+                    'codigo' => 'GUIA-123',
+                    'cantidad_afectada' => 3,
+                    'lote' => 'L-123',
+                    'fecha_vencimiento' => '2027-01-01',
+                    'numero_remito' => 'R-999',
+                    'tipo_comprobante' => 'remito',
+                ]],
+            ])
+            ->assertRedirect(route('observaciones.index'));
+
+        $observacion = Observacion::first();
+        $this->assertNotNull($observacion);
+        $this->assertSame('externa', $observacion->origen);
+        $this->assertSame('pendiente_clasificacion', $observacion->estado);
+        $this->assertSame($sector->id, $observacion->sector_id);
+        $this->assertSame($responsable->id, $observacion->responsable_id);
+        $this->assertCount(1, $observacion->productos);
+    }
+
+    public function test_store_vincula_cliente_por_numero(): void
+    {
+        $user = $this->userWith('observaciones.edit');
+        $sector = Sector::create(['nombre' => 'Comercial', 'slug' => 'comercial']);
+        $cliente = Cliente::create(['numero' => '777', 'razon_social' => 'Cliente Vinculado SA']);
+
+        $this->actingAs($user)
+            ->post('/observaciones', [
+                'tipo' => 'disconformidad_servicio',
+                'contacto_nombre' => 'Cliente Vinculado SA',
+                'contacto_email' => 'cv@example.com',
+                'contacto_numero_cliente' => '777',
+                'titulo' => 'Demora en la entrega',
+                'descripcion' => 'Se demoró el envío.',
+                'sector_id' => $sector->id,
+            ])
+            ->assertRedirect(route('observaciones.index'));
+
+        $this->assertSame($cliente->id, Observacion::first()->cliente_id);
+    }
+
+    public function test_store_requiere_sector(): void
+    {
+        $user = $this->userWith('observaciones.edit');
+
+        $this->actingAs($user)
+            ->post('/observaciones', [
+                'tipo' => 'disconformidad_servicio',
+                'contacto_nombre' => 'Sin Sector',
+                'contacto_email' => 'ss@example.com',
+                'titulo' => 'Reclamo',
+                'descripcion' => 'Detalle.',
+            ])
+            ->assertSessionHasErrors('sector_id');
+    }
+
+    public function test_store_interna_crea_observacion_con_datos_especificos(): void
+    {
+        $user = $this->userWith('observaciones.edit');
+        $sector = Sector::create(['nombre' => 'Facturación', 'slug' => 'facturacion']);
+
+        $this->actingAs($user)
+            ->post('/observaciones', [
+                'origen' => 'interna',
+                'sector_id' => $sector->id,
+                'tipo' => 'error_facturacion',
+                'titulo' => 'Factura con importe mal',
+                'descripcion' => 'El importe no coincide.',
+                'prioridad' => 'alta',
+                'tipo_caso' => 'Documentación',
+                'datos_especificos' => [
+                    'tipo_comprobante' => 'Factura',
+                    'numero_comprobante' => 'FA-0001',
+                ],
+            ])
+            ->assertRedirect(route('observaciones.index'));
+
+        $observacion = Observacion::first();
+        $this->assertSame('interna', $observacion->origen);
+        $this->assertSame('clasificada', $observacion->estado);
+        $this->assertSame('error_facturacion', $observacion->tipo);
+        $this->assertSame($sector->id, $observacion->sector_id);
+        $this->assertSame('FA-0001', $observacion->datos_especificos['numero_comprobante']);
+    }
+
+    public function test_store_interna_rechaza_tipo_que_no_es_del_sector(): void
+    {
+        $user = $this->userWith('observaciones.edit');
+        $sector = Sector::create(['nombre' => 'Facturación', 'slug' => 'facturacion']);
+
+        $this->actingAs($user)
+            ->post('/observaciones', [
+                'origen' => 'interna',
+                'sector_id' => $sector->id,
+                'tipo' => 'siniestro_chofer', // es de logística, no de facturación
+                'titulo' => 'Título',
+                'descripcion' => 'Detalle.',
+                'prioridad' => 'alta',
+                'tipo_caso' => 'Otro',
+            ])
+            ->assertSessionHasErrors('tipo');
+    }
+
+    public function test_store_interna_valida_campo_especifico_obligatorio(): void
+    {
+        $user = $this->userWith('observaciones.edit');
+        $sector = Sector::create(['nombre' => 'Facturación', 'slug' => 'facturacion']);
+
+        $this->actingAs($user)
+            ->post('/observaciones', [
+                'origen' => 'interna',
+                'sector_id' => $sector->id,
+                'tipo' => 'error_facturacion',
+                'titulo' => 'Título',
+                'descripcion' => 'Detalle.',
+                'prioridad' => 'alta',
+                'tipo_caso' => 'Otro',
+                'datos_especificos' => ['numero_comprobante' => 'FA-1'], // falta tipo_comprobante (required)
+            ])
+            ->assertSessionHasErrors('datos_especificos.tipo_comprobante');
+    }
+
+    public function test_update_permite_asignar_sector(): void
+    {
+        $user = $this->userWith('observaciones.view');
+        $sector = Sector::create(['nombre' => 'Logística', 'slug' => 'logistica']);
+
+        $observacion = Observacion::create([
+            'numero' => '0001-26',
+            'anio' => 2026,
+            'tipo' => 'falla_producto',
+            'estado' => 'pendiente_clasificacion',
+            'contacto_nombre' => 'Cliente Test',
+            'contacto_email' => 'cliente@example.com',
+            'titulo' => 'Título de prueba',
+            'descripcion' => 'Descripción de prueba',
+            'responsable_id' => $user->id,
+        ]);
+
+        $this->actingAs($user)
+            ->put("/observaciones/{$observacion->id}", [
+                'estado' => 'en_proceso',
+                'sector_id' => $sector->id,
+            ])
+            ->assertRedirect(route('observaciones.index'));
+
+        $this->assertSame($sector->id, $observacion->fresh()->sector_id);
+    }
+
+    public function test_update_clasifica_al_completar_prioridad_y_tipo_caso(): void
+    {
+        $superAdmin = User::factory()->create();
+        Role::firstOrCreate(['name' => 'super-admin']);
+        $superAdmin->assignRole('super-admin');
+
+        $observacion = Observacion::create([
+            'numero' => '0001-26',
+            'anio' => 2026,
+            'tipo' => 'falla_producto',
+            'estado' => 'pendiente_clasificacion',
+            'origen' => 'externa',
+            'contacto_nombre' => 'Cliente Test',
+            'contacto_email' => 'cliente@example.com',
+            'titulo' => 'Título de prueba',
+            'descripcion' => 'Descripción de prueba',
+        ]);
+
+        $this->actingAs($superAdmin)
+            ->put("/observaciones/{$observacion->id}", [
+                'estado' => 'pendiente_clasificacion',
+                'prioridad' => 'alta',
+                'tipo_caso' => 'Documentación',
+            ])
+            ->assertRedirect(route('observaciones.index'));
+
+        $observacion->refresh();
+        $this->assertSame('clasificada', $observacion->estado);
+        $this->assertSame('alta', $observacion->prioridad);
+        $this->assertSame('Documentación', $observacion->tipo_caso);
+    }
+
+    public function test_update_no_clasifica_si_falta_tipo_caso(): void
+    {
+        $superAdmin = User::factory()->create();
+        Role::firstOrCreate(['name' => 'super-admin']);
+        $superAdmin->assignRole('super-admin');
+
+        $observacion = Observacion::create([
+            'numero' => '0001-26',
+            'anio' => 2026,
+            'tipo' => 'falla_producto',
+            'estado' => 'pendiente_clasificacion',
+            'origen' => 'externa',
+            'contacto_nombre' => 'Cliente Test',
+            'contacto_email' => 'cliente@example.com',
+            'titulo' => 'Título de prueba',
+            'descripcion' => 'Descripción de prueba',
+        ]);
+
+        $this->actingAs($superAdmin)
+            ->put("/observaciones/{$observacion->id}", [
+                'estado' => 'pendiente_clasificacion',
+                'prioridad' => 'alta',
+            ])
+            ->assertRedirect(route('observaciones.index'));
+
+        $this->assertSame('pendiente_clasificacion', $observacion->fresh()->estado);
     }
 
     public function test_update_rechaza_estado_invalido(): void

@@ -28,6 +28,7 @@ class ObservacionPublicaTest extends TestCase
             'productos' => [
                 [
                     'producto' => 'Set de infusión',
+                    'codigo' => 'SET-001',
                     'cantidad_afectada' => 5,
                     'lote' => 'L-2026-01',
                     'fecha_vencimiento' => '2027-01-01',
@@ -63,6 +64,7 @@ class ObservacionPublicaTest extends TestCase
         $this->assertCount(1, $observacion->attachments);
         $this->assertCount(1, $observacion->productos);
         $this->assertSame('Set de infusión', $observacion->productos->first()->producto);
+        $this->assertSame('SET-001', $observacion->productos->first()->codigo);
 
         Storage::disk('local')->assertExists($observacion->attachments->first()->path);
 
@@ -92,6 +94,7 @@ class ObservacionPublicaTest extends TestCase
         $data = $this->datosFallaProducto();
         $data['productos'][] = [
             'producto' => 'Catéter venoso',
+            'codigo' => 'CAT-002',
             'cantidad_afectada' => 2,
             'lote' => 'L-2026-02',
             'fecha_vencimiento' => '2027-03-01',
@@ -128,6 +131,10 @@ class ObservacionPublicaTest extends TestCase
     {
         $this->post('/cargar-observacion', $this->datosFallaProducto());
 
-        $this->assertNull(Observacion::first()->cliente_id);
+        // El reclamo se guarda igual, pero sin cliente vinculado y conservando
+        // el N° tipeado para que el equipo pueda revisarlo desde el admin.
+        $observacion = Observacion::first();
+        $this->assertNull($observacion->cliente_id);
+        $this->assertSame('123', $observacion->contacto_numero_cliente);
     }
 }
