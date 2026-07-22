@@ -1,22 +1,32 @@
 <script setup lang="ts">
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { Head, Link, useForm } from '@inertiajs/vue3'
-import Input from '@/Components/Input.vue'
-import Select from '@/Components/Select.vue'
 import Button from '@/Components/Button.vue'
+import CamposUsuario, { type AreaOption, type RoleOption, type UserFormData, type UsuarioOption } from '@/Components/CamposUsuario.vue'
 
-interface RoleOption { id: number; name: string }
-interface SectorOption { id: number; nombre: string }
-interface UserData { id: number; name: string; apellido: string | null; email: string; sector_id: number | null; roles: { name: string }[] }
+interface UserData {
+    id: number
+    name: string
+    apellido: string | null
+    email: string
+    area_id: number | null
+    supervisor_id: number | null
+    gerente_id: number | null
+    es_gerente: boolean
+    roles: { name: string }[]
+}
 
-const props = defineProps<{ user: UserData; roles: RoleOption[]; sectors: SectorOption[] }>()
+const props = defineProps<{ user: UserData; roles: RoleOption[]; areas: AreaOption[]; usuarios: UsuarioOption[] }>()
 
-const form = useForm({
+const form = useForm<UserFormData>({
     name: props.user.name,
     apellido: props.user.apellido ?? '',
     email: props.user.email,
     password: '',
-    sector_id: props.user.sector_id,
+    area_id: props.user.area_id,
+    supervisor_id: props.user.supervisor_id,
+    gerente_id: props.user.gerente_id,
+    es_gerente: props.user.es_gerente,
     roles: props.user.roles.map(r => r.name),
 })
 
@@ -27,44 +37,34 @@ const submit = () => form.put(route('users.update', props.user.id))
     <Head title="Editar usuario" />
 
     <AppLayout>
-        <div class="flex items-center gap-3 mb-6">
-            <Link :href="route('users.index')" class="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">← Volver</Link>
-            <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-100">Editar usuario</h1>
-        </div>
+        <div class="max-w-3xl mx-auto">
+            <div class="flex items-center gap-3 mb-6">
+                <Link :href="route('users.index')" class="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">← Volver</Link>
+                <h1 class="text-xl font-bold text-gray-800 dark:text-gray-100">Editar usuario</h1>
+            </div>
 
-        <div class="bg-white dark:bg-slate-800 rounded-xl shadow p-6 max-w-lg">
-            <form @submit.prevent="submit" class="space-y-4">
-                <Input v-model="form.name" label="Nombre" :error="form.errors.name" />
-                <Input v-model="form.apellido" label="Apellido" :error="form.errors.apellido" />
-                <Input v-model="form.email" type="email" label="Email" :error="form.errors.email" />
-                <Input v-model="form.password" type="password" :error="form.errors.password">
-                    <template #label>
-                        Nueva contraseña <span class="text-gray-400 dark:text-gray-500 font-normal">(dejar vacío para no cambiar)</span>
-                    </template>
-                </Input>
+            <form
+                @submit.prevent="submit"
+                class="bg-white dark:bg-slate-800 rounded-2xl shadow p-6 sm:p-8 space-y-8"
+            >
+                <CamposUsuario
+                    modo="editar"
+                    :form="form"
+                    :roles="roles"
+                    :areas="areas"
+                    :usuarios="usuarios"
+                />
 
-                <Select v-model="form.sector_id" label="Sector" :error="form.errors.sector_id">
-                    <option :value="null">— Sin sector —</option>
-                    <option v-for="sector in sectors" :key="sector.id" :value="sector.id">
-                        {{ sector.nombre }}
-                    </option>
-                </Select>
-
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Roles</label>
-                    <div class="space-y-1">
-                        <label v-for="role in roles" :key="role.id" class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                            <input type="checkbox" :value="role.name" v-model="form.roles" class="rounded" />
-                            {{ role.name }}
-                        </label>
-                    </div>
-                </div>
-
-                <div class="flex gap-3 pt-2">
-                    <Button type="submit" variant="primary" :disabled="form.processing">Guardar cambios</Button>
-                    <Link :href="route('users.index')" class="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">
+                <div class="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-700">
+                    <Link
+                        :href="route('users.index')"
+                        class="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition"
+                    >
                         Cancelar
                     </Link>
+                    <Button type="submit" variant="primary" :disabled="form.processing">
+                        {{ form.processing ? 'Guardando...' : 'Guardar cambios' }}
+                    </Button>
                 </div>
             </form>
         </div>

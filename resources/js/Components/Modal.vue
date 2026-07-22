@@ -2,7 +2,7 @@
 withDefaults(defineProps<{
     show: boolean
     title?: string
-    size?: 'sm' | 'lg'
+    size?: 'sm' | 'lg' | 'xl'
 }>(), {
     size: 'sm',
 })
@@ -10,8 +10,9 @@ withDefaults(defineProps<{
 const emit = defineEmits<{ close: [] }>()
 
 const sizeClasses: Record<string, string> = {
-    sm: 'max-w-md',
-    lg: 'max-w-xl',
+    sm: 'max-w-lg',
+    lg: 'max-w-3xl',
+    xl: 'max-w-5xl',
 }
 </script>
 

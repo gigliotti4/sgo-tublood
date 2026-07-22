@@ -1,22 +1,21 @@
 <script setup lang="ts">
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { Head, Link, useForm } from '@inertiajs/vue3'
-import Input from '@/Components/Input.vue'
-import Select from '@/Components/Select.vue'
 import Button from '@/Components/Button.vue'
+import CamposUsuario, { type AreaOption, type RoleOption, type UserFormData, type UsuarioOption } from '@/Components/CamposUsuario.vue'
 
-interface RoleOption { id: number; name: string }
-interface SectorOption { id: number; nombre: string }
+defineProps<{ roles: RoleOption[]; areas: AreaOption[]; usuarios: UsuarioOption[] }>()
 
-defineProps<{ roles: RoleOption[]; sectors: SectorOption[] }>()
-
-const form = useForm({
+const form = useForm<UserFormData>({
     name: '',
     apellido: '',
     email: '',
     password: '',
-    sector_id: null as number | null,
-    roles: [] as string[],
+    area_id: null,
+    supervisor_id: null,
+    gerente_id: null,
+    es_gerente: false,
+    roles: [],
 })
 
 const submit = () => form.post(route('users.store'))
@@ -26,40 +25,34 @@ const submit = () => form.post(route('users.store'))
     <Head title="Nuevo usuario" />
 
     <AppLayout>
-        <div class="flex items-center gap-3 mb-6">
-            <Link :href="route('users.index')" class="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">← Volver</Link>
-            <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-100">Nuevo usuario</h1>
-        </div>
+        <div class="max-w-3xl mx-auto">
+            <div class="flex items-center gap-3 mb-6">
+                <Link :href="route('users.index')" class="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">← Volver</Link>
+                <h1 class="text-xl font-bold text-gray-800 dark:text-gray-100">Nuevo usuario</h1>
+            </div>
 
-        <div class="bg-white dark:bg-slate-800 rounded-xl shadow p-6 max-w-lg">
-            <form @submit.prevent="submit" class="space-y-4">
-                <Input v-model="form.name" label="Nombre" :error="form.errors.name" />
-                <Input v-model="form.apellido" label="Apellido" :error="form.errors.apellido" />
-                <Input v-model="form.email" type="email" label="Email" :error="form.errors.email" />
-                <Input v-model="form.password" type="password" label="Contraseña" :error="form.errors.password" />
+            <form
+                @submit.prevent="submit"
+                class="bg-white dark:bg-slate-800 rounded-2xl shadow p-6 sm:p-8 space-y-8"
+            >
+                <CamposUsuario
+                    modo="crear"
+                    :form="form"
+                    :roles="roles"
+                    :areas="areas"
+                    :usuarios="usuarios"
+                />
 
-                <Select v-model="form.sector_id" label="Sector" :error="form.errors.sector_id">
-                    <option :value="null">— Sin sector —</option>
-                    <option v-for="sector in sectors" :key="sector.id" :value="sector.id">
-                        {{ sector.nombre }}
-                    </option>
-                </Select>
-
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Roles</label>
-                    <div class="space-y-1">
-                        <label v-for="role in roles" :key="role.id" class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                            <input type="checkbox" :value="role.name" v-model="form.roles" class="rounded" />
-                            {{ role.name }}
-                        </label>
-                    </div>
-                </div>
-
-                <div class="flex gap-3 pt-2">
-                    <Button type="submit" variant="primary" :disabled="form.processing">Crear usuario</Button>
-                    <Link :href="route('users.index')" class="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">
+                <div class="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-700">
+                    <Link
+                        :href="route('users.index')"
+                        class="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition"
+                    >
                         Cancelar
                     </Link>
+                    <Button type="submit" variant="primary" :disabled="form.processing">
+                        {{ form.processing ? 'Creando...' : 'Crear usuario' }}
+                    </Button>
                 </div>
             </form>
         </div>

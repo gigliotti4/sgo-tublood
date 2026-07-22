@@ -1,15 +1,18 @@
 <script setup lang="ts">
 defineOptions({ inheritAttrs: false })
 
-defineProps<{
+withDefaults(defineProps<{
     label?: string
     error?: string
     /** Texto de ayuda debajo del campo. Lo tapa el error cuando hay uno. */
     hint?: string
+    rows?: number
     required?: boolean
     /** Ocupa las dos columnas de un FormSection. */
     full?: boolean
-}>()
+}>(), {
+    rows: 3,
+})
 
 const model = defineModel<string | number | null>()
 </script>
@@ -20,14 +23,13 @@ const model = defineModel<string | number | null>()
             {{ label }}
             <span v-if="required" class="text-red-500">*</span>
         </label>
-        <select
+        <textarea
             v-model="model"
+            :rows="rows"
             v-bind="$attrs"
-            class="w-full border rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none disabled:bg-slate-50 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-500"
+            class="w-full border rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
             :class="error ? 'border-red-400 dark:border-red-500' : 'border-gray-300 dark:border-slate-600'"
-        >
-            <slot />
-        </select>
+        />
         <p v-if="error" class="text-red-500 dark:text-red-400 text-xs mt-1">{{ error }}</p>
         <p v-else-if="hint || $slots.hint" class="text-xs text-gray-500 dark:text-slate-400 mt-1">
             <slot name="hint">{{ hint }}</slot>

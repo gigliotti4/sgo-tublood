@@ -4,10 +4,12 @@
         "module": "ESNext",
         "moduleResolution": "bundler",
         "strict": true,
+        // Los .d.ts de las dependencias no son asunto nuestro: @inertiajs/core
+        // referencia axios, que ya no viene instalado.
+        "skipLibCheck": true,
         "jsx": "preserve",
-        "baseUrl": ".",
         "paths": {
-            "@/*": ["resources/js/*"]
+            "@/*": ["./resources/js/*"]
         },
         "types": ["vite/client"]
     },
