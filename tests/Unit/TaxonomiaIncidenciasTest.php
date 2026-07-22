@@ -28,6 +28,18 @@ class TaxonomiaIncidenciasTest extends TestCase
         ]);
     }
 
+    public function test_sector_de_tipo_encuentra_el_sector_dueno_del_tipo(): void
+    {
+        $this->assertSame('sector_prueba', TaxonomiaIncidencias::sectorDeTipo('tipo_prueba'));
+    }
+
+    public function test_sector_de_tipo_de_un_tipo_inexistente_es_null(): void
+    {
+        // El portal público depende de esto: si no hay sector, se guarda sin él
+        // en vez de reventar.
+        $this->assertNull(TaxonomiaIncidencias::sectorDeTipo('no_existe'));
+    }
+
     public function test_atributos_validacion_deriva_los_labels_de_la_taxonomia(): void
     {
         $atributos = TaxonomiaIncidencias::atributosValidacion('sector_prueba', 'tipo_prueba');

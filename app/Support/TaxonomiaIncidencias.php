@@ -32,6 +32,24 @@ class TaxonomiaIncidencias
         return $labels;
     }
 
+    /**
+     * Slug del sector al que pertenece un tipo de incidencia, o null si el tipo
+     * no está en la taxonomía. Se apoya en la misma invariante que
+     * {@see static::etiquetasTipos()}: las claves de tipo son únicas entre sectores.
+     *
+     * Lo usa el portal público, donde el cliente elige el tipo pero no el sector.
+     */
+    public static function sectorDeTipo(string $tipoKey): ?string
+    {
+        foreach (static::taxonomia() as $sectorSlug => $tipos) {
+            if (array_key_exists($tipoKey, $tipos)) {
+                return $sectorSlug;
+            }
+        }
+
+        return null;
+    }
+
     /** Def del tipo de incidencia para un sector, o null si no existe. */
     public static function tipo(string $sectorSlug, string $tipoKey): ?array
     {

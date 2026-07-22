@@ -4,9 +4,15 @@ namespace Tests\Feature;
 
 use App\Models\Cliente;
 use App\Models\Observacion;
+use App\Models\Sector;
+use App\Models\User;
+use App\Notifications\ObservacionExternaRecibidaNotification;
+use App\Notifications\ObservacionRecibidaClienteNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class ObservacionPublicaTest extends TestCase
@@ -107,6 +113,80 @@ class ObservacionPublicaTest extends TestCase
         $observacion = Observacion::first();
         $this->assertCount(2, $observacion->productos);
         $this->assertSame(['Set de infusión', 'Catéter venoso'], $observacion->productos->pluck('producto')->all());
+    }
+
+    public function test_asigna_el_sector_que_la_taxonomia_declara_para_el_tipo(): void
+    {
+        // La clase no seedea sectores: sin este registro no habría a qué apuntar.
+        $sector = Sector::create(['nombre' => 'Garantía de Calidad', 'slug' => 'garantia_calidad']);
+
+        $this->post('/cargar-observacion', $this->datosFallaProducto());
+
+        $this->assertSame($sector->id, Observacion::first()->sector_id);
+    }
+
+    public function test_disconformidad_de_servicio_tambien_entra_a_garantia_de_calidad(): void
+    {
+        $sector = Sector::create(['nombre' => 'Garantía de Calidad', 'slug' => 'garantia_calidad']);
+
+        $this->post('/cargar-observacion', [
+            'tipo' => 'disconformidad_servicio',
+            'contacto_nombre' => 'Cliente de Prueba SA',
+            'contacto_email' => 'cliente@example.com',
+            'titulo' => 'Demora en la respuesta',
+            'descripcion' => 'Nadie contestó el pedido.',
+        ]);
+
+        $this->assertSame($sector->id, Observacion::first()->sector_id);
+    }
+
+    public function test_sin_el_sector_cargado_el_reclamo_se_guarda_igual(): void
+    {
+        // El portal es público: un sector faltante no puede hacer perder un reclamo.
+        $this->post('/cargar-observacion', $this->datosFallaProducto())
+            ->assertRedirect(route('observaciones.public.confirmacion'));
+
+        $this->assertNull(Observacion::first()->sector_id);
+    }
+
+    public function test_le_manda_el_acuse_de_recibo_al_cliente(): void
+    {
+        Notification::fake();
+
+        $this->post('/cargar-observacion', $this->datosFallaProducto());
+
+        Notification::assertSentOnDemand(
+            ObservacionRecibidaClienteNotification::class,
+            fn ($notification, $channels, $notifiable) => $notifiable->routes['mail'] === 'cliente@example.com'
+        );
+    }
+
+    public function test_avisa_al_equipo_de_garantia_de_calidad(): void
+    {
+        Notification::fake();
+
+        Role::firstOrCreate(['name' => 'garantia_calidad', 'guard_name' => 'web']);
+        $calidad = User::factory()->create();
+        $calidad->assignRole('garantia_calidad');
+        $ajeno = User::factory()->create();
+
+        $this->post('/cargar-observacion', $this->datosFallaProducto());
+
+        Notification::assertSentTo($calidad, ObservacionExternaRecibidaNotification::class);
+        Notification::assertNotSentTo($ajeno, ObservacionExternaRecibidaNotification::class);
+    }
+
+    public function test_sin_nadie_en_garantia_de_calidad_el_reclamo_entra_igual(): void
+    {
+        Notification::fake();
+
+        // El portal es público: que no haya destinatarios internos no puede
+        // hacer fallar la carga del cliente.
+        $this->post('/cargar-observacion', $this->datosFallaProducto())
+            ->assertRedirect(route('observaciones.public.confirmacion'));
+
+        $this->assertDatabaseCount('observations', 1);
+        Notification::assertNothingSentTo(User::factory()->create());
     }
 
     public function test_confirmacion_sin_sesion_redirige_al_formulario(): void

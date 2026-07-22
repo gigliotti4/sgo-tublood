@@ -41,7 +41,10 @@ return [
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
             'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 90),
-            'after_commit' => false,
+            // Las observaciones se crean dentro de una transacción y los avisos
+            // por mail salen encolados: sin esto el worker podría tomar el job
+            // antes del commit y mandar un mail de algo que terminó revertido.
+            'after_commit' => true,
         ],
 
         'beanstalkd' => [
