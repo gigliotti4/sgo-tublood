@@ -238,6 +238,21 @@ return [
         ],
 
         'garantia_calidad' => [
+            // Tipos "especiales": son los del canal externo (lo que carga el cliente
+            // por el portal público), pero se pueden cargar a mano acá cuando el
+            // reclamo llega por teléfono o mail. Declaran acá su código y su nombre,
+            // igual que el resto, pero no tienen `campos`: sus datos son productos
+            // repetibles, que valida Admin\ObservacionController::storeInternaEspecial().
+            'falla_producto' => [
+                'codigo' => '1.1',
+                'label' => 'Falla de producto',
+                'especial' => true,
+            ],
+            'disconformidad_servicio' => [
+                'codigo' => '1.2',
+                'label' => 'Disconformidad de servicio',
+                'especial' => true,
+            ],
             'evaluacion_tecnica' => [
                 'codigo' => '8.1',
                 'label' => 'Evaluación técnica de caso',

@@ -177,87 +177,7 @@ class ObservacionAdminTest extends TestCase
     public function test_create_requiere_permiso_observaciones_edit(): void
     {
         $user = User::factory()->create();
-        $this->actingAs($user)->get('/observaciones/crear?origen=externa')->assertStatus(403);
-    }
-
-    public function test_create_rechaza_origen_invalido(): void
-    {
-        $user = $this->userWith('observaciones.edit');
-        $this->actingAs($user)->get('/observaciones/crear?origen=marciano')->assertStatus(404);
-    }
-
-    public function test_store_crea_observacion_externa_con_sector_responsable_y_productos(): void
-    {
-        $user = $this->userWith('observaciones.edit');
-        $sector = Sector::create(['nombre' => 'Garantía de Calidad', 'slug' => 'garantia_calidad']);
-        $responsable = User::factory()->create();
-
-        $this->actingAs($user)
-            ->post('/observaciones', [
-                'tipo' => 'falla_producto',
-                'contacto_nombre' => 'Clínica Test',
-                'contacto_email' => 'contacto@clinicatest.com',
-                'titulo' => 'Producto con falla',
-                'descripcion' => 'El producto llegó dañado.',
-                'sector_id' => $sector->id,
-                'responsable_id' => $responsable->id,
-                'institucion' => 'Clínica Test',
-                'provincia' => 'Córdoba',
-                'productos' => [[
-                    'producto' => 'Guía de infusión',
-                    'codigo' => 'GUIA-123',
-                    'cantidad_afectada' => 3,
-                    'lote' => 'L-123',
-                    'fecha_vencimiento' => '2027-01-01',
-                    'numero_remito' => 'R-999',
-                    'tipo_comprobante' => 'remito',
-                ]],
-            ])
-            ->assertRedirect(route('observaciones.index'));
-
-        $observacion = Observacion::first();
-        $this->assertNotNull($observacion);
-        $this->assertSame('externa', $observacion->origen);
-        $this->assertSame('pendiente_clasificacion', $observacion->estado);
-        $this->assertSame($sector->id, $observacion->sector_id);
-        $this->assertSame($responsable->id, $observacion->responsable_id);
-        $this->assertCount(1, $observacion->productos);
-    }
-
-    public function test_store_vincula_cliente_por_numero(): void
-    {
-        $user = $this->userWith('observaciones.edit');
-        $sector = Sector::create(['nombre' => 'Comercial', 'slug' => 'comercial']);
-        $cliente = Cliente::create(['numero' => '777', 'razon_social' => 'Cliente Vinculado SA']);
-
-        $this->actingAs($user)
-            ->post('/observaciones', [
-                'tipo' => 'disconformidad_servicio',
-                'contacto_nombre' => 'Cliente Vinculado SA',
-                'contacto_email' => 'cv@example.com',
-                'contacto_numero_cliente' => '777',
-                'titulo' => 'Demora en la entrega',
-                'descripcion' => 'Se demoró el envío.',
-                'sector_id' => $sector->id,
-            ])
-            ->assertRedirect(route('observaciones.index'));
-
-        $this->assertSame($cliente->id, Observacion::first()->cliente_id);
-    }
-
-    public function test_store_requiere_sector(): void
-    {
-        $user = $this->userWith('observaciones.edit');
-
-        $this->actingAs($user)
-            ->post('/observaciones', [
-                'tipo' => 'disconformidad_servicio',
-                'contacto_nombre' => 'Sin Sector',
-                'contacto_email' => 'ss@example.com',
-                'titulo' => 'Reclamo',
-                'descripcion' => 'Detalle.',
-            ])
-            ->assertSessionHasErrors('sector_id');
+        $this->actingAs($user)->get('/observaciones/crear')->assertStatus(403);
     }
 
     public function test_store_interna_crea_observacion_con_datos_especificos(): void
@@ -324,6 +244,105 @@ class ObservacionAdminTest extends TestCase
                 'datos_especificos' => ['numero_comprobante' => 'FA-1'], // falta tipo_comprobante (required)
             ])
             ->assertSessionHasErrors('datos_especificos.tipo_comprobante');
+    }
+
+    public function test_store_interna_falla_producto_en_garantia_calidad(): void
+    {
+        $user = $this->userWith('observaciones.edit');
+        $sector = Sector::create(['nombre' => 'Garantía de Calidad', 'slug' => 'garantia_calidad']);
+
+        $this->actingAs($user)
+            ->post('/observaciones', [
+                'origen' => 'interna',
+                'sector_id' => $sector->id,
+                'tipo' => 'falla_producto',
+                'titulo' => 'Producto con falla',
+                'descripcion' => 'El producto llegó dañado.',
+                'prioridad' => 'alta',
+                'tipo_caso' => 'Producto defectuoso',
+                'institucion' => 'Clínica Test',
+                'provincia' => 'Córdoba',
+                'productos' => [[
+                    'producto' => 'Guía de infusión',
+                    'codigo' => 'GUIA-123',
+                    'cantidad_afectada' => 3,
+                    'lote' => 'L-123',
+                    'fecha_vencimiento' => '2027-01-01',
+                    'numero_remito' => 'R-999',
+                    'tipo_comprobante' => 'remito',
+                ]],
+            ])
+            ->assertRedirect(route('observaciones.index'));
+
+        $observacion = Observacion::first();
+        $this->assertNotNull($observacion);
+        $this->assertSame('interna', $observacion->origen);
+        $this->assertSame('clasificada', $observacion->estado);
+        $this->assertSame('falla_producto', $observacion->tipo);
+        $this->assertSame($sector->id, $observacion->sector_id);
+        $this->assertSame('Clínica Test', $observacion->institucion);
+        $this->assertNull($observacion->contacto_nombre);
+        $this->assertCount(1, $observacion->productos);
+    }
+
+    public function test_store_interna_disconformidad_servicio_en_garantia_calidad(): void
+    {
+        $user = $this->userWith('observaciones.edit');
+        $sector = Sector::create(['nombre' => 'Garantía de Calidad', 'slug' => 'garantia_calidad']);
+
+        $this->actingAs($user)
+            ->post('/observaciones', [
+                'origen' => 'interna',
+                'sector_id' => $sector->id,
+                'tipo' => 'disconformidad_servicio',
+                'titulo' => 'Demora en la entrega',
+                'descripcion' => 'Se demoró el envío.',
+                'prioridad' => 'media',
+                'tipo_caso' => 'Demora logística',
+            ])
+            ->assertRedirect(route('observaciones.index'));
+
+        $observacion = Observacion::first();
+        $this->assertSame('disconformidad_servicio', $observacion->tipo);
+        $this->assertSame('clasificada', $observacion->estado);
+    }
+
+    public function test_store_interna_falla_producto_rechaza_sector_que_no_es_garantia_calidad(): void
+    {
+        $user = $this->userWith('observaciones.edit');
+        $sector = Sector::create(['nombre' => 'Facturación', 'slug' => 'facturacion']);
+
+        $this->actingAs($user)
+            ->post('/observaciones', [
+                'origen' => 'interna',
+                'sector_id' => $sector->id,
+                'tipo' => 'falla_producto',
+                'titulo' => 'Título',
+                'descripcion' => 'Detalle.',
+                'prioridad' => 'alta',
+                'tipo_caso' => 'Otro',
+            ])
+            ->assertSessionHasErrors('tipo');
+    }
+
+    public function test_store_interna_falla_producto_requiere_productos(): void
+    {
+        $user = $this->userWith('observaciones.edit');
+        $sector = Sector::create(['nombre' => 'Garantía de Calidad', 'slug' => 'garantia_calidad']);
+
+        $this->actingAs($user)
+            ->post('/observaciones', [
+                'origen' => 'interna',
+                'sector_id' => $sector->id,
+                'tipo' => 'falla_producto',
+                'titulo' => 'Título',
+                'descripcion' => 'Detalle.',
+                'prioridad' => 'alta',
+                'tipo_caso' => 'Producto defectuoso',
+                'institucion' => 'Clínica Test',
+                'provincia' => 'Córdoba',
+            ])
+            ->assertSessionHasErrors('productos');
     }
 
     public function test_update_permite_asignar_sector(): void

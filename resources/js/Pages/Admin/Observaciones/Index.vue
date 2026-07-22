@@ -164,7 +164,8 @@ const guardar = () => {
         </div>
 
         <!-- Modal de edición -->
-        <Modal :show="observacionEnEdicion !== null" title="Editar observación" size="lg" @close="cerrarEdicion">
+
+        <Modal :show="observacionEnEdicion !== null" title="Editar observación" size="xl" @close="cerrarEdicion">
             <template v-if="observacionEnEdicion">
                 <div class="flex items-center gap-3 mb-4">
                     <span class="font-mono text-xs text-slate-500 dark:text-slate-400">{{ observacionEnEdicion.numero }}</span>

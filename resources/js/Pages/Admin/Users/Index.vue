@@ -1,24 +1,32 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
-import { Head, Link, router } from '@inertiajs/vue3'
+import { Head, Link, router, useForm } from '@inertiajs/vue3'
 import { usePermissions } from '@/composables/usePermissions'
 import Badge from '@/Components/Badge.vue'
 import Button from '@/Components/Button.vue'
 import Modal from '@/Components/Modal.vue'
 import Pagination from '@/Components/Pagination.vue'
+import Select from '@/Components/Select.vue'
 import type { PaginatedData } from '@/types'
 
+interface RoleOption { id: number; name: string }
+interface Importado { nombre: string; email: string; password: string }
 interface UserRow {
     id: number
     name: string
+    apellido: string | null
     email: string
     created_at: string
     roles: { name: string }[]
     sector: { id: number; nombre: string } | null
 }
 
-defineProps<{ users: PaginatedData<UserRow> }>()
+const props = defineProps<{
+    users: PaginatedData<UserRow>
+    roles: RoleOption[]
+    importados?: Importado[] | null
+}>()
 
 const { hasPermission } = usePermissions()
 
@@ -32,6 +40,38 @@ const destroy = () => {
         onFinish: () => { userToDelete.value = null },
     })
 }
+
+const nombreCompleto = (user: UserRow) => [user.name, user.apellido].filter(Boolean).join(' ')
+
+const showImportModal = ref(false)
+const importForm = useForm({
+    archivo: null as File | null,
+    rol: '',
+})
+
+const onArchivoChange = (e: Event) => {
+    importForm.archivo = (e.target as HTMLInputElement).files?.[0] ?? null
+}
+
+const submitImport = () => {
+    importForm.post(route('users.import'), {
+        forceFormData: true,
+        onSuccess: () => {
+            showImportModal.value = false
+            importForm.reset()
+        },
+    })
+}
+
+// Las contraseñas llegan por flash y solo se muestran una vez: se cierran a mano
+// para que no desaparezcan por una navegación accidental.
+const showCredenciales = ref((props.importados?.length ?? 0) > 0)
+
+const credencialesComoTexto = computed(() =>
+    (props.importados ?? []).map(u => `${u.nombre}\t${u.email}\t${u.password}`).join('\n')
+)
+
+const copiarCredenciales = () => navigator.clipboard.writeText(credencialesComoTexto.value)
 </script>
 
 <template>
@@ -40,13 +80,18 @@ const destroy = () => {
     <AppLayout>
         <div class="flex justify-between items-center mb-6">
             <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-100">Usuarios</h1>
-            <Link
-                v-if="hasPermission('users.create')"
-                :href="route('users.create')"
-                class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-indigo-700 transition"
-            >
-                Nuevo usuario
-            </Link>
+            <div class="flex gap-3">
+                <Button v-if="hasPermission('users.create')" variant="brand" @click="showImportModal = true">
+                    Importar Excel
+                </Button>
+                <Link
+                    v-if="hasPermission('users.create')"
+                    :href="route('users.create')"
+                    class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-indigo-700 transition"
+                >
+                    Nuevo usuario
+                </Link>
+            </div>
         </div>
 
         <div class="bg-white dark:bg-slate-800 rounded-xl shadow overflow-hidden">
@@ -62,7 +107,7 @@ const destroy = () => {
                 </thead>
                 <tbody class="divide-y divide-gray-100 dark:divide-slate-700">
                     <tr v-for="user in users.data" :key="user.id" class="hover:bg-gray-50 dark:hover:bg-slate-700/40">
-                        <td class="px-6 py-4 font-medium text-gray-800 dark:text-slate-100">{{ user.name }}</td>
+                        <td class="px-6 py-4 font-medium text-gray-800 dark:text-slate-100">{{ nombreCompleto(user) }}</td>
                         <td class="px-6 py-4 text-gray-500 dark:text-slate-400">{{ user.email }}</td>
                         <td class="px-6 py-4 text-gray-500 dark:text-slate-400">{{ user.sector?.nombre ?? '—' }}</td>
                         <td class="px-6 py-4">
@@ -108,6 +153,88 @@ const destroy = () => {
                 <Button variant="danger" @click="destroy">Eliminar</Button>
                 <button class="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200" @click="userToDelete = null">
                     Cancelar
+                </button>
+            </div>
+        </Modal>
+
+        <!-- Importación masiva por Excel -->
+        <Modal :show="showImportModal" title="Importar usuarios desde Excel" @close="showImportModal = false">
+            <form @submit.prevent="submitImport" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Archivo (.xlsx, .xls o .csv)
+                    </label>
+                    <input
+                        type="file"
+                        accept=".xlsx,.xls,.csv"
+                        class="w-full text-sm text-gray-700 dark:text-gray-300"
+                        @change="onArchivoChange"
+                    />
+                    <p v-if="importForm.errors.archivo" class="text-red-500 dark:text-red-400 text-xs mt-1">
+                        {{ importForm.errors.archivo }}
+                    </p>
+                    <p class="text-xs text-gray-500 dark:text-slate-400 mt-1">
+                        Tres columnas, con encabezado: <strong>Nombre</strong>, <strong>Apellido</strong> y <strong>Mail</strong>.
+                    </p>
+                </div>
+
+                <Select v-model="importForm.rol" label="Rol para los usuarios nuevos" :error="importForm.errors.rol">
+                    <option value="" disabled>— Seleccionar —</option>
+                    <option v-for="role in roles" :key="role.id" :value="role.name">{{ role.name }}</option>
+                </Select>
+
+                <p class="text-xs text-gray-500 dark:text-slate-400">
+                    A cada usuario nuevo se le genera una contraseña al azar, que vas a ver una sola vez al terminar.
+                    Los que ya existan (mismo mail) se actualizan sin tocarles contraseña ni rol.
+                </p>
+
+                <div class="flex gap-3 pt-2">
+                    <Button type="submit" variant="primary" :disabled="importForm.processing">
+                        {{ importForm.processing ? 'Importando...' : 'Importar' }}
+                    </Button>
+                    <button
+                        type="button"
+                        class="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                        @click="showImportModal = false"
+                    >
+                        Cancelar
+                    </button>
+                </div>
+            </form>
+        </Modal>
+
+        <!-- Contraseñas generadas: se muestran una sola vez -->
+        <Modal :show="showCredenciales" size="lg" title="Contraseñas de los usuarios importados" @close="showCredenciales = false">
+            <p class="text-sm text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded-lg px-3 py-2">
+                Guardá estas contraseñas ahora: se generaron al azar y no se pueden volver a ver.
+            </p>
+
+            <div class="mt-4 max-h-80 overflow-y-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-gray-50 dark:bg-slate-700/40 text-gray-500 dark:text-slate-400 uppercase text-xs">
+                        <tr>
+                            <th class="px-3 py-2 text-left">Nombre</th>
+                            <th class="px-3 py-2 text-left">Mail</th>
+                            <th class="px-3 py-2 text-left">Contraseña</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100 dark:divide-slate-700">
+                        <tr v-for="u in importados" :key="u.email">
+                            <td class="px-3 py-2 text-gray-800 dark:text-slate-100">{{ u.nombre }}</td>
+                            <td class="px-3 py-2 text-gray-500 dark:text-slate-400">{{ u.email }}</td>
+                            <td class="px-3 py-2 font-mono text-gray-800 dark:text-slate-100">{{ u.password }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="flex gap-3 mt-6">
+                <Button variant="primary" @click="copiarCredenciales">Copiar todo</Button>
+                <button
+                    class="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                    @click="showCredenciales = false"
+                >
+                    Ya las guardé
                 </button>
             </div>
         </Modal>

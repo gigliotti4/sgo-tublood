@@ -16,15 +16,6 @@ interface Opcion {
 // por ahora las tarjetas apuntan a las rutas previstas.
 const opciones: Opcion[] = [
     {
-        key: 'externa',
-        titulo: 'Observación externa',
-        descripcion: 'Reclamos de clientes (carga manual)',
-        href: '/observaciones/crear?origen=externa',
-        icon: 'M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008V11.25zm0 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008z',
-        color: 'text-blue-500 dark:text-blue-400',
-        tituloColor: 'text-blue-700 dark:text-blue-300',
-    },
-    {
         key: 'interna',
         titulo: 'Observación interna',
         descripcion: 'Registros por sector',
@@ -55,7 +46,7 @@ const opciones: Opcion[] = [
                 <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Elegí qué querés registrar</p>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-5">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <Link
                     v-for="o in opciones"
                     :key="o.key"

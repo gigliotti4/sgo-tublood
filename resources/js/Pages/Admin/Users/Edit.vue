@@ -7,12 +7,13 @@ import Button from '@/Components/Button.vue'
 
 interface RoleOption { id: number; name: string }
 interface SectorOption { id: number; nombre: string }
-interface UserData { id: number; name: string; email: string; sector_id: number | null; roles: { name: string }[] }
+interface UserData { id: number; name: string; apellido: string | null; email: string; sector_id: number | null; roles: { name: string }[] }
 
 const props = defineProps<{ user: UserData; roles: RoleOption[]; sectors: SectorOption[] }>()
 
 const form = useForm({
     name: props.user.name,
+    apellido: props.user.apellido ?? '',
     email: props.user.email,
     password: '',
     sector_id: props.user.sector_id,
@@ -34,6 +35,7 @@ const submit = () => form.put(route('users.update', props.user.id))
         <div class="bg-white dark:bg-slate-800 rounded-xl shadow p-6 max-w-lg">
             <form @submit.prevent="submit" class="space-y-4">
                 <Input v-model="form.name" label="Nombre" :error="form.errors.name" />
+                <Input v-model="form.apellido" label="Apellido" :error="form.errors.apellido" />
                 <Input v-model="form.email" type="email" label="Email" :error="form.errors.email" />
                 <Input v-model="form.password" type="password" :error="form.errors.password">
                     <template #label>

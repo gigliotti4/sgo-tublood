@@ -16,16 +16,12 @@ class TaxonomiaIncidencias
     }
 
     /**
-     * Mapa plano [tipoKey => "código label"] de todos los tipos internos, para
-     * mostrar la etiqueta legible en listados. Las claves de tipo son únicas
-     * entre sectores. Incluye los dos tipos de la carga externa.
+     * Mapa plano [tipoKey => "código label"] de todos los tipos, para mostrar la
+     * etiqueta legible en listados. Las claves de tipo son únicas entre sectores.
      */
     public static function etiquetasTipos(): array
     {
-        $labels = [
-            'falla_producto' => 'Falla de Producto',
-            'disconformidad_servicio' => 'Disconformidad de Servicio',
-        ];
+        $labels = [];
 
         foreach (static::taxonomia() as $tipos) {
             foreach ($tipos as $key => $def) {
@@ -40,6 +36,17 @@ class TaxonomiaIncidencias
     public static function tipo(string $sectorSlug, string $tipoKey): ?array
     {
         return config("incidencias.sectores.{$sectorSlug}.{$tipoKey}");
+    }
+
+    /**
+     * True si el tipo es un "tipo especial" de ese sector: los del canal externo
+     * (Falla de producto / Disconformidad de servicio), que no usan el mecanismo
+     * genérico de "Datos específicos" sino productos repetibles validados en
+     * Admin\ObservacionController::storeInternaEspecial().
+     */
+    public static function esTipoEspecial(string $sectorSlug, string $tipoKey): bool
+    {
+        return ! empty(static::tipo($sectorSlug, $tipoKey)['especial']);
     }
 
     /** Campos "Datos específicos" de un tipo. */

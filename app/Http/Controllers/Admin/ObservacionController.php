@@ -3,13 +3,11 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\Cliente;
 use App\Models\Observacion;
 use App\Models\Sector;
 use App\Models\User;
 use App\Support\TaxonomiaIncidencias;
 use Illuminate\Http\Request;
-use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -54,28 +52,13 @@ class ObservacionController extends Controller
     {
         $this->authorize('observaciones.edit');
 
-        $origen = $request->query('origen', 'externa');
-        abort_unless(array_key_exists($origen, Observacion::ORIGENES), 404);
-
-        if ($origen === 'interna') {
-            return inertia('Admin/Observaciones/CrearInterna', [
-                'sectores' => Sector::where('activo', true)->orderBy('nombre')->get(['id', 'nombre', 'slug']),
-                'taxonomia' => TaxonomiaIncidencias::taxonomia(),
-                'prioridades' => config('incidencias.prioridades'),
-                'tiposCaso' => config('incidencias.tipos_caso'),
-                'prioridadSugerida' => config('incidencias.prioridad_sugerida'),
-                'usuarios' => User::orderBy('name')->get(['id', 'name']),
-            ]);
-        }
-
-        return inertia('Admin/Observaciones/Create', [
-            'origen' => $origen,
+        return inertia('Admin/Observaciones/CrearInterna', [
+            'sectores' => Sector::where('activo', true)->orderBy('nombre')->get(['id', 'nombre', 'slug']),
+            'taxonomia' => TaxonomiaIncidencias::taxonomia(),
             'provincias' => self::PROVINCIAS,
-            'tipoOptions' => [
-                ['value' => 'falla_producto', 'label' => 'Falla de Producto'],
-                ['value' => 'disconformidad_servicio', 'label' => 'Disconformidad de Servicio'],
-            ],
-            'sectores' => Sector::where('activo', true)->orderBy('nombre')->get(['id', 'nombre']),
+            'prioridades' => config('incidencias.prioridades'),
+            'tiposCaso' => config('incidencias.tipos_caso'),
+            'prioridadSugerida' => config('incidencias.prioridad_sugerida'),
             'usuarios' => User::orderBy('name')->get(['id', 'name']),
         ]);
     }
@@ -84,77 +67,7 @@ class ObservacionController extends Controller
     {
         $this->authorize('observaciones.edit');
 
-        if ($request->input('origen') === 'interna') {
-            return $this->storeInterna($request);
-        }
-
-        $data = $request->validate([
-            'tipo' => ['required', 'in:falla_producto,disconformidad_servicio'],
-
-            'contacto_nombre' => ['required', 'string', 'max:255'],
-            'contacto_email' => ['required', 'email', 'max:255'],
-            'contacto_numero_cliente' => ['nullable', 'string', 'max:255'],
-            'contacto_telefono' => ['nullable', 'string', 'max:255'],
-
-            'titulo' => ['required', 'string', 'max:255'],
-            'descripcion' => ['required', 'string'],
-
-            'sector_id' => ['required', 'exists:sectors,id'],
-            'responsable_id' => ['nullable', 'exists:users,id'],
-
-            'institucion' => ['required_if:tipo,falla_producto', 'nullable', 'string', 'max:255'],
-            'provincia' => ['required_if:tipo,falla_producto', 'nullable', 'string', 'max:255'],
-            'equipamiento' => ['nullable', 'string', 'max:255'],
-            'ejecutivo_cuenta' => ['nullable', 'string', 'max:255'],
-
-            'productos' => ['required_if:tipo,falla_producto', 'array'],
-            'productos.*.producto' => ['required', 'string', 'max:255'],
-            'productos.*.codigo' => ['required', 'string', 'max:255'],
-            'productos.*.cantidad_afectada' => ['required', 'integer', 'min:1'],
-            'productos.*.lote' => ['required', 'string', 'max:255'],
-            'productos.*.fecha_vencimiento' => ['required', 'date'],
-            'productos.*.numero_remito' => ['required', 'string', 'max:255'],
-            'productos.*.tipo_comprobante' => ['required', 'in:factura,remito'],
-
-            'attachments' => ['array'],
-            'attachments.*' => ['file', 'mimes:jpg,jpeg,png,pdf', 'max:3072'],
-        ]);
-
-        DB::transaction(function () use ($data, $request) {
-            $anio = (int) now()->format('Y');
-
-            $clienteId = null;
-            if (! empty($data['contacto_numero_cliente'])) {
-                $clienteId = Cliente::where('numero', trim($data['contacto_numero_cliente']))->value('id');
-            }
-
-            $observacion = Observacion::create([
-                ...Arr::except($data, ['productos', 'attachments']),
-                'numero' => Observacion::generarNumero($anio),
-                'anio' => $anio,
-                'estado' => 'pendiente_clasificacion',
-                'origen' => 'externa',
-                'cliente_id' => $clienteId,
-            ]);
-
-            foreach ($data['productos'] ?? [] as $producto) {
-                $observacion->productos()->create($producto);
-            }
-
-            foreach ($request->file('attachments', []) as $file) {
-                $path = $file->store('observaciones', 'local');
-
-                $observacion->attachments()->create([
-                    'path' => $path,
-                    'original_name' => $file->getClientOriginalName(),
-                    'mime_type' => $file->getClientMimeType(),
-                    'size' => $file->getSize(),
-                ]);
-            }
-        });
-
-        return redirect()->route('observaciones.index')
-            ->with('success', 'Observación creada correctamente.');
+        return $this->storeInterna($request);
     }
 
     private function storeInterna(Request $request)
@@ -173,11 +86,18 @@ class ObservacionController extends Controller
 
         $sector = Sector::findOrFail($base['sector_id']);
 
-        // El tipo de incidencia tiene que pertenecer al sector elegido (taxonomía).
-        if (! TaxonomiaIncidencias::tipo($sector->slug, $base['tipo'])) {
+        // El tipo de incidencia tiene que pertenecer al sector elegido: o bien está
+        // en la taxonomía de "Datos específicos", o es uno de los tipos especiales
+        // (Falla de Producto / Disconformidad de Servicio, hoy solo Garantía de Calidad).
+        if (! TaxonomiaIncidencias::tipo($sector->slug, $base['tipo'])
+            && ! TaxonomiaIncidencias::esTipoEspecial($sector->slug, $base['tipo'])) {
             throw ValidationException::withMessages([
                 'tipo' => 'El tipo de incidencia no corresponde al sector seleccionado.',
             ]);
+        }
+
+        if (TaxonomiaIncidencias::esTipoEspecial($sector->slug, $base['tipo'])) {
+            return $this->storeInternaEspecial($request, $base, $sector);
         }
 
         // Reglas dinámicas de "Datos específicos" según el tipo, con los labels de
@@ -206,20 +126,80 @@ class ObservacionController extends Controller
                 'datos_especificos' => $especificos['datos_especificos'] ?? [],
             ]);
 
-            foreach ($request->file('attachments', []) as $file) {
-                $path = $file->store('observaciones', 'local');
-
-                $observacion->attachments()->create([
-                    'path' => $path,
-                    'original_name' => $file->getClientOriginalName(),
-                    'mime_type' => $file->getClientMimeType(),
-                    'size' => $file->getSize(),
-                ]);
-            }
+            $this->guardarAdjuntos($observacion, $request);
         });
 
         return redirect()->route('observaciones.index')
             ->with('success', 'Observación interna creada correctamente.');
+    }
+
+    /**
+     * Tipos especiales (Falla de Producto / Disconformidad de Servicio): mismos
+     * campos que la carga externa del portal público, sin datos de contacto —
+     * acá el registro lo carga personal de Tublood, no el cliente.
+     */
+    private function storeInternaEspecial(Request $request, array $base, Sector $sector)
+    {
+        $data = $request->validate([
+            'institucion' => ['required_if:tipo,falla_producto', 'nullable', 'string', 'max:255'],
+            'provincia' => ['required_if:tipo,falla_producto', 'nullable', 'string', 'max:255'],
+            'equipamiento' => ['nullable', 'string', 'max:255'],
+            'ejecutivo_cuenta' => ['nullable', 'string', 'max:255'],
+
+            'productos' => ['required_if:tipo,falla_producto', 'array'],
+            'productos.*.producto' => ['required', 'string', 'max:255'],
+            'productos.*.codigo' => ['required', 'string', 'max:255'],
+            'productos.*.cantidad_afectada' => ['required', 'integer', 'min:1'],
+            'productos.*.lote' => ['required', 'string', 'max:255'],
+            'productos.*.fecha_vencimiento' => ['required', 'date'],
+            'productos.*.numero_remito' => ['required', 'string', 'max:255'],
+            'productos.*.tipo_comprobante' => ['required', 'in:factura,remito'],
+        ]);
+
+        DB::transaction(function () use ($base, $sector, $data, $request) {
+            $anio = (int) now()->format('Y');
+
+            $observacion = Observacion::create([
+                'numero' => Observacion::generarNumero($anio),
+                'anio' => $anio,
+                'origen' => 'interna',
+                'estado' => 'clasificada',
+                'tipo' => $base['tipo'],
+                'titulo' => $base['titulo'],
+                'descripcion' => $base['descripcion'],
+                'sector_id' => $sector->id,
+                'responsable_id' => $base['responsable_id'] ?? null,
+                'prioridad' => $base['prioridad'],
+                'tipo_caso' => $base['tipo_caso'],
+                'institucion' => $data['institucion'] ?? null,
+                'provincia' => $data['provincia'] ?? null,
+                'equipamiento' => $data['equipamiento'] ?? null,
+                'ejecutivo_cuenta' => $data['ejecutivo_cuenta'] ?? null,
+            ]);
+
+            foreach ($data['productos'] ?? [] as $producto) {
+                $observacion->productos()->create($producto);
+            }
+
+            $this->guardarAdjuntos($observacion, $request);
+        });
+
+        return redirect()->route('observaciones.index')
+            ->with('success', 'Observación interna creada correctamente.');
+    }
+
+    private function guardarAdjuntos(Observacion $observacion, Request $request): void
+    {
+        foreach ($request->file('attachments', []) as $file) {
+            $path = $file->store('observaciones', 'local');
+
+            $observacion->attachments()->create([
+                'path' => $path,
+                'original_name' => $file->getClientOriginalName(),
+                'mime_type' => $file->getClientMimeType(),
+                'size' => $file->getSize(),
+            ]);
+        }
     }
 
     public function update(Request $request, Observacion $observacion)

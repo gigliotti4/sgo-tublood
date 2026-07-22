@@ -34,6 +34,7 @@ Route::middleware(['auth'])->group(function () {
     Route::middleware('can:users.create')->group(function () {
         Route::get('/users/create', [UserController::class, 'create'])->name('users.create');
         Route::post('/users', [UserController::class, 'store'])->name('users.store');
+        Route::post('/users/import', [UserController::class, 'import'])->name('users.import');
     });
     Route::middleware('can:users.edit')->group(function () {
         Route::get('/users/{user}/edit', [UserController::class, 'edit'])->name('users.edit');
@@ -69,9 +70,9 @@ Route::middleware(['auth'])->group(function () {
             ->middleware('can:update,observacion')->name('observaciones.update');
     });
     Route::middleware('can:observaciones.edit')->group(function () {
-        // Selector "Crear nuevo registro" (externa / interna / No Conformidad).
+        // Selector "Crear nuevo registro" (interna / No Conformidad). La externa es solo portal público.
         Route::get('/observaciones/nuevo', [AdminObservacionController::class, 'nuevo'])->name('observaciones.nuevo');
-        // Carga manual (externa por ahora): mismo formulario del portal + sector y responsable.
+        // Carga manual interna: formulario dirigido por taxonomía (sector -> tipo -> datos específicos).
         Route::get('/observaciones/crear', [AdminObservacionController::class, 'create'])->name('observaciones.create');
         Route::post('/observaciones', [AdminObservacionController::class, 'store'])->name('observaciones.store');
     });

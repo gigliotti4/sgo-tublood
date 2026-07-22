@@ -12,6 +12,7 @@ defineProps<{ roles: RoleOption[]; sectors: SectorOption[] }>()
 
 const form = useForm({
     name: '',
+    apellido: '',
     email: '',
     password: '',
     sector_id: null as number | null,
@@ -33,6 +34,7 @@ const submit = () => form.post(route('users.store'))
         <div class="bg-white dark:bg-slate-800 rounded-xl shadow p-6 max-w-lg">
             <form @submit.prevent="submit" class="space-y-4">
                 <Input v-model="form.name" label="Nombre" :error="form.errors.name" />
+                <Input v-model="form.apellido" label="Apellido" :error="form.errors.apellido" />
                 <Input v-model="form.email" type="email" label="Email" :error="form.errors.email" />
                 <Input v-model="form.password" type="password" label="Contraseña" :error="form.errors.password" />
 

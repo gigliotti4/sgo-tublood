@@ -6,17 +6,38 @@ import CampoDinamico, { type CampoDef } from '@/Components/CampoDinamico.vue'
 
 interface SectorOption { id: number; nombre: string; slug: string }
 interface UsuarioOption { id: number; name: string }
-interface TipoDef { codigo: string; label: string; campos: CampoDef[] }
+interface TipoDef { codigo: string; label: string; campos?: CampoDef[]; especial?: boolean }
 type Taxonomia = Record<string, Record<string, TipoDef>>
+
+interface ProductoForm {
+    producto: string
+    codigo: string
+    cantidad_afectada: number | null
+    lote: string
+    fecha_vencimiento: string
+    numero_remito: string
+    tipo_comprobante: string
+}
 
 const props = defineProps<{
     sectores: SectorOption[]
     taxonomia: Taxonomia
+    provincias: string[]
     prioridades: Record<string, string>
     tiposCaso: string[]
     prioridadSugerida: Record<string, string>
     usuarios: UsuarioOption[]
 }>()
+
+const nuevoProducto = (): ProductoForm => ({
+    producto: '',
+    codigo: '',
+    cantidad_afectada: null,
+    lote: '',
+    fecha_vencimiento: '',
+    numero_remito: '',
+    tipo_comprobante: '',
+})
 
 const form = useForm({
     origen: 'interna',
@@ -28,33 +49,62 @@ const form = useForm({
     descripcion: '',
     responsable_id: null as number | null,
     datos_especificos: {} as Record<string, string | number | null>,
+    institucion: '',
+    provincia: '',
+    equipamiento: '',
+    ejecutivo_cuenta: '',
+    productos: [] as ProductoForm[],
     attachments: [] as File[],
 })
 
 const sectorSlug = computed(() => props.sectores.find(s => s.id === form.sector_id)?.slug ?? null)
 
-const tiposDelSector = computed(() => {
-    if (!sectorSlug.value) return []
-    const tipos = props.taxonomia[sectorSlug.value] ?? {}
-    return Object.entries(tipos).map(([key, def]) => ({ key, label: `${def.codigo} ${def.label}` }))
+/**
+ * Los tipos del sector, separados en dos grupos: los "especiales" son reclamos
+ * de cliente (el canal externo del portal público, que también se puede cargar a
+ * mano acá) y el resto son incidencias propias del sector. Se muestran como dos
+ * <optgroup> para que se lea qué se está cargando.
+ */
+const gruposDeTipos = computed(() => {
+    const tipos = Object.entries(props.taxonomia[sectorSlug.value ?? ''] ?? {})
+        .map(([key, def]) => ({ key, label: `${def.codigo} ${def.label}`, especial: def.especial === true }))
+
+    return [
+        { titulo: 'Reclamos de cliente', tipos: tipos.filter(t => t.especial) },
+        { titulo: 'Incidencias del sector', tipos: tipos.filter(t => !t.especial) },
+    ].filter(g => g.tipos.length > 0)
 })
+
+const tipoEspecial = computed(() =>
+    props.taxonomia[sectorSlug.value ?? '']?.[form.tipo]?.especial === true
+)
 
 const camposDelTipo = computed<CampoDef[]>(() => {
     if (!sectorSlug.value || !form.tipo) return []
     return props.taxonomia[sectorSlug.value]?.[form.tipo]?.campos ?? []
 })
 
+const agregarProducto = () => form.productos.push(nuevoProducto())
+const quitarProducto = (index: number) => form.productos.splice(index, 1)
+
+const errorProducto = (index: number, campo: keyof ProductoForm) =>
+    (form.errors as Record<string, string>)[`productos.${index}.${campo}`]
+
 // Al cambiar de sector: reseteá el tipo y los datos específicos.
 watch(() => form.sector_id, () => {
     form.tipo = ''
     form.datos_especificos = {}
+    form.productos = []
 })
 
-// Al cambiar de tipo: reconstruí las claves de datos específicos.
+// Al cambiar de tipo: reconstruí las claves de datos específicos, o inicializá el
+// bloque de productos si es el tipo especial "Falla de Producto".
 watch(() => form.tipo, () => {
     const nuevos: Record<string, string | number | null> = {}
     for (const c of camposDelTipo.value) nuevos[c.id] = ''
     form.datos_especificos = nuevos
+
+    form.productos = form.tipo === 'falla_producto' ? [nuevoProducto()] : []
 })
 
 // Sugerencia de prioridad según tipo de caso.
@@ -127,7 +177,9 @@ const submit = () => form.post(route('observaciones.store'), { forceFormData: tr
                                 :class="form.errors.tipo ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
                             >
                                 <option value="" disabled>{{ form.sector_id ? '— Seleccionar —' : 'Elegí un sector primero' }}</option>
-                                <option v-for="t in tiposDelSector" :key="t.key" :value="t.key">{{ t.label }}</option>
+                                <optgroup v-for="grupo in gruposDeTipos" :key="grupo.titulo" :label="grupo.titulo">
+                                    <option v-for="t in grupo.tipos" :key="t.key" :value="t.key">{{ t.label }}</option>
+                                </optgroup>
                             </select>
                             <p v-if="form.errors.tipo" class="text-red-500 text-xs">{{ form.errors.tipo }}</p>
                         </div>
@@ -210,6 +262,196 @@ const submit = () => form.post(route('observaciones.store'), { forceFormData: tr
                             :campo="campo"
                             :error="errorCampo(campo.id)"
                         />
+                    </div>
+                </section>
+
+                <!-- Falla de Producto (tipo especial, hoy solo Garantía de Calidad) -->
+                <section v-if="tipoEspecial && form.tipo === 'falla_producto'" class="space-y-4">
+                    <h2 class="text-sm font-semibold text-slate-800 border-b border-slate-100 pb-2">Falla de Producto</h2>
+
+                    <div class="grid sm:grid-cols-2 gap-4">
+                        <div class="space-y-1.5">
+                            <label for="institucion" class="block text-sm font-medium text-slate-700">
+                                Institución <span class="text-red-500">*</span>
+                            </label>
+                            <input
+                                id="institucion"
+                                v-model="form.institucion"
+                                type="text"
+                                class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                :class="form.errors.institucion ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
+                            />
+                            <p v-if="form.errors.institucion" class="text-red-500 text-xs">{{ form.errors.institucion }}</p>
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <label for="provincia" class="block text-sm font-medium text-slate-700">
+                                Provincia <span class="text-red-500">*</span>
+                            </label>
+                            <select
+                                id="provincia"
+                                v-model="form.provincia"
+                                class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                :class="form.errors.provincia ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
+                            >
+                                <option value="" disabled>— Seleccionar —</option>
+                                <option v-for="p in props.provincias" :key="p" :value="p">{{ p }}</option>
+                            </select>
+                            <p v-if="form.errors.provincia" class="text-red-500 text-xs">{{ form.errors.provincia }}</p>
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <label for="equipamiento" class="block text-sm font-medium text-slate-700">Equipamiento utilizado</label>
+                            <input
+                                id="equipamiento"
+                                v-model="form.equipamiento"
+                                type="text"
+                                class="w-full px-3 py-2.5 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            />
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <label for="ejecutivo_cuenta" class="block text-sm font-medium text-slate-700">Ejecutivo de cuenta a cargo</label>
+                            <input
+                                id="ejecutivo_cuenta"
+                                v-model="form.ejecutivo_cuenta"
+                                type="text"
+                                class="w-full px-3 py-2.5 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            />
+                        </div>
+                    </div>
+
+                    <!-- Productos -->
+                    <div class="space-y-4 pt-2">
+                        <div
+                            v-for="(producto, index) in form.productos"
+                            :key="index"
+                            class="rounded-xl border border-slate-200 p-4 space-y-4"
+                        >
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Producto {{ index + 1 }}</span>
+                                <button
+                                    v-if="form.productos.length > 1"
+                                    type="button"
+                                    class="text-xs text-red-500 hover:text-red-600"
+                                    @click="quitarProducto(index)"
+                                >
+                                    Quitar
+                                </button>
+                            </div>
+
+                            <div class="grid sm:grid-cols-2 gap-4">
+                                <div class="space-y-1.5">
+                                    <label :for="`producto-${index}-producto`" class="block text-sm font-medium text-slate-700">
+                                        Producto <span class="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        :id="`producto-${index}-producto`"
+                                        v-model="producto.producto"
+                                        type="text"
+                                        class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                        :class="errorProducto(index, 'producto') ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
+                                    />
+                                    <p v-if="errorProducto(index, 'producto')" class="text-red-500 text-xs">{{ errorProducto(index, 'producto') }}</p>
+                                </div>
+
+                                <div class="space-y-1.5">
+                                    <label :for="`producto-${index}-codigo`" class="block text-sm font-medium text-slate-700">
+                                        Código <span class="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        :id="`producto-${index}-codigo`"
+                                        v-model="producto.codigo"
+                                        type="text"
+                                        class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                        :class="errorProducto(index, 'codigo') ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
+                                    />
+                                    <p v-if="errorProducto(index, 'codigo')" class="text-red-500 text-xs">{{ errorProducto(index, 'codigo') }}</p>
+                                </div>
+
+                                <div class="space-y-1.5">
+                                    <label :for="`producto-${index}-cantidad`" class="block text-sm font-medium text-slate-700">
+                                        Cantidad afectada <span class="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        :id="`producto-${index}-cantidad`"
+                                        v-model.number="producto.cantidad_afectada"
+                                        type="number"
+                                        min="1"
+                                        class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                        :class="errorProducto(index, 'cantidad_afectada') ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
+                                    />
+                                    <p v-if="errorProducto(index, 'cantidad_afectada')" class="text-red-500 text-xs">{{ errorProducto(index, 'cantidad_afectada') }}</p>
+                                </div>
+
+                                <div class="space-y-1.5">
+                                    <label :for="`producto-${index}-lote`" class="block text-sm font-medium text-slate-700">
+                                        Lote <span class="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        :id="`producto-${index}-lote`"
+                                        v-model="producto.lote"
+                                        type="text"
+                                        class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                        :class="errorProducto(index, 'lote') ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
+                                    />
+                                    <p v-if="errorProducto(index, 'lote')" class="text-red-500 text-xs">{{ errorProducto(index, 'lote') }}</p>
+                                </div>
+
+                                <div class="space-y-1.5">
+                                    <label :for="`producto-${index}-vencimiento`" class="block text-sm font-medium text-slate-700">
+                                        Fecha de vencimiento <span class="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        :id="`producto-${index}-vencimiento`"
+                                        v-model="producto.fecha_vencimiento"
+                                        type="date"
+                                        class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                        :class="errorProducto(index, 'fecha_vencimiento') ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
+                                    />
+                                    <p v-if="errorProducto(index, 'fecha_vencimiento')" class="text-red-500 text-xs">{{ errorProducto(index, 'fecha_vencimiento') }}</p>
+                                </div>
+
+                                <div class="space-y-1.5">
+                                    <label :for="`producto-${index}-remito`" class="block text-sm font-medium text-slate-700">
+                                        N° de remito <span class="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        :id="`producto-${index}-remito`"
+                                        v-model="producto.numero_remito"
+                                        type="text"
+                                        class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                        :class="errorProducto(index, 'numero_remito') ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
+                                    />
+                                    <p v-if="errorProducto(index, 'numero_remito')" class="text-red-500 text-xs">{{ errorProducto(index, 'numero_remito') }}</p>
+                                </div>
+                            </div>
+
+                            <div class="space-y-1.5">
+                                <span class="block text-sm font-medium text-slate-700">
+                                    Tipo de comprobante <span class="text-red-500">*</span>
+                                </span>
+                                <div class="flex gap-6">
+                                    <label class="flex items-center gap-2 text-sm text-slate-700">
+                                        <input v-model="producto.tipo_comprobante" type="radio" value="factura" class="text-indigo-600 focus:ring-indigo-500" />
+                                        Factura
+                                    </label>
+                                    <label class="flex items-center gap-2 text-sm text-slate-700">
+                                        <input v-model="producto.tipo_comprobante" type="radio" value="remito" class="text-indigo-600 focus:ring-indigo-500" />
+                                        Remito
+                                    </label>
+                                </div>
+                                <p v-if="errorProducto(index, 'tipo_comprobante')" class="text-red-500 text-xs">{{ errorProducto(index, 'tipo_comprobante') }}</p>
+                            </div>
+                        </div>
+
+                        <button
+                            type="button"
+                            class="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+                            @click="agregarProducto"
+                        >
+                            + Agregar producto
+                        </button>
                     </div>
                 </section>
 
