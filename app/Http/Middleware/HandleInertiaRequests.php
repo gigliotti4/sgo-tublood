@@ -35,6 +35,11 @@ class HandleInertiaRequests extends Middleware
                         ->limit(20)
                         ->get(['id', 'numero', 'razon_social', 'fecha_vencimiento'])
                     : [],
+                // Alertas de vencimiento/escalamiento de observaciones: las deja
+                // el comando `observaciones:alertas` en el canal `database`.
+                'alertas' => $request->user()
+                    ? $request->user()->unreadNotifications()->limit(20)->get(['id', 'data', 'created_at'])
+                    : [],
             ],
         ]);
     }

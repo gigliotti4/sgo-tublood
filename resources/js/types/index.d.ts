@@ -4,15 +4,41 @@ export interface User {
     email: string
     roles: string[]
     permissions: string[]
-    sector_id?: number | null
-    sector?: Sector | null
+    area_id?: number | null
+    area?: Area | null
+    supervisor_id?: number | null
+    gerente_id?: number | null
+    es_gerente?: boolean
 }
 
+/** Sector de gestión: destino de una observación, con sus tipos de incidencia. */
 export interface Sector {
     id: number
     nombre: string
     slug: string
     activo: boolean
+}
+
+/** Área del organigrama ("sector original" del Excel): dónde trabaja la persona. */
+export interface Area {
+    id: number
+    nombre: string
+    slug: string
+    dias_gestion: number | null
+    activo: boolean
+    usuarios_count?: number
+}
+
+export interface AlertaNotificacion {
+    id: string
+    created_at: string
+    data: {
+        tipo: 'observacion_vencida' | 'observacion_escalada' | 'observacion_finalizada'
+        observacion_id: number
+        numero: string
+        titulo: string
+        mensaje: string
+    }
 }
 
 export interface ClienteVencimiento {
@@ -32,6 +58,7 @@ export interface PageProps extends Record<string, unknown> {
     }
     notificaciones: {
         vencimientos: ClienteVencimiento[]
+        alertas: AlertaNotificacion[]
     }
 }
 
@@ -104,8 +131,13 @@ export interface Observacion {
     contacto_telefono: string | null
     responsable_id: number | null
     responsable: { id: number; name: string } | null
+    responsable_asignado_at: string | null
+    vence_at: string | null
+    alerta_nivel: number
     sector_id: number | null
     sector: { id: number; nombre: string } | null
+    area_id: number | null
+    area: { id: number; nombre: string } | null
     prioridad: string | null
     tipo_caso: string | null
     tecnovigilancia: boolean

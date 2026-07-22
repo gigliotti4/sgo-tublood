@@ -26,6 +26,10 @@ return [
         'baja' => 'Baja',
     ],
 
+    // Estados que dan por terminada una observación: cortan el reloj de alertas
+    // y disparan el aviso final al gerente del responsable.
+    'estados_finales' => ['cerrada'],
+
     'tipos_caso' => [
         'Producto defectuoso',
         'Riesgo sanitario',

@@ -12,14 +12,18 @@ import type { PaginatedData } from '@/types'
 
 interface RoleOption { id: number; name: string }
 interface Importado { nombre: string; email: string; password: string }
+interface Persona { id: number; name: string; apellido: string | null }
 interface UserRow {
     id: number
     name: string
     apellido: string | null
     email: string
     created_at: string
+    es_gerente: boolean
     roles: { name: string }[]
-    sector: { id: number; nombre: string } | null
+    area: { id: number; nombre: string; dias_gestion: number | null } | null
+    supervisor: Persona | null
+    gerente: Persona | null
 }
 
 const props = defineProps<{
@@ -41,7 +45,7 @@ const destroy = () => {
     })
 }
 
-const nombreCompleto = (user: UserRow) => [user.name, user.apellido].filter(Boolean).join(' ')
+const nombreCompleto = (persona: Persona | UserRow) => [persona.name, persona.apellido].filter(Boolean).join(' ')
 
 const showImportModal = ref(false)
 const importForm = useForm({
@@ -81,6 +85,12 @@ const copiarCredenciales = () => navigator.clipboard.writeText(credencialesComoT
         <div class="flex justify-between items-center mb-6">
             <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-100">Usuarios</h1>
             <div class="flex gap-3">
+                <Link
+                    :href="route('areas.index')"
+                    class="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                >
+                    Áreas
+                </Link>
                 <Button v-if="hasPermission('users.create')" variant="brand" @click="showImportModal = true">
                     Importar Excel
                 </Button>
@@ -100,16 +110,32 @@ const copiarCredenciales = () => navigator.clipboard.writeText(credencialesComoT
                     <tr>
                         <th class="px-6 py-3 text-left">Nombre</th>
                         <th class="px-6 py-3 text-left">Email</th>
-                        <th class="px-6 py-3 text-left">Sector</th>
+                        <th class="px-6 py-3 text-left">Área</th>
+                        <th class="px-6 py-3 text-left">Supervisor</th>
+                        <th class="px-6 py-3 text-left">Gerente</th>
                         <th class="px-6 py-3 text-left">Roles</th>
                         <th class="px-6 py-3 text-left">Acciones</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100 dark:divide-slate-700">
                     <tr v-for="user in users.data" :key="user.id" class="hover:bg-gray-50 dark:hover:bg-slate-700/40">
-                        <td class="px-6 py-4 font-medium text-gray-800 dark:text-slate-100">{{ nombreCompleto(user) }}</td>
+                        <td class="px-6 py-4 font-medium text-gray-800 dark:text-slate-100">
+                            {{ nombreCompleto(user) }}
+                            <Badge v-if="user.es_gerente" variant="amber" :pill="false">gerente</Badge>
+                        </td>
                         <td class="px-6 py-4 text-gray-500 dark:text-slate-400">{{ user.email }}</td>
-                        <td class="px-6 py-4 text-gray-500 dark:text-slate-400">{{ user.sector?.nombre ?? '—' }}</td>
+                        <td class="px-6 py-4 text-gray-500 dark:text-slate-400">
+                            {{ user.area?.nombre ?? '—' }}
+                            <span v-if="user.area?.dias_gestion" class="text-xs text-gray-400 dark:text-slate-500">
+                                · {{ user.area.dias_gestion }} días
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 text-gray-500 dark:text-slate-400">
+                            {{ user.supervisor ? nombreCompleto(user.supervisor) : '—' }}
+                        </td>
+                        <td class="px-6 py-4 text-gray-500 dark:text-slate-400">
+                            {{ user.gerente ? nombreCompleto(user.gerente) : '—' }}
+                        </td>
                         <td class="px-6 py-4">
                             <Badge v-for="role in user.roles" :key="role.name" variant="indigo" :pill="false">
                                 {{ role.name }}
@@ -133,7 +159,7 @@ const copiarCredenciales = () => navigator.clipboard.writeText(credencialesComoT
                         </td>
                     </tr>
                     <tr v-if="users.data.length === 0">
-                        <td colspan="5" class="px-6 py-8 text-center text-gray-400 dark:text-slate-500">No hay usuarios.</td>
+                        <td colspan="7" class="px-6 py-8 text-center text-gray-400 dark:text-slate-500">No hay usuarios.</td>
                     </tr>
                 </tbody>
             </table>
@@ -174,7 +200,10 @@ const copiarCredenciales = () => navigator.clipboard.writeText(credencialesComoT
                         {{ importForm.errors.archivo }}
                     </p>
                     <p class="text-xs text-gray-500 dark:text-slate-400 mt-1">
-                        Tres columnas, con encabezado: <strong>Nombre</strong>, <strong>Apellido</strong> y <strong>Mail</strong>.
+                        Con encabezado y en este orden: <strong>Nombre</strong>, <strong>Apellido</strong>,
+                        <strong>Mail</strong>, <strong>Sector original</strong>, <strong>Supervisor</strong>,
+                        <strong>Gerente aviso final</strong> y <strong>Tiempo de gestión</strong>.
+                        Las últimas cuatro son opcionales; las columnas vacías no pisan lo que ya esté cargado.
                     </p>
                 </div>
 

@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Observers\ObservacionObserver;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+#[ObservedBy(ObservacionObserver::class)]
 class Observacion extends Model
 {
     public const ESTADOS = [
@@ -36,7 +39,11 @@ class Observacion extends Model
         'contacto_numero_cliente',
         'cliente_id',
         'responsable_id',
+        'responsable_asignado_at',
+        'vence_at',
+        'alerta_nivel',
         'sector_id',
+        'area_id',
         'contacto_telefono',
         'titulo',
         'descripcion',
@@ -53,7 +60,15 @@ class Observacion extends Model
     protected $casts = [
         'tecnovigilancia' => 'boolean',
         'datos_especificos' => 'array',
+        'responsable_asignado_at' => 'datetime',
+        'vence_at' => 'datetime',
+        'alerta_nivel' => 'integer',
     ];
+
+    public function estaFinalizada(): bool
+    {
+        return in_array($this->estado, config('incidencias.estados_finales', []), true);
+    }
 
     public function attachments(): HasMany
     {
@@ -75,9 +90,16 @@ class Observacion extends Model
         return $this->belongsTo(User::class);
     }
 
+    /** Sector de gestión: define los tipos de incidencia disponibles. */
     public function sector(): BelongsTo
     {
         return $this->belongsTo(Sector::class);
+    }
+
+    /** Área del organigrama a la que se asignó el caso. */
+    public function area(): BelongsTo
+    {
+        return $this->belongsTo(Area::class);
     }
 
     public static function generarNumero(int $anio): string

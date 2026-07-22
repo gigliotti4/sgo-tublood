@@ -1,11 +1,13 @@
 <?php
 
+use App\Http\Controllers\Admin\AreaController;
 use App\Http\Controllers\Admin\ClienteController;
 use App\Http\Controllers\Admin\ObservacionController as AdminObservacionController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\NotificacionController;
 use App\Http\Controllers\Portal\ObservacionController;
 use Illuminate\Support\Facades\Route;
 
@@ -27,6 +29,9 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
+    Route::post('/notificaciones/leidas', [NotificacionController::class, 'marcarLeidas'])
+        ->name('notificaciones.leidas');
+
     // Usuarios
     Route::middleware('can:users.view')->group(function () {
         Route::get('/users', [UserController::class, 'index'])->name('users.index');
@@ -42,6 +47,16 @@ Route::middleware(['auth'])->group(function () {
     });
     Route::middleware('can:users.delete')->group(function () {
         Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
+    });
+
+    // Áreas del organigrama: parte de la estructura de usuarios, así que van con
+    // los mismos permisos en vez de un permiso propio.
+    Route::middleware('can:users.view')->group(function () {
+        Route::get('/areas', [AreaController::class, 'index'])->name('areas.index');
+    });
+    Route::middleware('can:users.edit')->group(function () {
+        Route::post('/areas', [AreaController::class, 'store'])->name('areas.store');
+        Route::put('/areas/{area}', [AreaController::class, 'update'])->name('areas.update');
     });
 
     // Clientes

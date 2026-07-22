@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\Sector;
+use App\Models\Area;
 use App\Models\User;
 use App\Services\UserImportService;
 use Illuminate\Http\Request;
@@ -17,8 +17,8 @@ class UserController extends Controller
         $this->authorize('users.view');
 
         return inertia('Admin/Users/Index', [
-            'users' => User::with(['roles', 'sector:id,nombre'])
-                ->select('id', 'name', 'apellido', 'email', 'sector_id', 'created_at')
+            'users' => User::with(['roles', 'area:id,nombre', 'supervisor:id,name,apellido', 'gerente:id,name,apellido'])
+                ->select('id', 'name', 'apellido', 'email', 'area_id', 'supervisor_id', 'gerente_id', 'es_gerente', 'created_at')
                 ->latest()
                 ->paginate(15),
             'roles' => Role::orderBy('name')->get(['id', 'name']),
@@ -34,7 +34,8 @@ class UserController extends Controller
 
         return inertia('Admin/Users/Create', [
             'roles' => Role::orderBy('name')->get(['id', 'name']),
-            'sectors' => Sector::where('activo', true)->orderBy('nombre')->get(['id', 'nombre']),
+            'areas' => $this->areas(),
+            'usuarios' => $this->usuarios(),
         ]);
     }
 
@@ -43,21 +44,15 @@ class UserController extends Controller
         $this->authorize('users.create');
 
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'apellido' => ['nullable', 'string', 'max:255'],
+            ...$this->reglas(),
             'email' => ['required', 'email', 'unique:users'],
             'password' => ['required', Password::defaults()],
-            'sector_id' => ['nullable', 'exists:sectors,id'],
-            'roles' => ['array'],
-            'roles.*' => ['exists:roles,name'],
         ]);
 
         $user = User::create([
-            'name' => $data['name'],
-            'apellido' => $data['apellido'] ?? null,
+            ...$this->atributos($data),
             'email' => $data['email'],
             'password' => $data['password'],
-            'sector_id' => $data['sector_id'] ?? null,
         ]);
 
         $user->syncRoles($data['roles'] ?? []);
@@ -71,9 +66,11 @@ class UserController extends Controller
         $this->authorize('users.edit');
 
         return inertia('Admin/Users/Edit', [
-            'user' => $user->load('roles', 'sector'),
+            'user' => $user->load('roles', 'area'),
             'roles' => Role::orderBy('name')->get(['id', 'name']),
-            'sectors' => Sector::where('activo', true)->orderBy('nombre')->get(['id', 'nombre']),
+            'areas' => $this->areas(),
+            // El propio usuario no puede ser su supervisor ni su gerente.
+            'usuarios' => $this->usuarios()->where('id', '!=', $user->id)->values(),
         ]);
     }
 
@@ -82,20 +79,14 @@ class UserController extends Controller
         $this->authorize('users.edit');
 
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'apellido' => ['nullable', 'string', 'max:255'],
+            ...$this->reglas($user),
             'email' => ['required', 'email', "unique:users,email,{$user->id}"],
             'password' => ['nullable', Password::defaults()],
-            'sector_id' => ['nullable', 'exists:sectors,id'],
-            'roles' => ['array'],
-            'roles.*' => ['exists:roles,name'],
         ]);
 
         $user->update([
-            'name' => $data['name'],
-            'apellido' => $data['apellido'] ?? null,
+            ...$this->atributos($data),
             'email' => $data['email'],
-            'sector_id' => $data['sector_id'] ?? null,
             ...($data['password'] ? ['password' => $data['password']] : []),
         ]);
 
@@ -141,5 +132,52 @@ class UserController extends Controller
 
         return redirect()->route('users.index')
             ->with('success', 'Usuario eliminado correctamente.');
+    }
+
+    /** Reglas comunes al alta y la edición. En el alta no hay $user todavía. */
+    private function reglas(?User $user = null): array
+    {
+        return [
+            'name' => ['required', 'string', 'max:255'],
+            'apellido' => ['nullable', 'string', 'max:255'],
+            'area_id' => ['nullable', 'exists:areas,id'],
+            'supervisor_id' => [
+                'nullable',
+                'exists:users,id',
+                // Un círculo en la cadena dejaría al motor de alertas escalando
+                // en redondo; se corta acá, no solo en el import.
+                function (string $attribute, mixed $value, callable $fail) use ($user) {
+                    if ($user?->generariaCiclo((int) $value)) {
+                        $fail('Ese supervisor cerraría un círculo de escalamiento.');
+                    }
+                },
+            ],
+            'gerente_id' => ['nullable', 'exists:users,id'],
+            'es_gerente' => ['boolean'],
+            'roles' => ['array'],
+            'roles.*' => ['exists:roles,name'],
+        ];
+    }
+
+    private function atributos(array $data): array
+    {
+        return [
+            'name' => $data['name'],
+            'apellido' => $data['apellido'] ?? null,
+            'area_id' => $data['area_id'] ?? null,
+            'supervisor_id' => $data['supervisor_id'] ?? null,
+            'gerente_id' => $data['gerente_id'] ?? null,
+            'es_gerente' => $data['es_gerente'] ?? false,
+        ];
+    }
+
+    private function areas()
+    {
+        return Area::where('activo', true)->orderBy('nombre')->get(['id', 'nombre', 'dias_gestion']);
+    }
+
+    private function usuarios()
+    {
+        return User::orderBy('name')->get(['id', 'name', 'apellido', 'es_gerente']);
     }
 }

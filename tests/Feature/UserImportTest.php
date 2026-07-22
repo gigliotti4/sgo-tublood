@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Area;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -46,7 +47,7 @@ class UserImportTest extends TestCase
 
     private function encabezado(): array
     {
-        return ['NOMBRE', 'APELLIDO', 'MAIL'];
+        return ['NOMBRE', 'APELLIDO', 'MAIL', 'SECTOR ORIGINAL', 'SUPERVISOR', 'GERENTE AVISO FINAL', 'TIEMPO DE GESTIÓN PARA ALERTAS'];
     }
 
     private function importar(User $admin, array $filas, string $rol = 'usuario_interno')
@@ -158,5 +159,173 @@ class UserImportTest extends TestCase
         $this->assertSame(1, User::where('email', 'repetido@tublood.com')->count());
         $this->assertSame('Primero', User::where('email', 'repetido@tublood.com')->first()->name);
         $response->assertSessionHas('error');
+    }
+
+    public function test_import_crea_el_area_con_su_plazo_de_gestion(): void
+    {
+        Role::firstOrCreate(['name' => 'usuario_interno', 'guard_name' => 'web']);
+        $admin = $this->userWith('users.create');
+
+        $this->importar($admin, [
+            ['LONEL', 'BRINGAS', 'logistica@tublood.com', 'LOGISTICA', '-', 'EMANUEL', '5 días'],
+        ]);
+
+        $area = Area::where('slug', 'logistica')->firstOrFail();
+        $this->assertSame('LOGISTICA', $area->nombre);
+        $this->assertSame(5, $area->dias_gestion);
+        $this->assertSame($area->id, User::where('email', 'logistica@tublood.com')->first()->area_id);
+    }
+
+    public function test_import_normaliza_el_nombre_del_area_con_saltos_de_linea(): void
+    {
+        Role::firstOrCreate(['name' => 'usuario_interno', 'guard_name' => 'web']);
+        $admin = $this->userWith('users.create');
+
+        $this->importar($admin, [
+            ['IARA', 'NIEVA', 'asuntosregulatorios@tublood.com', "ASUNTOS REGULATORIOS/\nGESTIÓN DE CALIDAD", '-', 'EMANUEL', '5 días'],
+        ]);
+
+        $this->assertSame(
+            'ASUNTOS REGULATORIOS/ GESTIÓN DE CALIDAD',
+            User::where('email', 'asuntosregulatorios@tublood.com')->first()->area->nombre
+        );
+    }
+
+    public function test_import_marca_como_gerente_a_quien_trae_si_en_la_columna_supervisor(): void
+    {
+        Role::firstOrCreate(['name' => 'usuario_interno', 'guard_name' => 'web']);
+        $admin = $this->userWith('users.create');
+
+        $this->importar($admin, [
+            ['EMANUEL', 'DURAN', 'eduran@tublood.com', '', 'si', '-', '-'],
+        ]);
+
+        $emanuel = User::where('email', 'eduran@tublood.com')->firstOrFail();
+        $this->assertTrue($emanuel->es_gerente);
+        $this->assertNull($emanuel->supervisor_id);
+        $this->assertNull($emanuel->area_id);
+    }
+
+    public function test_import_resuelve_supervisor_por_nombre_completo_y_gerente_por_nombre_de_pila(): void
+    {
+        Role::firstOrCreate(['name' => 'usuario_interno', 'guard_name' => 'web']);
+        $admin = $this->userWith('users.create');
+
+        $this->importar($admin, [
+            ['MARTIN', 'MILEO', 'mmileo@tublood.com', '', 'si', '-', '-'],
+            ['CANDELARIA', 'VACULA', 'oficinacomercial@tublood.com', 'VENTAS', '-', 'MARTIN', '2 días'],
+            ['MATIAS', 'BORDA', 'ventas4@tublood.com', 'VENTAS', 'CANDELARIA VACULA', 'MARTIN', '2 días'],
+        ]);
+
+        $martin = User::where('email', 'mmileo@tublood.com')->firstOrFail();
+        $candelaria = User::where('email', 'oficinacomercial@tublood.com')->firstOrFail();
+        $matias = User::where('email', 'ventas4@tublood.com')->firstOrFail();
+
+        $this->assertSame($candelaria->id, $matias->supervisor_id);
+        $this->assertSame($martin->id, $matias->gerente_id);
+        $this->assertSame($martin->id, $candelaria->gerente_id);
+
+        // La cadena completa de escalamiento del equipo de Ventas.
+        $this->assertSame([$candelaria->id], $matias->cadenaEscalamiento()->pluck('id')->all());
+    }
+
+    public function test_import_resuelve_referencias_a_filas_posteriores(): void
+    {
+        Role::firstOrCreate(['name' => 'usuario_interno', 'guard_name' => 'web']);
+        $admin = $this->userWith('users.create');
+
+        // Osmarly nombra a Barbara, que recién aparece en la fila siguiente.
+        $this->importar($admin, [
+            ['OSMARLY', 'AZOCAR', 'tesoreria@tublood.com', 'FINANZAS', 'BARBARA NEGRIN', '-', '2 días'],
+            ['BARBARA', 'NEGRIN', 'bnegrin@tublood.com', 'FINANZAS', '-', '-', '2 días'],
+        ]);
+
+        $this->assertSame(
+            User::where('email', 'bnegrin@tublood.com')->first()->id,
+            User::where('email', 'tesoreria@tublood.com')->first()->supervisor_id
+        );
+    }
+
+    public function test_import_avisa_cuando_el_supervisor_no_existe(): void
+    {
+        Role::firstOrCreate(['name' => 'usuario_interno', 'guard_name' => 'web']);
+        $admin = $this->userWith('users.create');
+
+        $response = $this->importar($admin, [
+            ['MARIA', 'AVERO', 'cotizaciones@tublood.com', 'VENTAS', 'ALGUIEN QUE NO EXISTE', '-', '2 días'],
+        ])->assertRedirect(route('users.index'));
+
+        $this->assertNull(User::where('email', 'cotizaciones@tublood.com')->first()->supervisor_id);
+        $this->assertStringContainsString('no existe ningún usuario', $response->getSession()->get('error'));
+    }
+
+    public function test_import_avisa_cuando_el_nombre_del_supervisor_es_ambiguo(): void
+    {
+        Role::firstOrCreate(['name' => 'usuario_interno', 'guard_name' => 'web']);
+        $admin = $this->userWith('users.create');
+
+        $response = $this->importar($admin, [
+            ['CAMILA', 'KONZ', 'cobranzas@tublood.com', 'FINANZAS', '-', '-', '2 días'],
+            ['CAMILA', 'VIÑUELA', 'info@tublood.com', 'VENTAS', '-', '-', '2 días'],
+            ['BELEN', 'CAMAÑO', 'marketing@tublood.com', 'VENTAS', 'CAMILA', '-', '2 días'],
+        ])->assertRedirect(route('users.index'));
+
+        $this->assertNull(User::where('email', 'marketing@tublood.com')->first()->supervisor_id);
+        $this->assertStringContainsString('hay más de un usuario', $response->getSession()->get('error'));
+    }
+
+    public function test_import_rechaza_un_circulo_de_escalamiento(): void
+    {
+        Role::firstOrCreate(['name' => 'usuario_interno', 'guard_name' => 'web']);
+        $admin = $this->userWith('users.create');
+
+        $response = $this->importar($admin, [
+            ['UNO', 'PRIMERO', 'uno@tublood.com', 'VENTAS', 'DOS SEGUNDO', '-', '2 días'],
+            ['DOS', 'SEGUNDO', 'dos@tublood.com', 'VENTAS', 'UNO PRIMERO', '-', '2 días'],
+        ])->assertRedirect(route('users.index'));
+
+        $uno = User::where('email', 'uno@tublood.com')->firstOrFail();
+        $dos = User::where('email', 'dos@tublood.com')->firstOrFail();
+
+        $this->assertSame($dos->id, $uno->supervisor_id);
+        $this->assertNull($dos->supervisor_id);
+        $this->assertStringContainsString('círculo de escalamiento', $response->getSession()->get('error'));
+    }
+
+    public function test_import_avisa_si_dos_filas_dan_plazos_distintos_a_la_misma_area(): void
+    {
+        Role::firstOrCreate(['name' => 'usuario_interno', 'guard_name' => 'web']);
+        $admin = $this->userWith('users.create');
+
+        $response = $this->importar($admin, [
+            ['UNO', 'VENTAS', 'ventas1@tublood.com', 'VENTAS', '-', '-', '2 días'],
+            ['DOS', 'VENTAS', 'ventas2@tublood.com', 'VENTAS', '-', '-', '5 días'],
+        ])->assertRedirect(route('users.index'));
+
+        $this->assertSame(2, Area::where('slug', 'ventas')->first()->dias_gestion);
+        $this->assertStringContainsString('ya venía con 2 días', $response->getSession()->get('error'));
+    }
+
+    public function test_import_de_tres_columnas_no_borra_lo_que_ya_estaba_cargado(): void
+    {
+        Role::firstOrCreate(['name' => 'usuario_interno', 'guard_name' => 'web']);
+        $admin = $this->userWith('users.create');
+
+        $area = Area::create(['nombre' => 'Ventas', 'slug' => 'ventas', 'dias_gestion' => 2]);
+        $supervisor = User::factory()->create();
+        $existente = User::factory()->create([
+            'email' => 'existente@tublood.com',
+            'area_id' => $area->id,
+            'supervisor_id' => $supervisor->id,
+            'es_gerente' => true,
+        ]);
+
+        $this->importar($admin, [['NOMBRE NUEVO', 'APELLIDO', 'existente@tublood.com']]);
+
+        $existente->refresh();
+        $this->assertSame('NOMBRE NUEVO', $existente->name);
+        $this->assertSame($area->id, $existente->area_id);
+        $this->assertSame($supervisor->id, $existente->supervisor_id);
+        $this->assertTrue($existente->es_gerente);
     }
 }
