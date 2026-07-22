@@ -2,10 +2,23 @@
 import { Head, Link, useForm } from '@inertiajs/vue3'
 import { computed, ref, watch } from 'vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import Button from '@/Components/Button.vue'
 import CampoDinamico, { type CampoDef } from '@/Components/CampoDinamico.vue'
+import FormSection from '@/Components/FormSection.vue'
+import Input from '@/Components/Input.vue'
+import RadioGroup from '@/Components/RadioGroup.vue'
+import Select from '@/Components/Select.vue'
+import Textarea from '@/Components/Textarea.vue'
 
 interface SectorOption { id: number; nombre: string; slug: string }
-interface UsuarioOption { id: number; name: string }
+interface AreaOption { id: number; nombre: string }
+interface UsuarioOption {
+    id: number
+    name: string
+    apellido: string | null
+    area_id: number | null
+    area: { nombre: string; dias_gestion: number | null } | null
+}
 interface TipoDef { codigo: string; label: string; campos?: CampoDef[]; especial?: boolean }
 type Taxonomia = Record<string, Record<string, TipoDef>>
 
@@ -27,6 +40,7 @@ const props = defineProps<{
     tiposCaso: string[]
     prioridadSugerida: Record<string, string>
     usuarios: UsuarioOption[]
+    areas: AreaOption[]
 }>()
 
 const nuevoProducto = (): ProductoForm => ({
@@ -48,6 +62,7 @@ const form = useForm({
     titulo: '',
     descripcion: '',
     responsable_id: null as number | null,
+    area_id: null as number | null,
     datos_especificos: {} as Record<string, string | number | null>,
     institucion: '',
     provincia: '',
@@ -82,6 +97,47 @@ const tipoEspecial = computed(() =>
 const camposDelTipo = computed<CampoDef[]>(() => {
     if (!sectorSlug.value || !form.tipo) return []
     return props.taxonomia[sectorSlug.value]?.[form.tipo]?.campos ?? []
+})
+
+const nombreCompleto = (u: UsuarioOption) => [u.name, u.apellido].filter(Boolean).join(' ')
+
+/**
+ * Elegir área recorta la lista de responsables a esa área. Se deja pasar
+ * igual al responsable ya elegido, para no hacerlo desaparecer del select.
+ */
+const usuariosFiltrados = computed(() => {
+    if (!form.area_id) return props.usuarios
+
+    return props.usuarios.filter(u => u.area_id === form.area_id || u.id === form.responsable_id)
+})
+
+/** Al cambiar de área se suelta el responsable si era de otra. */
+const alCambiarArea = () => {
+    if (!form.area_id) return
+
+    const elegido = props.usuarios.find(u => u.id === form.responsable_id)
+    if (elegido && elegido.area_id !== form.area_id) form.responsable_id = null
+}
+
+const gentePorArea = computed(() => {
+    if (!form.area_id) return null
+
+    const total = props.usuarios.filter(u => u.area_id === form.area_id).length
+
+    return total === 0
+        ? 'Esta área no tiene usuarios cargados.'
+        : `${total} ${total === 1 ? 'persona' : 'personas'} en esta área.`
+})
+
+/** El plazo de gestión sale del área del responsable: sin área no hay alerta. */
+const plazoDelResponsable = computed(() => {
+    const elegido = props.usuarios.find(u => u.id === form.responsable_id)
+    if (!elegido) return null
+
+    if (!elegido.area) return 'Esta persona no tiene área asignada, así que la observación no va a generar alertas.'
+    if (!elegido.area.dias_gestion) return `El área ${elegido.area.nombre} no tiene plazo cargado, así que no va a generar alertas.`
+
+    return `Vence a los ${elegido.area.dias_gestion} días hábiles (plazo de ${elegido.area.nombre}).`
 })
 
 const agregarProducto = () => form.productos.push(nuevoProducto())
@@ -138,202 +194,115 @@ const submit = () => form.post(route('observaciones.store'), { forceFormData: tr
     <Head title="Nueva observación interna" />
 
     <AppLayout>
-        <div class="max-w-xxl mx-auto">
+        <div class="max-w-4xl mx-auto">
             <div class="mb-6">
-                <h1 class="text-xl font-bold text-slate-800">Nueva observación interna</h1>
-                <p class="text-sm text-slate-500 mt-0.5">Registro por sector</p>
+                <h1 class="text-xl font-bold text-slate-800 dark:text-slate-100">Nueva observación interna</h1>
+                <p class="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Registro por sector</p>
             </div>
 
-            <form @submit.prevent="submit" class="bg-white rounded-2xl shadow p-6 sm:p-8 space-y-8">
-                <!-- Clasificación -->
-                <section class="space-y-4">
-                    <h2 class="text-sm font-semibold text-slate-800 border-b border-slate-100 pb-2">Clasificación</h2>
-                    <div class="grid sm:grid-cols-2 gap-4">
-                        <div class="space-y-1.5">
-                            <label for="sector_id" class="block text-sm font-medium text-slate-700">
-                                Sector <span class="text-red-500">*</span>
-                            </label>
-                            <select
-                                id="sector_id"
-                                v-model="form.sector_id"
-                                class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                :class="form.errors.sector_id ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
-                            >
-                                <option :value="null" disabled>— Seleccionar —</option>
-                                <option v-for="s in props.sectores" :key="s.id" :value="s.id">{{ s.nombre }}</option>
-                            </select>
-                            <p v-if="form.errors.sector_id" class="text-red-500 text-xs">{{ form.errors.sector_id }}</p>
-                        </div>
+            <form
+                @submit.prevent="submit"
+                class="bg-white dark:bg-slate-800 rounded-2xl shadow p-6 sm:p-8 space-y-8"
+            >
+                <FormSection title="Clasificación">
+                    <Select v-model="form.sector_id" required label="Sector" :error="form.errors.sector_id">
+                        <option :value="null" disabled>— Seleccionar —</option>
+                        <option v-for="s in props.sectores" :key="s.id" :value="s.id">{{ s.nombre }}</option>
+                    </Select>
 
-                        <div class="space-y-1.5">
-                            <label for="tipo" class="block text-sm font-medium text-slate-700">
-                                Tipo de incidencia <span class="text-red-500">*</span>
-                            </label>
-                            <select
-                                id="tipo"
-                                v-model="form.tipo"
-                                :disabled="!form.sector_id"
-                                class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-slate-50 disabled:text-slate-400"
-                                :class="form.errors.tipo ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
-                            >
-                                <option value="" disabled>{{ form.sector_id ? '— Seleccionar —' : 'Elegí un sector primero' }}</option>
-                                <optgroup v-for="grupo in gruposDeTipos" :key="grupo.titulo" :label="grupo.titulo">
-                                    <option v-for="t in grupo.tipos" :key="t.key" :value="t.key">{{ t.label }}</option>
-                                </optgroup>
-                            </select>
-                            <p v-if="form.errors.tipo" class="text-red-500 text-xs">{{ form.errors.tipo }}</p>
-                        </div>
+                    <Select
+                        v-model="form.tipo"
+                        required
+                        label="Tipo de incidencia"
+                        :disabled="!form.sector_id"
+                        :error="form.errors.tipo"
+                    >
+                        <option value="" disabled>
+                            {{ form.sector_id ? '— Seleccionar —' : 'Elegí un sector primero' }}
+                        </option>
+                        <optgroup v-for="grupo in gruposDeTipos" :key="grupo.titulo" :label="grupo.titulo">
+                            <option v-for="t in grupo.tipos" :key="t.key" :value="t.key">{{ t.label }}</option>
+                        </optgroup>
+                    </Select>
 
-                        <div class="space-y-1.5">
-                            <label for="prioridad" class="block text-sm font-medium text-slate-700">
-                                Prioridad <span class="text-red-500">*</span>
-                            </label>
-                            <select
-                                id="prioridad"
-                                v-model="form.prioridad"
-                                class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                :class="form.errors.prioridad ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
-                            >
-                                <option value="" disabled>— Seleccionar —</option>
-                                <option v-for="(label, key) in props.prioridades" :key="key" :value="key">{{ label }}</option>
-                            </select>
-                            <p v-if="form.errors.prioridad" class="text-red-500 text-xs">{{ form.errors.prioridad }}</p>
-                        </div>
+                    <Select
+                        v-model="form.tipo_caso"
+                        required
+                        label="Tipo de caso"
+                        :error="form.errors.tipo_caso"
+                        @change="sugerirPrioridad"
+                    >
+                        <option value="" disabled>— Seleccionar —</option>
+                        <option v-for="tc in props.tiposCaso" :key="tc" :value="tc">{{ tc }}</option>
+                    </Select>
 
-                        <div class="space-y-1.5">
-                            <label for="tipo_caso" class="block text-sm font-medium text-slate-700">
-                                Tipo de caso <span class="text-red-500">*</span>
-                            </label>
-                            <select
-                                id="tipo_caso"
-                                v-model="form.tipo_caso"
-                                class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                :class="form.errors.tipo_caso ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
-                                @change="sugerirPrioridad"
-                            >
-                                <option value="" disabled>— Seleccionar —</option>
-                                <option v-for="tc in props.tiposCaso" :key="tc" :value="tc">{{ tc }}</option>
-                            </select>
-                            <p v-if="form.errors.tipo_caso" class="text-red-500 text-xs">{{ form.errors.tipo_caso }}</p>
-                        </div>
-                    </div>
-                </section>
+                    <Select
+                        v-model="form.prioridad"
+                        required
+                        label="Prioridad"
+                        hint="Se sugiere sola según el tipo de caso; podés cambiarla."
+                        :error="form.errors.prioridad"
+                    >
+                        <option value="" disabled>— Seleccionar —</option>
+                        <option v-for="(label, key) in props.prioridades" :key="key" :value="key">{{ label }}</option>
+                    </Select>
+                </FormSection>
 
-                <!-- Datos del reporte -->
-                <section class="space-y-4">
-                    <h2 class="text-sm font-semibold text-slate-800 border-b border-slate-100 pb-2">Datos del reporte</h2>
-                    <div class="space-y-1.5">
-                        <label for="titulo" class="block text-sm font-medium text-slate-700">
-                            Título breve <span class="text-red-500">*</span>
-                        </label>
-                        <input
-                            id="titulo"
-                            v-model="form.titulo"
-                            type="text"
-                            maxlength="120"
-                            class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                            :class="form.errors.titulo ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
-                        />
-                        <p v-if="form.errors.titulo" class="text-red-500 text-xs">{{ form.errors.titulo }}</p>
-                    </div>
-                    <div class="space-y-1.5">
-                        <label for="descripcion" class="block text-sm font-medium text-slate-700">
-                            Descripción detallada <span class="text-red-500">*</span>
-                        </label>
-                        <textarea
-                            id="descripcion"
-                            v-model="form.descripcion"
-                            rows="4"
-                            class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                            :class="form.errors.descripcion ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
-                        />
-                        <p v-if="form.errors.descripcion" class="text-red-500 text-xs">{{ form.errors.descripcion }}</p>
-                    </div>
-                </section>
+                <FormSection title="Datos del reporte" :columns="1">
+                    <Input
+                        v-model="form.titulo"
+                        required
+                        label="Título breve"
+                        maxlength="120"
+                        :error="form.errors.titulo"
+                    />
+                    <Textarea
+                        v-model="form.descripcion"
+                        required
+                        label="Descripción detallada"
+                        :rows="4"
+                        :error="form.errors.descripcion"
+                    />
+                </FormSection>
 
                 <!-- Datos específicos (dinámico según tipo) -->
-                <section v-if="camposDelTipo.length" class="space-y-4">
-                    <h2 class="text-sm font-semibold text-slate-800 border-b border-slate-100 pb-2">Datos específicos</h2>
-                    <div class="grid sm:grid-cols-2 gap-4">
-                        <CampoDinamico
-                            v-for="campo in camposDelTipo"
-                            :key="campo.id"
-                            v-model="form.datos_especificos[campo.id]"
-                            :campo="campo"
-                            :error="errorCampo(campo.id)"
-                        />
-                    </div>
-                </section>
+                <FormSection v-if="camposDelTipo.length" title="Datos específicos">
+                    <CampoDinamico
+                        v-for="campo in camposDelTipo"
+                        :key="campo.id"
+                        v-model="form.datos_especificos[campo.id]"
+                        :campo="campo"
+                        :error="errorCampo(campo.id)"
+                    />
+                </FormSection>
 
                 <!-- Falla de Producto (tipo especial, hoy solo Garantía de Calidad) -->
-                <section v-if="tipoEspecial && form.tipo === 'falla_producto'" class="space-y-4">
-                    <h2 class="text-sm font-semibold text-slate-800 border-b border-slate-100 pb-2">Falla de Producto</h2>
+                <FormSection v-if="tipoEspecial && form.tipo === 'falla_producto'" title="Falla de Producto">
+                    <Input v-model="form.institucion" required label="Institución" :error="form.errors.institucion" />
 
-                    <div class="grid sm:grid-cols-2 gap-4">
-                        <div class="space-y-1.5">
-                            <label for="institucion" class="block text-sm font-medium text-slate-700">
-                                Institución <span class="text-red-500">*</span>
-                            </label>
-                            <input
-                                id="institucion"
-                                v-model="form.institucion"
-                                type="text"
-                                class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                :class="form.errors.institucion ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
-                            />
-                            <p v-if="form.errors.institucion" class="text-red-500 text-xs">{{ form.errors.institucion }}</p>
-                        </div>
+                    <Select v-model="form.provincia" required label="Provincia" :error="form.errors.provincia">
+                        <option value="" disabled>— Seleccionar —</option>
+                        <option v-for="p in props.provincias" :key="p" :value="p">{{ p }}</option>
+                    </Select>
 
-                        <div class="space-y-1.5">
-                            <label for="provincia" class="block text-sm font-medium text-slate-700">
-                                Provincia <span class="text-red-500">*</span>
-                            </label>
-                            <select
-                                id="provincia"
-                                v-model="form.provincia"
-                                class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                :class="form.errors.provincia ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
-                            >
-                                <option value="" disabled>— Seleccionar —</option>
-                                <option v-for="p in props.provincias" :key="p" :value="p">{{ p }}</option>
-                            </select>
-                            <p v-if="form.errors.provincia" class="text-red-500 text-xs">{{ form.errors.provincia }}</p>
-                        </div>
+                    <Input v-model="form.equipamiento" label="Equipamiento utilizado" />
+                    <Input v-model="form.ejecutivo_cuenta" label="Ejecutivo de cuenta a cargo" />
 
-                        <div class="space-y-1.5">
-                            <label for="equipamiento" class="block text-sm font-medium text-slate-700">Equipamiento utilizado</label>
-                            <input
-                                id="equipamiento"
-                                v-model="form.equipamiento"
-                                type="text"
-                                class="w-full px-3 py-2.5 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                            />
-                        </div>
-
-                        <div class="space-y-1.5">
-                            <label for="ejecutivo_cuenta" class="block text-sm font-medium text-slate-700">Ejecutivo de cuenta a cargo</label>
-                            <input
-                                id="ejecutivo_cuenta"
-                                v-model="form.ejecutivo_cuenta"
-                                type="text"
-                                class="w-full px-3 py-2.5 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                            />
-                        </div>
-                    </div>
-
-                    <!-- Productos -->
-                    <div class="space-y-4 pt-2">
+                    <!-- Productos afectados: lista repetible -->
+                    <div class="sm:col-span-2 space-y-4 pt-2">
                         <div
                             v-for="(producto, index) in form.productos"
                             :key="index"
-                            class="rounded-xl border border-slate-200 p-4 space-y-4"
+                            class="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-700/20 p-4 space-y-4"
                         >
                             <div class="flex items-center justify-between">
-                                <span class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Producto {{ index + 1 }}</span>
+                                <span class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                                    Producto {{ index + 1 }}
+                                </span>
                                 <button
                                     v-if="form.productos.length > 1"
                                     type="button"
-                                    class="text-xs text-red-500 hover:text-red-600"
+                                    class="text-xs text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 cursor-pointer"
                                     @click="quitarProducto(index)"
                                 >
                                     Quitar
@@ -341,156 +310,110 @@ const submit = () => form.post(route('observaciones.store'), { forceFormData: tr
                             </div>
 
                             <div class="grid sm:grid-cols-2 gap-4">
-                                <div class="space-y-1.5">
-                                    <label :for="`producto-${index}-producto`" class="block text-sm font-medium text-slate-700">
-                                        Producto <span class="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        :id="`producto-${index}-producto`"
-                                        v-model="producto.producto"
-                                        type="text"
-                                        class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                        :class="errorProducto(index, 'producto') ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
-                                    />
-                                    <p v-if="errorProducto(index, 'producto')" class="text-red-500 text-xs">{{ errorProducto(index, 'producto') }}</p>
-                                </div>
-
-                                <div class="space-y-1.5">
-                                    <label :for="`producto-${index}-codigo`" class="block text-sm font-medium text-slate-700">
-                                        Código <span class="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        :id="`producto-${index}-codigo`"
-                                        v-model="producto.codigo"
-                                        type="text"
-                                        class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                        :class="errorProducto(index, 'codigo') ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
-                                    />
-                                    <p v-if="errorProducto(index, 'codigo')" class="text-red-500 text-xs">{{ errorProducto(index, 'codigo') }}</p>
-                                </div>
-
-                                <div class="space-y-1.5">
-                                    <label :for="`producto-${index}-cantidad`" class="block text-sm font-medium text-slate-700">
-                                        Cantidad afectada <span class="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        :id="`producto-${index}-cantidad`"
-                                        v-model.number="producto.cantidad_afectada"
-                                        type="number"
-                                        min="1"
-                                        class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                        :class="errorProducto(index, 'cantidad_afectada') ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
-                                    />
-                                    <p v-if="errorProducto(index, 'cantidad_afectada')" class="text-red-500 text-xs">{{ errorProducto(index, 'cantidad_afectada') }}</p>
-                                </div>
-
-                                <div class="space-y-1.5">
-                                    <label :for="`producto-${index}-lote`" class="block text-sm font-medium text-slate-700">
-                                        Lote <span class="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        :id="`producto-${index}-lote`"
-                                        v-model="producto.lote"
-                                        type="text"
-                                        class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                        :class="errorProducto(index, 'lote') ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
-                                    />
-                                    <p v-if="errorProducto(index, 'lote')" class="text-red-500 text-xs">{{ errorProducto(index, 'lote') }}</p>
-                                </div>
-
-                                <div class="space-y-1.5">
-                                    <label :for="`producto-${index}-vencimiento`" class="block text-sm font-medium text-slate-700">
-                                        Fecha de vencimiento <span class="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        :id="`producto-${index}-vencimiento`"
-                                        v-model="producto.fecha_vencimiento"
-                                        type="date"
-                                        class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                        :class="errorProducto(index, 'fecha_vencimiento') ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
-                                    />
-                                    <p v-if="errorProducto(index, 'fecha_vencimiento')" class="text-red-500 text-xs">{{ errorProducto(index, 'fecha_vencimiento') }}</p>
-                                </div>
-
-                                <div class="space-y-1.5">
-                                    <label :for="`producto-${index}-remito`" class="block text-sm font-medium text-slate-700">
-                                        N° de remito <span class="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        :id="`producto-${index}-remito`"
-                                        v-model="producto.numero_remito"
-                                        type="text"
-                                        class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                        :class="errorProducto(index, 'numero_remito') ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
-                                    />
-                                    <p v-if="errorProducto(index, 'numero_remito')" class="text-red-500 text-xs">{{ errorProducto(index, 'numero_remito') }}</p>
-                                </div>
-                            </div>
-
-                            <div class="space-y-1.5">
-                                <span class="block text-sm font-medium text-slate-700">
-                                    Tipo de comprobante <span class="text-red-500">*</span>
-                                </span>
-                                <div class="flex gap-6">
-                                    <label class="flex items-center gap-2 text-sm text-slate-700">
-                                        <input v-model="producto.tipo_comprobante" type="radio" value="factura" class="text-indigo-600 focus:ring-indigo-500" />
-                                        Factura
-                                    </label>
-                                    <label class="flex items-center gap-2 text-sm text-slate-700">
-                                        <input v-model="producto.tipo_comprobante" type="radio" value="remito" class="text-indigo-600 focus:ring-indigo-500" />
-                                        Remito
-                                    </label>
-                                </div>
-                                <p v-if="errorProducto(index, 'tipo_comprobante')" class="text-red-500 text-xs">{{ errorProducto(index, 'tipo_comprobante') }}</p>
+                                <Input
+                                    v-model="producto.producto"
+                                    required
+                                    label="Producto"
+                                    :error="errorProducto(index, 'producto')"
+                                />
+                                <Input
+                                    v-model="producto.codigo"
+                                    required
+                                    label="Código"
+                                    :error="errorProducto(index, 'codigo')"
+                                />
+                                <Input
+                                    v-model.number="producto.cantidad_afectada"
+                                    required
+                                    type="number"
+                                    min="1"
+                                    label="Cantidad afectada"
+                                    :error="errorProducto(index, 'cantidad_afectada')"
+                                />
+                                <Input
+                                    v-model="producto.lote"
+                                    required
+                                    label="Lote"
+                                    :error="errorProducto(index, 'lote')"
+                                />
+                                <Input
+                                    v-model="producto.fecha_vencimiento"
+                                    required
+                                    type="date"
+                                    label="Fecha de vencimiento"
+                                    :error="errorProducto(index, 'fecha_vencimiento')"
+                                />
+                                <Input
+                                    v-model="producto.numero_remito"
+                                    required
+                                    label="N° de remito"
+                                    :error="errorProducto(index, 'numero_remito')"
+                                />
+                                <RadioGroup
+                                    v-model="producto.tipo_comprobante"
+                                    full
+                                    required
+                                    label="Tipo de comprobante"
+                                    :opciones="[
+                                        { value: 'factura', label: 'Factura' },
+                                        { value: 'remito', label: 'Remito' },
+                                    ]"
+                                    :error="errorProducto(index, 'tipo_comprobante')"
+                                />
                             </div>
                         </div>
 
                         <button
                             type="button"
-                            class="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+                            class="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium cursor-pointer"
                             @click="agregarProducto"
                         >
                             + Agregar producto
                         </button>
                     </div>
-                </section>
+                </FormSection>
 
-                <!-- Asignación -->
-                <section class="space-y-4">
-                    <h2 class="text-sm font-semibold text-slate-800 border-b border-slate-100 pb-2">Asignación</h2>
-                    <div class="space-y-1.5 sm:w-1/2">
-                        <label for="responsable_id" class="block text-sm font-medium text-slate-700">Responsable</label>
-                        <select
-                            id="responsable_id"
-                            v-model="form.responsable_id"
-                            class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                            :class="form.errors.responsable_id ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
-                        >
-                            <option :value="null">— Sin asignar —</option>
-                            <option v-for="u in props.usuarios" :key="u.id" :value="u.id">{{ u.name }}</option>
-                        </select>
-                        <p v-if="form.errors.responsable_id" class="text-red-500 text-xs">{{ form.errors.responsable_id }}</p>
-                    </div>
-                </section>
+                <FormSection title="Asignación">
+                    <Select
+                        v-model="form.area_id"
+                        label="Área"
+                        :hint="gentePorArea ?? undefined"
+                        :error="form.errors.area_id"
+                        @change="alCambiarArea"
+                    >
+                        <option :value="null">— Sin asignar —</option>
+                        <option v-for="a in props.areas" :key="a.id" :value="a.id">{{ a.nombre }}</option>
+                    </Select>
 
-                <!-- Adjuntos -->
-                <section class="space-y-4">
-                    <h2 class="text-sm font-semibold text-slate-800 border-b border-slate-100 pb-2">Adjuntos</h2>
+                    <Select
+                        v-model="form.responsable_id"
+                        label="Responsable"
+                        :hint="plazoDelResponsable ?? undefined"
+                        :error="form.errors.responsable_id"
+                    >
+                        <option :value="null">— Sin asignar —</option>
+                        <option v-for="u in usuariosFiltrados" :key="u.id" :value="u.id">{{ nombreCompleto(u) }}</option>
+                    </Select>
+                </FormSection>
+
+                <FormSection title="Adjuntos" :columns="1">
                     <div
                         class="border-2 border-dashed rounded-xl p-8 text-center transition"
-                        :class="isDragging ? 'border-indigo-400 bg-indigo-50/50' : 'border-slate-200'"
+                        :class="isDragging
+                            ? 'border-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20'
+                            : 'border-slate-200 dark:border-slate-600'"
                         @dragover.prevent="isDragging = true"
                         @dragleave.prevent="isDragging = false"
                         @drop.prevent="onDrop"
                     >
-                        <svg class="w-6 h-6 mx-auto text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <svg class="w-6 h-6 mx-auto text-slate-400 dark:text-slate-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.485 8.486L20.5 13"/>
                         </svg>
-                        <p class="text-sm font-medium text-slate-700 mt-2">Adjuntar archivos</p>
-                        <p class="text-xs text-slate-400 mt-1">JPG, PNG, PDF. Máx 3 MB</p>
+                        <p class="text-sm font-medium text-slate-700 dark:text-slate-200 mt-2">Adjuntar archivos</p>
+                        <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">JPG, PNG, PDF. Máx 3 MB</p>
                         <button
                             type="button"
-                            class="mt-3 text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+                            class="mt-3 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium cursor-pointer"
                             @click="fileInput?.click()"
                         >
                             Seleccionar archivos
@@ -509,30 +432,33 @@ const submit = () => form.post(route('observaciones.store'), { forceFormData: tr
                         <li
                             v-for="(file, index) in form.attachments"
                             :key="index"
-                            class="flex items-center justify-between text-sm bg-slate-50 rounded-lg px-3 py-2"
+                            class="flex items-center justify-between text-sm bg-slate-50 dark:bg-slate-700/40 rounded-lg px-3 py-2"
                         >
-                            <span class="text-slate-700 truncate">{{ file.name }}</span>
-                            <button type="button" class="text-slate-400 hover:text-red-500" @click="removeFile(index)">✕</button>
+                            <span class="text-slate-700 dark:text-slate-200 truncate">{{ file.name }}</span>
+                            <button
+                                type="button"
+                                class="text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 cursor-pointer"
+                                @click="removeFile(index)"
+                            >
+                                ✕
+                            </button>
                         </li>
                     </ul>
-                    <p v-if="form.errors.attachments" class="text-red-500 text-xs">{{ form.errors.attachments }}</p>
-                </section>
+                    <p v-if="form.errors.attachments" class="text-red-500 dark:text-red-400 text-xs">
+                        {{ form.errors.attachments }}
+                    </p>
+                </FormSection>
 
-                <!-- Acciones -->
-                <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <div class="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-700">
                     <Link
                         :href="route('observaciones.nuevo')"
-                        class="px-4 py-2.5 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition"
+                        class="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition"
                     >
                         ← Volver
                     </Link>
-                    <button
-                        type="submit"
-                        :disabled="form.processing"
-                        class="px-5 py-2.5 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed transition"
-                    >
+                    <Button type="submit" variant="primary" :disabled="form.processing">
                         {{ form.processing ? 'Guardando...' : 'Guardar observación' }}
-                    </button>
+                    </Button>
                 </div>
             </form>
         </div>

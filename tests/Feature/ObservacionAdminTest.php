@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Area;
 use App\Models\Cliente;
 use App\Models\Observacion;
 use App\Models\Sector;
@@ -63,6 +64,103 @@ class ObservacionAdminTest extends TestCase
 
         $this->actingAs($user)->get('/observaciones')
             ->assertInertia(fn ($page) => $page->has('usuarios', 1));
+    }
+
+    public function test_los_usuarios_asignables_traen_su_area_para_mostrar_el_plazo(): void
+    {
+        $area = Area::create(['nombre' => 'Ventas', 'slug' => 'ventas', 'dias_gestion' => 2]);
+        $user = $this->userWith('observaciones.view', 'observaciones.edit');
+        $user->update(['area_id' => $area->id]);
+
+        // De este eager-load salen dos cosas del formulario: el aviso de a los
+        // cuántos días hábiles vence, y el filtro de responsables por área.
+        foreach (['/observaciones', '/observaciones/crear'] as $url) {
+            $this->actingAs($user)->get($url)
+                ->assertStatus(200)
+                ->assertInertia(fn ($page) => $page
+                    ->where('usuarios.0.area.dias_gestion', 2)
+                    ->where('usuarios.0.area_id', $area->id)
+                );
+        }
+    }
+
+    public function test_store_guarda_el_area_asignada(): void
+    {
+        $area = Area::create(['nombre' => 'Ventas', 'slug' => 'ventas', 'dias_gestion' => 2]);
+        $sector = Sector::create(['nombre' => 'Facturación', 'slug' => 'facturacion']);
+        $user = $this->userWith('observaciones.edit');
+
+        $this->actingAs($user)->post('/observaciones', [
+            'origen' => 'interna',
+            'sector_id' => $sector->id,
+            'area_id' => $area->id,
+            'tipo' => 'error_facturacion',
+            'titulo' => 'Título de prueba',
+            'descripcion' => 'Descripción de prueba',
+            'prioridad' => 'alta',
+            'tipo_caso' => 'Documentación',
+            'datos_especificos' => [
+                'tipo_comprobante' => 'Factura',
+                'numero_comprobante' => 'A-0001',
+            ],
+        ])->assertRedirect(route('observaciones.index'));
+
+        $this->assertSame($area->id, Observacion::firstOrFail()->area_id);
+    }
+
+    public function test_store_rechaza_un_area_inexistente(): void
+    {
+        $sector = Sector::create(['nombre' => 'Facturación', 'slug' => 'facturacion']);
+        $user = $this->userWith('observaciones.edit');
+
+        $this->actingAs($user)->post('/observaciones', [
+            'origen' => 'interna',
+            'sector_id' => $sector->id,
+            'area_id' => 9999,
+            'tipo' => 'error_facturacion',
+            'titulo' => 'Título de prueba',
+            'descripcion' => 'Descripción de prueba',
+            'prioridad' => 'alta',
+            'tipo_caso' => 'Documentación',
+        ])->assertSessionHasErrors('area_id');
+    }
+
+    public function test_update_cambia_el_area_de_la_observacion(): void
+    {
+        $area = Area::create(['nombre' => 'Ventas', 'slug' => 'ventas', 'dias_gestion' => 2]);
+        $user = $this->userWith('observaciones.view');
+
+        $observacion = Observacion::create([
+            'numero' => '0001-26',
+            'anio' => 2026,
+            'tipo' => 'falla_producto',
+            'estado' => 'clasificada',
+            'contacto_nombre' => 'Cliente Test',
+            'contacto_email' => 'cliente@example.com',
+            'titulo' => 'Título de prueba',
+            'descripcion' => 'Descripción de prueba',
+            'responsable_id' => $user->id,
+        ]);
+
+        $this->actingAs($user)->put("/observaciones/{$observacion->id}", [
+            'estado' => 'clasificada',
+            'area_id' => $area->id,
+        ])->assertRedirect(route('observaciones.index'));
+
+        $this->assertSame($area->id, $observacion->fresh()->area_id);
+    }
+
+    public function test_index_y_alta_pasan_las_areas_activas_al_formulario(): void
+    {
+        Area::create(['nombre' => 'Ventas', 'slug' => 'ventas', 'dias_gestion' => 2]);
+        Area::create(['nombre' => 'Vieja', 'slug' => 'vieja', 'activo' => false]);
+        $user = $this->userWith('observaciones.view', 'observaciones.edit');
+
+        foreach (['/observaciones', '/observaciones/crear'] as $url) {
+            $this->actingAs($user)->get($url)
+                ->assertStatus(200)
+                ->assertInertia(fn ($page) => $page->has('areas', 1)->where('areas.0.nombre', 'Ventas'));
+        }
     }
 
     public function test_index_incluye_datos_del_cliente_vinculado(): void

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Area;
 use App\Models\Observacion;
 use App\Models\Sector;
 use App\Models\User;
@@ -28,13 +29,14 @@ class ObservacionController extends Controller
 
         return inertia('Admin/Observaciones/Index', [
             'observaciones' => Observacion::query()
-                ->with(['responsable:id,name', 'sector:id,nombre', 'cliente:id,numero,razon_social,mail,telefono', 'productos'])
+                ->with(['responsable:id,name', 'sector:id,nombre', 'area:id,nombre', 'cliente:id,numero,razon_social,mail,telefono', 'productos'])
                 ->latest()
                 ->paginate(20),
             // Cualquiera que vea el listado puede necesitar reasignar responsable/sector
             // en las filas que sí puede editar (ver ObservacionPolicy::update).
-            'usuarios' => User::orderBy('name')->get(['id', 'name']),
+            'usuarios' => $this->usuariosAsignables(),
             'sectores' => Sector::where('activo', true)->orderBy('nombre')->get(['id', 'nombre']),
+            'areas' => $this->areasAsignables(),
             'tipoLabels' => TaxonomiaIncidencias::etiquetasTipos(),
             'prioridades' => config('incidencias.prioridades'),
             'tiposCaso' => config('incidencias.tipos_caso'),
@@ -59,8 +61,26 @@ class ObservacionController extends Controller
             'prioridades' => config('incidencias.prioridades'),
             'tiposCaso' => config('incidencias.tipos_caso'),
             'prioridadSugerida' => config('incidencias.prioridad_sugerida'),
-            'usuarios' => User::orderBy('name')->get(['id', 'name']),
+            'usuarios' => $this->usuariosAsignables(),
+            'areas' => $this->areasAsignables(),
         ]);
+    }
+
+    /**
+     * Candidatos a responsable. Traen su área porque de ahí sale el plazo de
+     * gestión: el formulario avisa a los cuántos días hábiles va a vencer la
+     * observación, o que no va a alertar si esa persona no tiene plazo.
+     */
+    private function usuariosAsignables()
+    {
+        return User::with('area:id,nombre,dias_gestion')
+            ->orderBy('name')
+            ->get(['id', 'name', 'apellido', 'area_id']);
+    }
+
+    private function areasAsignables()
+    {
+        return Area::where('activo', true)->orderBy('nombre')->get(['id', 'nombre']);
     }
 
     public function store(Request $request)
@@ -80,6 +100,7 @@ class ObservacionController extends Controller
             'prioridad' => ['required', Rule::in(array_keys(config('incidencias.prioridades')))],
             'tipo_caso' => ['required', Rule::in(config('incidencias.tipos_caso'))],
             'responsable_id' => ['nullable', 'exists:users,id'],
+            'area_id' => ['nullable', 'exists:areas,id'],
             'attachments' => ['array'],
             'attachments.*' => ['file', 'mimes:jpg,jpeg,png,pdf', 'max:3072'],
         ]);
@@ -121,6 +142,7 @@ class ObservacionController extends Controller
                 'descripcion' => $base['descripcion'],
                 'sector_id' => $sector->id,
                 'responsable_id' => $base['responsable_id'] ?? null,
+                'area_id' => $base['area_id'] ?? null,
                 'prioridad' => $base['prioridad'],
                 'tipo_caso' => $base['tipo_caso'],
                 'datos_especificos' => $especificos['datos_especificos'] ?? [],
@@ -169,6 +191,7 @@ class ObservacionController extends Controller
                 'descripcion' => $base['descripcion'],
                 'sector_id' => $sector->id,
                 'responsable_id' => $base['responsable_id'] ?? null,
+                'area_id' => $base['area_id'] ?? null,
                 'prioridad' => $base['prioridad'],
                 'tipo_caso' => $base['tipo_caso'],
                 'institucion' => $data['institucion'] ?? null,
@@ -209,6 +232,7 @@ class ObservacionController extends Controller
         $data = $request->validate([
             'responsable_id' => ['nullable', 'exists:users,id'],
             'sector_id' => ['nullable', 'exists:sectors,id'],
+            'area_id' => ['nullable', 'exists:areas,id'],
             'estado' => ['required', 'in:'.implode(',', array_keys(Observacion::ESTADOS))],
             'prioridad' => ['nullable', Rule::in(array_keys(config('incidencias.prioridades')))],
             'tipo_caso' => ['nullable', Rule::in(config('incidencias.tipos_caso'))],
