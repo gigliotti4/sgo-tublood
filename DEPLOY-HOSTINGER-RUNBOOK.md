@@ -4,15 +4,30 @@
 > Decisiones de este entorno: dominio raíz `sgo.tublood.com`, SSH + `git clone`, colas en `sync`, **mail en `log`** (no se manda nada real todavía).
 > El plan conceptual está en [PLAN-deploy-hostinger.md](PLAN-deploy-hostinger.md); esto son los pasos concretos.
 
-**URL final: `https://sgo.tublood.com`** — el dominio ya existe en la cuenta y su raíz está libre.
-**No hay que crear ningún subdominio.**
+## ✅ Desplegado el 2026-07-24 — https://sgo.tublood.com
 
-Reemplazá en los comandos:
+Las secciones 2 a 5 **ya están ejecutadas**. Quedan pendientes solo §6 (cron) y §7 (smoke test funcional).
+De acá en adelante el único comando que se usa es `./deploy.sh` (§8).
 
-| Marcador | Qué es |
+### Datos reales del entorno
+
+| | |
 |---|---|
-| `<USER>` | usuario SSH de Hostinger, ej. `u123456789` |
-| `<SSH_HOST>` / `<SSH_PORT>` | de hPanel → Avanzado → Acceso SSH (el puerto suele ser `65002`) |
+| SSH | `ssh -p 65002 u233318432@147.93.37.196` |
+| Proyecto | `~/domains/sgo.tublood.com/sgo-app` |
+| Document root | `~/domains/sgo.tublood.com/public_html` → symlink a `sgo-app/public` |
+| **PHP del CLI** | ⚠️ el `php` del PATH es **8.0** — usar siempre **`/opt/alt/php83/usr/bin/php`** |
+| PHP del sitio (web) | 8.3.30, ya configurado en hPanel |
+| Composer | `~/bin/composer` — invocarlo con el binario 8.3, si no corre bajo 8.0 |
+| Base | MariaDB 11.8.8, `u233318432_tublood` |
+| SSL | ya emitido y funcionando |
+| `crontab` por SSH | ❌ no disponible, el cron va sí o sí por hPanel |
+
+> ⚠️ **La cuenta hostea ~22 sitios más** (`cristiandiez.com.ar`, `estudiolazo.com`, `mcp.tarragonagroup.com`…).
+> `~/public_html` de la raíz es un symlink a `cristiandiez.com.ar` — **no tocarlo**.
+> Todo lo de este proyecto vive dentro de `~/domains/sgo.tublood.com/`.
+
+---
 
 ---
 
@@ -175,11 +190,34 @@ exit
 
 hPanel → Avanzado → Trabajos Cron → **cada minuto**:
 
+Tipo **Personalizado** (el tipo "PHP" no sirve: fuerza el prefijo `/usr/bin/php`, que es 8.0):
+
 ```
-cd ~/domains/sgo.tublood.com/sgo-app && /usr/bin/php artisan schedule:run >> /dev/null 2>&1
+/opt/alt/php83/usr/bin/php /home/u233318432/domains/sgo.tublood.com/sgo-app/artisan schedule:run
 ```
 
-(usá la misma ruta de PHP 8.3 que verificaste en §2)
+Los cinco desplegables en la opción "Cada …" (equivale a `* * * * *`).
+
+### ⚠️ hPanel NO pasa el comando por un shell
+
+Lo parte en argumentos y se lo entrega directo a `timeout`. **No funciona nada de sintaxis de shell**: ni `cd`, ni `&&`, ni `>`, ni `2>&1`, ni `~`, ni pipes. Tiene que ser un ejecutable con sus argumentos y punto.
+
+Los dos intentos que fallaron, por si vuelve a pasar:
+
+| Comando | Error en `~/.logs/cronjob_*` | Causa |
+|---|---|---|
+| `cd /ruta && php artisan schedule:run >> /dev/null 2>&1` | `timeout: failed to run command 'cd'` | `cd` es builtin del shell, no un binario |
+| `php /ruta/artisan schedule:run > /dev/null` | `No arguments expected for "schedule:run" command, got ">"` | el `>` llegó como argumento literal |
+
+En los dos casos el cron **se ejecutaba puntualmente cada minuto sin hacer nada**, que es el modo de falla más engañoso: el job figura activo en hPanel y no pasa absolutamente nada.
+
+No hace falta suprimir la salida: hPanel **sobrescribe** el log en cada corrida, no lo acumula. Y sirve de indicador de vida — si el cron anda, ahí va a decir `No scheduled commands are ready to run.` casi todos los minutos.
+
+Otras dos cosas:
+- **Tiene que ser por hPanel**: en este plan `crontab` no existe por SSH (`command not found`).
+- **Ruta absoluta al binario 8.3**: el `php` del PATH es 8.0 y el proyecto no arranca con esa versión. Y ruta absoluta a `artisan`, que resuelve todo con `__DIR__` y por eso no necesita `cd`.
+
+**Para depurar el cron**: `cat ~/.logs/cronjob_*`. Es lo que destrabó los dos errores de arriba.
 
 Dispara lo agendado en [routes/console.php](routes/console.php): `clientes:sync` cada 5 min y `observaciones:alertas` cada hora.
 
