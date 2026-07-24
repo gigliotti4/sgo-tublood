@@ -14,7 +14,9 @@
 /.zed
 /auth.json
 /node_modules
-/public/build
+# /public/build NO se ignora a propósito: los assets compilados se versionan para
+# que el deploy en Hostinger sea `git pull` (no hay Node en el hosting compartido).
+# Correr `npm run build` y commitear antes de pushear si tocaste el frontend.
 /public/fonts-manifest.dev.json
 /public/hot
 /public/storage
