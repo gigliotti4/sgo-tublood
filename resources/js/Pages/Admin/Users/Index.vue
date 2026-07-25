@@ -21,7 +21,7 @@ interface UserRow {
     created_at: string
     es_gerente: boolean
     roles: { name: string }[]
-    area: { id: number; nombre: string; dias_gestion: number | null } | null
+    sector: { id: number; nombre: string; dias_gestion: number | null } | null
     supervisor: Persona | null
     gerente: Persona | null
 }
@@ -86,10 +86,10 @@ const copiarCredenciales = () => navigator.clipboard.writeText(credencialesComoT
             <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-100">Usuarios</h1>
             <div class="flex gap-3">
                 <Link
-                    :href="route('areas.index')"
+                    :href="route('sectores.index')"
                     class="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
                 >
-                    Áreas
+                    Sectores
                 </Link>
                 <Button v-if="hasPermission('users.create')" variant="brand" @click="showImportModal = true">
                     Importar Excel
@@ -110,7 +110,7 @@ const copiarCredenciales = () => navigator.clipboard.writeText(credencialesComoT
                     <tr>
                         <th class="px-6 py-3 text-left">Nombre</th>
                         <th class="px-6 py-3 text-left">Email</th>
-                        <th class="px-6 py-3 text-left">Área</th>
+                        <th class="px-6 py-3 text-left">Sector</th>
                         <th class="px-6 py-3 text-left">Supervisor</th>
                         <th class="px-6 py-3 text-left">Gerente</th>
                         <th class="px-6 py-3 text-left">Roles</th>
@@ -125,9 +125,9 @@ const copiarCredenciales = () => navigator.clipboard.writeText(credencialesComoT
                         </td>
                         <td class="px-6 py-4 text-gray-500 dark:text-slate-400">{{ user.email }}</td>
                         <td class="px-6 py-4 text-gray-500 dark:text-slate-400">
-                            {{ user.area?.nombre ?? '—' }}
-                            <span v-if="user.area?.dias_gestion" class="text-xs text-gray-400 dark:text-slate-500">
-                                · {{ user.area.dias_gestion }} días
+                            {{ user.sector?.nombre ?? '—' }}
+                            <span v-if="user.sector?.dias_gestion" class="text-xs text-gray-400 dark:text-slate-500">
+                                · {{ user.sector.dias_gestion }} días
                             </span>
                         </td>
                         <td class="px-6 py-4 text-gray-500 dark:text-slate-400">

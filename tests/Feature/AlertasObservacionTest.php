@@ -2,8 +2,8 @@
 
 namespace Tests\Feature;
 
-use App\Models\Area;
 use App\Models\Observacion;
+use App\Models\Sector;
 use App\Models\User;
 use App\Notifications\ObservacionEscaladaNotification;
 use App\Notifications\ObservacionFinalizadaNotification;
@@ -16,18 +16,18 @@ class AlertasObservacionTest extends TestCase
 {
     use RefreshDatabase;
 
-    private int $areasCreadas = 0;
+    private int $sectoresCreados = 0;
 
-    /** Responsable con su cadena completa: área con plazo, supervisor y gerente. */
+    /** Responsable con su cadena completa: sector con plazo, supervisor y gerente. */
     private function responsable(int $dias = 3): User
     {
-        $slug = 'area-'.(++$this->areasCreadas);
-        $area = Area::create(['nombre' => "Área {$this->areasCreadas}", 'slug' => $slug, 'dias_gestion' => $dias]);
+        $slug = 'sector-'.(++$this->sectoresCreados);
+        $sector = Sector::create(['nombre' => "Sector {$this->sectoresCreados}", 'slug' => $slug, 'dias_gestion' => $dias]);
         $gerente = User::factory()->create(['es_gerente' => true]);
         $supervisor = User::factory()->create(['gerente_id' => $gerente->id]);
 
         return User::factory()->create([
-            'area_id' => $area->id,
+            'sector_id' => $sector->id,
             'supervisor_id' => $supervisor->id,
             'gerente_id' => $gerente->id,
         ]);
@@ -70,7 +70,7 @@ class AlertasObservacionTest extends TestCase
         $this->assertSame('2026-07-28', $observacion->vence_at->toDateString());
     }
 
-    public function test_responsable_sin_area_no_genera_vencimiento(): void
+    public function test_responsable_sin_sector_no_genera_vencimiento(): void
     {
         $observacion = $this->observacion(['responsable_id' => User::factory()->create()->id]);
 

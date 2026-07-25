@@ -11,13 +11,12 @@ import Select from '@/Components/Select.vue'
 import Textarea from '@/Components/Textarea.vue'
 
 interface SectorOption { id: number; nombre: string; slug: string }
-interface AreaOption { id: number; nombre: string }
 interface UsuarioOption {
     id: number
     name: string
     apellido: string | null
-    area_id: number | null
-    area: { nombre: string; dias_gestion: number | null } | null
+    sector_id: number | null
+    sector: { nombre: string; dias_gestion: number | null } | null
 }
 interface TipoDef { codigo: string; label: string; campos?: CampoDef[]; especial?: boolean }
 type Taxonomia = Record<string, Record<string, TipoDef>>
@@ -40,7 +39,6 @@ const props = defineProps<{
     tiposCaso: string[]
     prioridadSugerida: Record<string, string>
     usuarios: UsuarioOption[]
-    areas: AreaOption[]
 }>()
 
 const nuevoProducto = (): ProductoForm => ({
@@ -62,7 +60,6 @@ const form = useForm({
     titulo: '',
     descripcion: '',
     responsable_id: null as number | null,
-    area_id: null as number | null,
     datos_especificos: {} as Record<string, string | number | null>,
     institucion: '',
     provincia: '',
@@ -102,42 +99,35 @@ const camposDelTipo = computed<CampoDef[]>(() => {
 const nombreCompleto = (u: UsuarioOption) => [u.name, u.apellido].filter(Boolean).join(' ')
 
 /**
- * Elegir área recorta la lista de responsables a esa área. Se deja pasar
- * igual al responsable ya elegido, para no hacerlo desaparecer del select.
+ * El sector elegido en Clasificación recorta la lista de responsables a ese
+ * mismo sector. Se deja pasar igual al responsable ya elegido, para no
+ * hacerlo desaparecer del select.
  */
 const usuariosFiltrados = computed(() => {
-    if (!form.area_id) return props.usuarios
+    if (!form.sector_id) return props.usuarios
 
-    return props.usuarios.filter(u => u.area_id === form.area_id || u.id === form.responsable_id)
+    return props.usuarios.filter(u => u.sector_id === form.sector_id || u.id === form.responsable_id)
 })
 
-/** Al cambiar de área se suelta el responsable si era de otra. */
-const alCambiarArea = () => {
-    if (!form.area_id) return
+const gentePorSector = computed(() => {
+    if (!form.sector_id) return null
 
-    const elegido = props.usuarios.find(u => u.id === form.responsable_id)
-    if (elegido && elegido.area_id !== form.area_id) form.responsable_id = null
-}
-
-const gentePorArea = computed(() => {
-    if (!form.area_id) return null
-
-    const total = props.usuarios.filter(u => u.area_id === form.area_id).length
+    const total = props.usuarios.filter(u => u.sector_id === form.sector_id).length
 
     return total === 0
-        ? 'Esta área no tiene usuarios cargados.'
-        : `${total} ${total === 1 ? 'persona' : 'personas'} en esta área.`
+        ? 'Este sector no tiene usuarios cargados.'
+        : `${total} ${total === 1 ? 'persona' : 'personas'} en este sector.`
 })
 
-/** El plazo de gestión sale del área del responsable: sin área no hay alerta. */
+/** El plazo de gestión sale del sector del responsable: sin sector no hay alerta. */
 const plazoDelResponsable = computed(() => {
     const elegido = props.usuarios.find(u => u.id === form.responsable_id)
     if (!elegido) return null
 
-    if (!elegido.area) return 'Esta persona no tiene área asignada, así que la observación no va a generar alertas.'
-    if (!elegido.area.dias_gestion) return `El área ${elegido.area.nombre} no tiene plazo cargado, así que no va a generar alertas.`
+    if (!elegido.sector) return 'Esta persona no tiene sector asignado, así que la observación no va a generar alertas.'
+    if (!elegido.sector.dias_gestion) return `El sector ${elegido.sector.nombre} no tiene plazo cargado, así que no va a generar alertas.`
 
-    return `Vence a los ${elegido.area.dias_gestion} días hábiles (plazo de ${elegido.area.nombre}).`
+    return `Vence a los ${elegido.sector.dias_gestion} días hábiles (plazo de ${elegido.sector.nombre}).`
 })
 
 const agregarProducto = () => form.productos.push(nuevoProducto())
@@ -146,11 +136,15 @@ const quitarProducto = (index: number) => form.productos.splice(index, 1)
 const errorProducto = (index: number, campo: keyof ProductoForm) =>
     (form.errors as Record<string, string>)[`productos.${index}.${campo}`]
 
-// Al cambiar de sector: reseteá el tipo y los datos específicos.
+// Al cambiar de sector: reseteá el tipo y los datos específicos, y soltá el
+// responsable si era de otro sector (el mismo sector filtra ambas cosas).
 watch(() => form.sector_id, () => {
     form.tipo = ''
     form.datos_especificos = {}
     form.productos = []
+
+    const elegido = props.usuarios.find(u => u.id === form.responsable_id)
+    if (elegido && elegido.sector_id !== form.sector_id) form.responsable_id = null
 })
 
 // Al cambiar de tipo: reconstruí las claves de datos específicos, o inicializá el
@@ -375,17 +369,6 @@ const submit = () => form.post(route('observaciones.store'), { forceFormData: tr
 
                 <FormSection title="Asignación">
                     <Select
-                        v-model="form.area_id"
-                        label="Área"
-                        :hint="gentePorArea ?? undefined"
-                        :error="form.errors.area_id"
-                        @change="alCambiarArea"
-                    >
-                        <option :value="null">— Sin asignar —</option>
-                        <option v-for="a in props.areas" :key="a.id" :value="a.id">{{ a.nombre }}</option>
-                    </Select>
-
-                    <Select
                         v-model="form.responsable_id"
                         label="Responsable"
                         :hint="plazoDelResponsable ?? undefined"
@@ -394,6 +377,9 @@ const submit = () => form.post(route('observaciones.store'), { forceFormData: tr
                         <option :value="null">— Sin asignar —</option>
                         <option v-for="u in usuariosFiltrados" :key="u.id" :value="u.id">{{ nombreCompleto(u) }}</option>
                     </Select>
+                    <p v-if="gentePorSector" class="text-xs text-slate-500 dark:text-slate-400 sm:col-span-2 -mt-2">
+                        {{ gentePorSector }}
+                    </p>
                 </FormSection>
 
                 <FormSection title="Adjuntos" :columns="1">

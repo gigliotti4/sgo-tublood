@@ -122,8 +122,10 @@ class ObservacionController extends Controller
      * Avisos del alta externa, fuera de la transacción: acuse de recibo al
      * cliente y aviso al equipo que lo va a clasificar.
      *
-     * Los destinatarios internos salen del **rol** `garantia_calidad` y no del
-     * sector, porque `users` se vincula a áreas del organigrama, no a sectores.
+     * Los destinatarios internos son los usuarios activos del sector de la
+     * observación (Garantía de Calidad, siempre en el alta externa). Si ese
+     * sector no tiene a nadie cargado todavía, se cae al **rol**
+     * `garantia_calidad` para no perder el aviso durante la transición.
      *
      * Todo va envuelto en un try/catch a propósito: para cuando esto corre el
      * reclamo ya está guardado, así que un problema al avisar no puede
@@ -136,9 +138,15 @@ class ObservacionController extends Controller
             Notification::route('mail', $observacion->contacto_email)
                 ->notify(new ObservacionRecibidaClienteNotification($observacion));
 
-            // Con `User::role(...)` no alcanza: ese scope tira RoleDoesNotExist
-            // si el rol no está creado, y eso sería un 500 en un endpoint público.
-            $calidad = User::whereHas('roles', fn ($q) => $q->where('name', 'garantia_calidad'))->get();
+            $calidad = $observacion->sector_id
+                ? User::where('sector_id', $observacion->sector_id)->get()
+                : collect();
+
+            if ($calidad->isEmpty()) {
+                // Con `User::role(...)` no alcanza: ese scope tira RoleDoesNotExist
+                // si el rol no está creado, y eso sería un 500 en un endpoint público.
+                $calidad = User::whereHas('roles', fn ($q) => $q->where('name', 'garantia_calidad'))->get();
+            }
 
             if ($calidad->isNotEmpty()) {
                 Notification::send($calidad, new ObservacionExternaRecibidaNotification($observacion));

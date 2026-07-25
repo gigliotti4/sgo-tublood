@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Area;
+use App\Models\Sector;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -161,34 +161,65 @@ class UserImportTest extends TestCase
         $response->assertSessionHas('error');
     }
 
-    public function test_import_crea_el_area_con_su_plazo_de_gestion(): void
+    public function test_import_asigna_el_sector_con_su_plazo_de_gestion(): void
     {
         Role::firstOrCreate(['name' => 'usuario_interno', 'guard_name' => 'web']);
         $admin = $this->userWith('users.create');
+        $sector = Sector::create(['nombre' => 'Logística', 'slug' => 'logistica']);
 
         $this->importar($admin, [
             ['LONEL', 'BRINGAS', 'logistica@tublood.com', 'LOGISTICA', '-', 'EMANUEL', '5 días'],
         ]);
 
-        $area = Area::where('slug', 'logistica')->firstOrFail();
-        $this->assertSame('LOGISTICA', $area->nombre);
-        $this->assertSame(5, $area->dias_gestion);
-        $this->assertSame($area->id, User::where('email', 'logistica@tublood.com')->first()->area_id);
+        $this->assertSame(5, $sector->fresh()->dias_gestion);
+        $this->assertSame($sector->id, User::where('email', 'logistica@tublood.com')->first()->sector_id);
     }
 
-    public function test_import_normaliza_el_nombre_del_area_con_saltos_de_linea(): void
+    public function test_import_normaliza_el_nombre_del_sector_con_saltos_de_linea(): void
     {
         Role::firstOrCreate(['name' => 'usuario_interno', 'guard_name' => 'web']);
         $admin = $this->userWith('users.create');
+        // El catálogo usa el nombre consolidado; el Excel trae el mismo sector
+        // partido en dos líneas — el import tiene que igual reconocerlo.
+        $sector = Sector::create(['nombre' => 'Asuntos Regulatorios', 'slug' => 'asuntos_regulatorios']);
 
         $this->importar($admin, [
             ['IARA', 'NIEVA', 'asuntosregulatorios@tublood.com', "ASUNTOS REGULATORIOS/\nGESTIÓN DE CALIDAD", '-', 'EMANUEL', '5 días'],
         ]);
 
         $this->assertSame(
-            'ASUNTOS REGULATORIOS/ GESTIÓN DE CALIDAD',
-            User::where('email', 'asuntosregulatorios@tublood.com')->first()->area->nombre
+            $sector->id,
+            User::where('email', 'asuntosregulatorios@tublood.com')->first()->sector_id
         );
+    }
+
+    public function test_import_resuelve_el_sector_via_alias(): void
+    {
+        Role::firstOrCreate(['name' => 'usuario_interno', 'guard_name' => 'web']);
+        $admin = $this->userWith('users.create');
+        // El Excel trae "CALIDAD"; el catálogo lo tiene como "garantia_calidad".
+        $sector = Sector::create(['nombre' => 'Garantía de Calidad', 'slug' => 'garantia_calidad']);
+
+        $this->importar($admin, [
+            ['NADIA', 'PAVIA', 'calidad@tublood.com', 'CALIDAD', '-', '-', '3 días'],
+        ]);
+
+        $this->assertSame($sector->id, User::where('email', 'calidad@tublood.com')->first()->sector_id);
+    }
+
+    public function test_import_deja_sin_sector_a_un_nombre_fuera_del_catalogo(): void
+    {
+        Role::firstOrCreate(['name' => 'usuario_interno', 'guard_name' => 'web']);
+        $admin = $this->userWith('users.create');
+
+        // El catálogo de sectores es fijo: el import no crea sectores nuevos.
+        $response = $this->importar($admin, [
+            ['OSMARLY', 'AZOCAR', 'tesoreria@tublood.com', 'FINANZAS', '-', '-', '2 días'],
+        ])->assertRedirect(route('users.index'));
+
+        $this->assertNull(User::where('email', 'tesoreria@tublood.com')->first()->sector_id);
+        $this->assertFalse(Sector::where('slug', 'finanzas')->exists());
+        $this->assertStringContainsString('no está en el catálogo', $response->getSession()->get('error'));
     }
 
     public function test_import_marca_como_gerente_a_quien_trae_si_en_la_columna_supervisor(): void
@@ -203,7 +234,7 @@ class UserImportTest extends TestCase
         $emanuel = User::where('email', 'eduran@tublood.com')->firstOrFail();
         $this->assertTrue($emanuel->es_gerente);
         $this->assertNull($emanuel->supervisor_id);
-        $this->assertNull($emanuel->area_id);
+        $this->assertNull($emanuel->sector_id);
     }
 
     public function test_import_resuelve_supervisor_por_nombre_completo_y_gerente_por_nombre_de_pila(): void
@@ -292,17 +323,19 @@ class UserImportTest extends TestCase
         $this->assertStringContainsString('círculo de escalamiento', $response->getSession()->get('error'));
     }
 
-    public function test_import_avisa_si_dos_filas_dan_plazos_distintos_a_la_misma_area(): void
+    public function test_import_avisa_si_dos_filas_dan_plazos_distintos_al_mismo_sector(): void
     {
         Role::firstOrCreate(['name' => 'usuario_interno', 'guard_name' => 'web']);
         $admin = $this->userWith('users.create');
+        // "VENTAS" en el Excel alía a "comercial" en el catálogo.
+        $sector = Sector::create(['nombre' => 'Comercial', 'slug' => 'comercial']);
 
         $response = $this->importar($admin, [
             ['UNO', 'VENTAS', 'ventas1@tublood.com', 'VENTAS', '-', '-', '2 días'],
             ['DOS', 'VENTAS', 'ventas2@tublood.com', 'VENTAS', '-', '-', '5 días'],
         ])->assertRedirect(route('users.index'));
 
-        $this->assertSame(2, Area::where('slug', 'ventas')->first()->dias_gestion);
+        $this->assertSame(2, $sector->fresh()->dias_gestion);
         $this->assertStringContainsString('ya venía con 2 días', $response->getSession()->get('error'));
     }
 
@@ -311,11 +344,11 @@ class UserImportTest extends TestCase
         Role::firstOrCreate(['name' => 'usuario_interno', 'guard_name' => 'web']);
         $admin = $this->userWith('users.create');
 
-        $area = Area::create(['nombre' => 'Ventas', 'slug' => 'ventas', 'dias_gestion' => 2]);
+        $sector = Sector::create(['nombre' => 'Comercial', 'slug' => 'comercial', 'dias_gestion' => 2]);
         $supervisor = User::factory()->create();
         $existente = User::factory()->create([
             'email' => 'existente@tublood.com',
-            'area_id' => $area->id,
+            'sector_id' => $sector->id,
             'supervisor_id' => $supervisor->id,
             'es_gerente' => true,
         ]);
@@ -324,7 +357,7 @@ class UserImportTest extends TestCase
 
         $existente->refresh();
         $this->assertSame('NOMBRE NUEVO', $existente->name);
-        $this->assertSame($area->id, $existente->area_id);
+        $this->assertSame($sector->id, $existente->sector_id);
         $this->assertSame($supervisor->id, $existente->supervisor_id);
         $this->assertTrue($existente->es_gerente);
     }

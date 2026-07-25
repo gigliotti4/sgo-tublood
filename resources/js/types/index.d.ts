@@ -4,23 +4,15 @@ export interface User {
     email: string
     roles: string[]
     permissions: string[]
-    area_id?: number | null
-    area?: Area | null
+    sector_id?: number | null
+    sector?: Sector | null
     supervisor_id?: number | null
     gerente_id?: number | null
     es_gerente?: boolean
 }
 
-/** Sector de gestión: destino de una observación, con sus tipos de incidencia. */
+/** Sector: dónde trabaja la persona y destino de gestión de una observación. */
 export interface Sector {
-    id: number
-    nombre: string
-    slug: string
-    activo: boolean
-}
-
-/** Área del organigrama ("sector original" del Excel): dónde trabaja la persona. */
-export interface Area {
     id: number
     nombre: string
     slug: string
@@ -136,8 +128,6 @@ export interface Observacion {
     alerta_nivel: number
     sector_id: number | null
     sector: { id: number; nombre: string } | null
-    area_id: number | null
-    area: { id: number; nombre: string } | null
     prioridad: string | null
     tipo_caso: string | null
     tecnovigilancia: boolean

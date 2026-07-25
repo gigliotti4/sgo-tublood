@@ -2,16 +2,16 @@
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { Head, Link, useForm } from '@inertiajs/vue3'
 import Button from '@/Components/Button.vue'
-import CamposUsuario, { type AreaOption, type RoleOption, type UserFormData, type UsuarioOption } from '@/Components/CamposUsuario.vue'
+import CamposUsuario, { type SectorOption, type RoleOption, type UserFormData, type UsuarioOption } from '@/Components/CamposUsuario.vue'
 
-defineProps<{ roles: RoleOption[]; areas: AreaOption[]; usuarios: UsuarioOption[] }>()
+defineProps<{ roles: RoleOption[]; sectores: SectorOption[]; usuarios: UsuarioOption[] }>()
 
 const form = useForm<UserFormData>({
     name: '',
     apellido: '',
     email: '',
     password: '',
-    area_id: null,
+    sector_id: null,
     supervisor_id: null,
     gerente_id: null,
     es_gerente: false,
@@ -39,7 +39,7 @@ const submit = () => form.post(route('users.store'))
                     modo="crear"
                     :form="form"
                     :roles="roles"
-                    :areas="areas"
+                    :sectores="sectores"
                     :usuarios="usuarios"
                 />
 

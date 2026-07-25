@@ -10,7 +10,7 @@ export interface UserFormData {
     apellido: string
     email: string
     password: string
-    area_id: number | null
+    sector_id: number | null
     supervisor_id: number | null
     gerente_id: number | null
     es_gerente: boolean
@@ -18,7 +18,7 @@ export interface UserFormData {
 }
 
 export interface RoleOption { id: number; name: string }
-export interface AreaOption { id: number; nombre: string; dias_gestion: number | null }
+export interface SectorOption { id: number; nombre: string; dias_gestion: number | null }
 export interface UsuarioOption { id: number; name: string; apellido: string | null; es_gerente: boolean }
 
 /**
@@ -28,7 +28,7 @@ export interface UsuarioOption { id: number; name: string; apellido: string | nu
 const props = defineProps<{
     form: InertiaForm<UserFormData>
     roles: RoleOption[]
-    areas: AreaOption[]
+    sectores: SectorOption[]
     usuarios: UsuarioOption[]
     modo: 'crear' | 'editar'
 }>()
@@ -40,14 +40,14 @@ const nombreCompleto = (u: UsuarioOption) => [u.name, u.apellido].filter(Boolean
 const gerentes = computed(() => props.usuarios.filter(u => u.es_gerente))
 const noGerentes = computed(() => props.usuarios.filter(u => !u.es_gerente))
 
-/** El plazo de gestión es del área, y de él dependen las alertas del usuario. */
-const plazoDelArea = computed(() => {
-    const area = props.areas.find(a => a.id === props.form.area_id)
-    if (!area) return 'Sin área, las observaciones de esta persona no generan alertas.'
+/** El plazo de gestión es del sector, y de él dependen las alertas del usuario. */
+const plazoDelSector = computed(() => {
+    const sector = props.sectores.find(s => s.id === props.form.sector_id)
+    if (!sector) return 'Sin sector, las observaciones de esta persona no generan alertas.'
 
-    return area.dias_gestion
-        ? `Sus observaciones vencen a los ${area.dias_gestion} días hábiles.`
-        : `El área ${area.nombre} no tiene plazo cargado: no va a generar alertas.`
+    return sector.dias_gestion
+        ? `Sus observaciones vencen a los ${sector.dias_gestion} días hábiles.`
+        : `El sector ${sector.nombre} no tiene plazo cargado: no va a generar alertas.`
 })
 </script>
 
@@ -72,9 +72,9 @@ const plazoDelArea = computed(() => {
         title="Organización"
         description="Define el plazo de gestión y a quién se le escala si una observación se vence."
     >
-        <Select v-model="form.area_id" label="Área" :hint="plazoDelArea" :error="form.errors.area_id">
-            <option :value="null">— Sin área —</option>
-            <option v-for="area in areas" :key="area.id" :value="area.id">{{ area.nombre }}</option>
+        <Select v-model="form.sector_id" label="Sector" :hint="plazoDelSector" :error="form.errors.sector_id">
+            <option :value="null">— Sin sector —</option>
+            <option v-for="sector in sectores" :key="sector.id" :value="sector.id">{{ sector.nombre }}</option>
         </Select>
 
         <Select

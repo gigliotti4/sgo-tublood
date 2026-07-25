@@ -31,7 +31,7 @@ class AlertasObservacionesCommand extends Command
             ->where('alerta_nivel', '<', 2)
             ->whereNotNull('responsable_id')
             ->whereNotIn('estado', config('incidencias.estados_finales', []))
-            ->with(['responsable.area', 'responsable.supervisor', 'responsable.gerente'])
+            ->with(['responsable.sector', 'responsable.supervisor', 'responsable.gerente'])
             ->get();
 
         foreach ($observaciones as $observacion) {
@@ -54,7 +54,7 @@ class AlertasObservacionesCommand extends Command
             }
 
             // El salto al gerente recién ocurre si pasó otro plazo igual sin gestión.
-            $dias = $responsable->area?->dias_gestion;
+            $dias = $responsable->sector?->dias_gestion;
 
             if (! $dias || now()->lt($observacion->vence_at->copy()->addWeekdays($dias))) {
                 continue;

@@ -14,16 +14,16 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Collection;
 use Spatie\Permission\Traits\HasRoles;
 
-#[Fillable(['name', 'apellido', 'email', 'password', 'area_id', 'supervisor_id', 'gerente_id', 'es_gerente'])]
+#[Fillable(['name', 'apellido', 'email', 'password', 'sector_id', 'supervisor_id', 'gerente_id', 'es_gerente'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, HasRoles, Notifiable;
 
-    public function area(): BelongsTo
+    public function sector(): BelongsTo
     {
-        return $this->belongsTo(Area::class);
+        return $this->belongsTo(Sector::class);
     }
 
     /** A quién se escala si este usuario no gestiona a tiempo. */

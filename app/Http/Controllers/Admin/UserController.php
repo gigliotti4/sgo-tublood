@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\Area;
+use App\Models\Sector;
 use App\Models\User;
 use App\Services\UserImportService;
 use Illuminate\Http\Request;
@@ -17,8 +17,8 @@ class UserController extends Controller
         $this->authorize('users.view');
 
         return inertia('Admin/Users/Index', [
-            'users' => User::with(['roles', 'area:id,nombre', 'supervisor:id,name,apellido', 'gerente:id,name,apellido'])
-                ->select('id', 'name', 'apellido', 'email', 'area_id', 'supervisor_id', 'gerente_id', 'es_gerente', 'created_at')
+            'users' => User::with(['roles', 'sector:id,nombre', 'supervisor:id,name,apellido', 'gerente:id,name,apellido'])
+                ->select('id', 'name', 'apellido', 'email', 'sector_id', 'supervisor_id', 'gerente_id', 'es_gerente', 'created_at')
                 ->latest()
                 ->paginate(15),
             'roles' => Role::orderBy('name')->get(['id', 'name']),
@@ -34,7 +34,7 @@ class UserController extends Controller
 
         return inertia('Admin/Users/Create', [
             'roles' => Role::orderBy('name')->get(['id', 'name']),
-            'areas' => $this->areas(),
+            'sectores' => $this->sectores(),
             'usuarios' => $this->usuarios(),
         ]);
     }
@@ -66,9 +66,9 @@ class UserController extends Controller
         $this->authorize('users.edit');
 
         return inertia('Admin/Users/Edit', [
-            'user' => $user->load('roles', 'area'),
+            'user' => $user->load('roles', 'sector'),
             'roles' => Role::orderBy('name')->get(['id', 'name']),
-            'areas' => $this->areas(),
+            'sectores' => $this->sectores(),
             // El propio usuario no puede ser su supervisor ni su gerente.
             'usuarios' => $this->usuarios()->where('id', '!=', $user->id)->values(),
         ]);
@@ -140,7 +140,7 @@ class UserController extends Controller
         return [
             'name' => ['required', 'string', 'max:255'],
             'apellido' => ['nullable', 'string', 'max:255'],
-            'area_id' => ['nullable', 'exists:areas,id'],
+            'sector_id' => ['nullable', 'exists:sectors,id'],
             'supervisor_id' => [
                 'nullable',
                 'exists:users,id',
@@ -164,16 +164,16 @@ class UserController extends Controller
         return [
             'name' => $data['name'],
             'apellido' => $data['apellido'] ?? null,
-            'area_id' => $data['area_id'] ?? null,
+            'sector_id' => $data['sector_id'] ?? null,
             'supervisor_id' => $data['supervisor_id'] ?? null,
             'gerente_id' => $data['gerente_id'] ?? null,
             'es_gerente' => $data['es_gerente'] ?? false,
         ];
     }
 
-    private function areas()
+    private function sectores()
     {
-        return Area::where('activo', true)->orderBy('nombre')->get(['id', 'nombre', 'dias_gestion']);
+        return Sector::where('activo', true)->orderBy('nombre')->get(['id', 'nombre', 'dias_gestion']);
     }
 
     private function usuarios()

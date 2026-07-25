@@ -161,10 +161,11 @@ class ObservacionPublicaTest extends TestCase
         );
     }
 
-    public function test_avisa_al_equipo_de_garantia_de_calidad(): void
+    public function test_avisa_al_equipo_de_garantia_de_calidad_por_rol_si_el_sector_no_tiene_a_nadie(): void
     {
         Notification::fake();
 
+        // Sin el sector "garantia_calidad" cargado en la tabla, cae al rol.
         Role::firstOrCreate(['name' => 'garantia_calidad', 'guard_name' => 'web']);
         $calidad = User::factory()->create();
         $calidad->assignRole('garantia_calidad');
@@ -173,6 +174,20 @@ class ObservacionPublicaTest extends TestCase
         $this->post('/cargar-observacion', $this->datosFallaProducto());
 
         Notification::assertSentTo($calidad, ObservacionExternaRecibidaNotification::class);
+        Notification::assertNotSentTo($ajeno, ObservacionExternaRecibidaNotification::class);
+    }
+
+    public function test_avisa_a_los_usuarios_del_sector_antes_que_al_rol(): void
+    {
+        Notification::fake();
+
+        $sector = Sector::create(['nombre' => 'Garantía de Calidad', 'slug' => 'garantia_calidad']);
+        $delSector = User::factory()->create(['sector_id' => $sector->id]);
+        $ajeno = User::factory()->create();
+
+        $this->post('/cargar-observacion', $this->datosFallaProducto());
+
+        Notification::assertSentTo($delSector, ObservacionExternaRecibidaNotification::class);
         Notification::assertNotSentTo($ajeno, ObservacionExternaRecibidaNotification::class);
     }
 

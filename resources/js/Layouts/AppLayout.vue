@@ -65,7 +65,7 @@ const menuSections: MenuSection[] = [
         title: 'Administración',
         items: [
             { label: 'Usuarios',   route: 'users.index', permission: 'users.view', icon: 'users' },
-            { label: 'Áreas',      route: 'areas.index', permission: 'users.view', icon: 'squares' },
+            { label: 'Sectores',   route: 'sectores.index', permission: 'users.view', icon: 'squares' },
             { label: 'Roles',      route: 'roles.index',  permission: 'roles.view',  icon: 'shield' },
         ]
     }

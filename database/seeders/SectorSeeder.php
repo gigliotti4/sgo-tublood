@@ -9,19 +9,21 @@ class SectorSeeder extends Seeder
 {
     public function run(): void
     {
+        // dias_gestion: plazo real del Excel para los sectores que lo traen;
+        // null para los que no tienen usuarios cargados con ese sector todavía.
         $sectores = [
-            'facturacion' => 'Facturación',
-            'logistica' => 'Logística',
-            'deposito' => 'Depósito',
-            'comercial' => 'Comercial',
-            'comex' => 'COMEX',
-            'asuntos_regulatorios' => 'Asuntos Regulatorios',
-            'garantia_calidad' => 'Garantía de Calidad',
-            'direccion_tecnica' => 'Dirección Técnica',
+            'facturacion' => ['nombre' => 'Facturación', 'dias_gestion' => 2],
+            'logistica' => ['nombre' => 'Logística', 'dias_gestion' => 5],
+            'deposito' => ['nombre' => 'Depósito', 'dias_gestion' => 3],
+            'comercial' => ['nombre' => 'Comercial', 'dias_gestion' => 2],
+            'comex' => ['nombre' => 'COMEX', 'dias_gestion' => null],
+            'asuntos_regulatorios' => ['nombre' => 'Asuntos Regulatorios', 'dias_gestion' => 5],
+            'garantia_calidad' => ['nombre' => 'Garantía de Calidad', 'dias_gestion' => 3],
+            'direccion_tecnica' => ['nombre' => 'Dirección Técnica', 'dias_gestion' => null],
         ];
 
-        foreach ($sectores as $slug => $nombre) {
-            Sector::firstOrCreate(['slug' => $slug], ['nombre' => $nombre]);
+        foreach ($sectores as $slug => $datos) {
+            Sector::firstOrCreate(['slug' => $slug], $datos);
         }
     }
 }

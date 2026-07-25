@@ -31,10 +31,10 @@ class ObservacionObserver
             return;
         }
 
-        $dias = User::with('area')->find($observacion->responsable_id)?->area?->dias_gestion;
+        $dias = User::with('sector')->find($observacion->responsable_id)?->sector?->dias_gestion;
 
         $observacion->responsable_asignado_at = now();
-        // Sin área o sin plazo cargado no hay contra qué medir: la observación
+        // Sin sector o sin plazo cargado no hay contra qué medir: la observación
         // queda sin vencimiento y nunca alerta.
         $observacion->vence_at = $dias ? now()->addWeekdays($dias) : null;
     }

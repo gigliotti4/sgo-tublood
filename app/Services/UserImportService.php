@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Models\Area;
+use App\Models\Sector;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Str;
@@ -85,7 +85,11 @@ class UserImportService
             $atributos = ['name' => $nombre, 'apellido' => $apellido];
 
             if ($sector) {
-                $atributos['area_id'] = $this->area($sector, $dias, $numeroFila)->id;
+                $sectorModel = $this->sector($sector, $dias, $numeroFila);
+
+                if ($sectorModel) {
+                    $atributos['sector_id'] = $sectorModel->id;
+                }
             }
 
             // "si" en la columna Supervisor marca a los gerentes de la empresa:
@@ -218,32 +222,43 @@ class UserImportService
     }
 
     /**
-     * El plazo viene por fila pero es del sector, así que se guarda en el área.
-     * Dentro de una misma corrida gana la primera fila que lo trae; entre
-     * corridas distintas, el archivo nuevo pisa lo que había.
+     * Resuelve el "sector original" del Excel contra el catálogo fijo de
+     * `sectors` (vía `config('organizacion.alias_sectores')` o por slug
+     * directo). El catálogo no se amplía desde acá: un nombre que no matchea
+     * ningún sector deja al usuario sin sector, con advertencia.
+     *
+     * El plazo viene por fila. Dentro de una misma corrida gana la primera
+     * fila que lo trae; entre corridas distintas, el archivo nuevo pisa lo
+     * que había.
      */
-    private function area(string $nombre, ?int $dias, int $fila): Area
+    private function sector(string $nombre, ?int $dias, int $fila): ?Sector
     {
-        $slug = Str::slug($nombre);
+        $slug = config('organizacion.alias_sectores.'.Str::slug($nombre), Str::slug($nombre));
 
-        $area = Area::firstOrCreate(['slug' => $slug], ['nombre' => $nombre, 'dias_gestion' => $dias]);
+        $sector = Sector::where('slug', $slug)->first();
+
+        if (! $sector) {
+            $this->advertencias[] = "Fila {$fila}: el sector '{$nombre}' no está en el catálogo, el usuario quedó sin sector.";
+
+            return null;
+        }
 
         if ($dias === null) {
-            return $area;
+            return $sector;
         }
 
         if (! isset($this->plazosDelArchivo[$slug])) {
             $this->plazosDelArchivo[$slug] = $dias;
-            $area->update(['dias_gestion' => $dias]);
+            $sector->update(['dias_gestion' => $dias]);
 
-            return $area;
+            return $sector;
         }
 
         if ($this->plazosDelArchivo[$slug] !== $dias) {
-            $this->advertencias[] = "Fila {$fila}: el área '{$area->nombre}' ya venía con {$this->plazosDelArchivo[$slug]} días en este archivo, se ignoró el valor {$dias}.";
+            $this->advertencias[] = "Fila {$fila}: el sector '{$sector->nombre}' ya venía con {$this->plazosDelArchivo[$slug]} días en este archivo, se ignoró el valor {$dias}.";
         }
 
-        return $area;
+        return $sector;
     }
 
     /** "3 días" → 3. */

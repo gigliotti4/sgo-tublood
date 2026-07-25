@@ -43,7 +43,6 @@ class Observacion extends Model
         'vence_at',
         'alerta_nivel',
         'sector_id',
-        'area_id',
         'contacto_telefono',
         'titulo',
         'descripcion',
@@ -94,12 +93,6 @@ class Observacion extends Model
     public function sector(): BelongsTo
     {
         return $this->belongsTo(Sector::class);
-    }
-
-    /** Área del organigrama a la que se asignó el caso. */
-    public function area(): BelongsTo
-    {
-        return $this->belongsTo(Area::class);
     }
 
     public static function generarNumero(int $anio): string
