@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\Cliente;
 use App\Models\Observacion;
+use App\Models\ObservationProduct;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 
@@ -64,6 +65,7 @@ class DemoDataSeeder extends Seeder
                 $observacion->productos()->create([
                     'producto' => fake()->words(2, true),
                     'cantidad_afectada' => fake()->numberBetween(1, 20),
+                    'tipo_presentacion' => fake()->randomElement(array_keys(ObservationProduct::PRESENTACIONES)),
                     'lote' => strtoupper(fake()->bothify('L-####-??')),
                     'fecha_vencimiento' => fake()->dateTimeBetween('now', '+2 years'),
                     'numero_remito' => strtoupper(fake()->bothify('R-####')),

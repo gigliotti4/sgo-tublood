@@ -7,20 +7,20 @@ defineProps<{
 </script>
 
 <template>
-    <div class="flex items-center gap-1">
+    <div class="flex items-center gap-1.5">
         <component
             :is="link.url ? 'a' : 'span'"
             v-for="link in links"
             :key="link.label"
             :href="link.url ?? undefined"
             v-html="link.label"
-            class="px-2.5 py-1 rounded-md border text-xs transition-colors"
+            class="flex h-9 min-w-9 items-center justify-center rounded-lg px-2 text-sm font-medium transition-colors"
             :class="[
                 link.active
-                    ? 'bg-[#2a3182] text-white border-[#2a3182]'
+                    ? 'bg-brand-500 text-white shadow-theme-xs'
                     : link.url
-                        ? 'border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer'
-                        : 'border-transparent text-slate-300 dark:text-slate-600 cursor-default'
+                        ? 'cursor-pointer border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.05]'
+                        : 'cursor-default text-gray-300 dark:text-gray-600'
             ]"
             @click.prevent="link.url && router.get(link.url)"
         />

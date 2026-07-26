@@ -32,27 +32,27 @@ const items = computed<OpcionRadio[]>(() =>
 
 <template>
     <div :class="full ? 'sm:col-span-2' : ''">
-        <span v-if="label" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+        <span v-if="label" class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
             {{ label }}
-            <span v-if="required" class="text-red-500">*</span>
+            <span v-if="required" class="text-error-500">*</span>
         </span>
         <div class="flex flex-wrap gap-x-6 gap-y-2 pt-1">
             <label
                 v-for="op in items"
                 :key="op.value"
-                class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer"
+                class="flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-400"
             >
                 <input
                     v-model="model"
                     type="radio"
                     :name="name"
                     :value="op.value"
-                    class="text-indigo-600 focus:ring-indigo-500 dark:bg-slate-700 dark:border-slate-600"
+                    class="h-4 w-4 accent-brand-500 dark:accent-brand-400"
                 />
                 {{ op.label }}
             </label>
         </div>
-        <p v-if="error" class="text-red-500 dark:text-red-400 text-xs mt-1">{{ error }}</p>
-        <p v-else-if="hint" class="text-xs text-gray-500 dark:text-slate-400 mt-1">{{ hint }}</p>
+        <p v-if="error" class="mt-1.5 text-xs text-error-500 dark:text-error-400">{{ error }}</p>
+        <p v-else-if="hint" class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">{{ hint }}</p>
     </div>
 </template>

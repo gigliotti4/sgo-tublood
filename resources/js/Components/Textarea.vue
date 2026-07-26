@@ -19,19 +19,21 @@ const model = defineModel<string | number | null>()
 
 <template>
     <div :class="full ? 'sm:col-span-2' : ''">
-        <label v-if="label" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+        <label v-if="label" class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
             {{ label }}
-            <span v-if="required" class="text-red-500">*</span>
+            <span v-if="required" class="text-error-500">*</span>
         </label>
         <textarea
             v-model="model"
             :rows="rows"
             v-bind="$attrs"
-            class="w-full border rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-            :class="error ? 'border-red-400 dark:border-red-500' : 'border-gray-300 dark:border-slate-600'"
+            class="w-full rounded-lg border bg-white px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs transition placeholder:text-gray-400 focus:outline-none focus:ring-3 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
+            :class="error
+                ? 'border-error-300 focus:border-error-300 focus:ring-error-500/10 dark:border-error-500/60'
+                : 'border-gray-300 focus:border-brand-300 focus:ring-brand-500/10 dark:border-gray-700 dark:focus:border-brand-800'"
         />
-        <p v-if="error" class="text-red-500 dark:text-red-400 text-xs mt-1">{{ error }}</p>
-        <p v-else-if="hint || $slots.hint" class="text-xs text-gray-500 dark:text-slate-400 mt-1">
+        <p v-if="error" class="mt-1.5 text-xs text-error-500 dark:text-error-400">{{ error }}</p>
+        <p v-else-if="hint || $slots.hint" class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
             <slot name="hint">{{ hint }}</slot>
         </p>
     </div>

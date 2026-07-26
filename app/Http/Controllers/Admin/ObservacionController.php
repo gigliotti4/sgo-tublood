@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Cliente;
 use App\Models\Observacion;
+use App\Models\ObservationProduct;
 use App\Models\Sector;
 use App\Models\User;
 use App\Support\TaxonomiaIncidencias;
@@ -26,15 +28,55 @@ class ObservacionController extends Controller
     {
         $this->authorize('observaciones.view');
 
+        $filters = $request->validate([
+            'q' => ['nullable', 'string', 'max:255'],
+            'origen' => ['nullable', Rule::in(array_keys(Observacion::ORIGENES))],
+            'prioridad' => ['nullable', Rule::in(array_keys(config('incidencias.prioridades')))],
+            'tipo_caso' => ['nullable', Rule::in(config('incidencias.tipos_caso'))],
+            'responsable_id' => ['nullable', 'integer', 'exists:users,id'],
+            'creado_por' => ['nullable', 'integer', 'exists:users,id'],
+            'apertura' => ['nullable', 'in:abierta,cerrada'],
+            'desde' => ['nullable', 'date'],
+            'hasta' => ['nullable', 'date', 'after_or_equal:desde'],
+        ]);
+
         return inertia('Admin/Observaciones/Index', [
             'observaciones' => Observacion::query()
                 ->with(['responsable:id,name', 'sector:id,nombre', 'cliente:id,numero,razon_social,mail,telefono', 'productos'])
+                // Texto libre: un solo campo que barre número, título, descripción,
+                // cliente (vinculado o los datos tipeados en el portal) y productos.
+                ->when($filters['q'] ?? null, fn ($query, $q) => $query->where(function ($query) use ($q) {
+                    $query->where('numero', 'like', "%{$q}%")
+                        ->orWhere('titulo', 'like', "%{$q}%")
+                        ->orWhere('descripcion', 'like', "%{$q}%")
+                        ->orWhere('contacto_nombre', 'like', "%{$q}%")
+                        ->orWhereHas('cliente', fn ($c) => $c
+                            ->where('razon_social', 'like', "%{$q}%")
+                            ->orWhere('numero', 'like', "%{$q}%"))
+                        ->orWhereHas('productos', fn ($p) => $p
+                            ->where('producto', 'like', "%{$q}%")
+                            ->orWhere('codigo', 'like', "%{$q}%")
+                            ->orWhere('lote', 'like', "%{$q}%"));
+                }))
+                ->when($filters['origen'] ?? null, fn ($query, $v) => $query->where('origen', $v))
+                ->when($filters['prioridad'] ?? null, fn ($query, $v) => $query->where('prioridad', $v))
+                ->when($filters['tipo_caso'] ?? null, fn ($query, $v) => $query->where('tipo_caso', $v))
+                ->when($filters['responsable_id'] ?? null, fn ($query, $v) => $query->where('responsable_id', $v))
+                ->when($filters['creado_por'] ?? null, fn ($query, $v) => $query->where('created_by', $v))
+                ->when($filters['apertura'] ?? null, fn ($query, $v) => $v === 'abierta'
+                    ? $query->whereIn('estado', Observacion::ESTADOS_ABIERTOS)
+                    : $query->whereNotIn('estado', Observacion::ESTADOS_ABIERTOS))
+                ->when($filters['desde'] ?? null, fn ($query, $v) => $query->whereDate('created_at', '>=', $v))
+                ->when($filters['hasta'] ?? null, fn ($query, $v) => $query->whereDate('created_at', '<=', $v))
                 ->latest()
-                ->paginate(20),
+                ->paginate(20)
+                ->withQueryString(),
+            'filters' => $filters,
             // Cualquiera que vea el listado puede necesitar reasignar responsable/sector
             // en las filas que sí puede editar (ver ObservacionPolicy::update).
             'usuarios' => $this->usuariosAsignables(),
             'sectores' => Sector::where('activo', true)->orderBy('nombre')->get(['id', 'nombre']),
+            'presentaciones' => ObservationProduct::PRESENTACIONES,
             'tipoLabels' => TaxonomiaIncidencias::etiquetasTipos(),
             'prioridades' => config('incidencias.prioridades'),
             'tiposCaso' => config('incidencias.tipos_caso'),
@@ -56,6 +98,7 @@ class ObservacionController extends Controller
             'sectores' => Sector::where('activo', true)->orderBy('nombre')->get(['id', 'nombre', 'slug']),
             'taxonomia' => TaxonomiaIncidencias::taxonomia(),
             'provincias' => self::PROVINCIAS,
+            'presentaciones' => ObservationProduct::PRESENTACIONES,
             'prioridades' => config('incidencias.prioridades'),
             'tiposCaso' => config('incidencias.tipos_caso'),
             'prioridadSugerida' => config('incidencias.prioridad_sugerida'),
@@ -92,6 +135,11 @@ class ObservacionController extends Controller
             'prioridad' => ['required', Rule::in(array_keys(config('incidencias.prioridades')))],
             'tipo_caso' => ['required', Rule::in(config('incidencias.tipos_caso'))],
             'responsable_id' => ['nullable', 'exists:users,id'],
+            // Cliente involucrado (opcional): si el N° matchea un cliente
+            // sincronizado de RP Sistemas, la observación queda vinculada.
+            'contacto_numero_cliente' => ['nullable', 'string', 'max:255'],
+            'contacto_nombre' => ['nullable', 'string', 'max:255'],
+            'contacto_email' => ['nullable', 'email', 'max:255'],
             'attachments' => ['array'],
             'attachments.*' => ['file', 'mimes:jpg,jpeg,png,pdf', 'max:3072'],
         ]);
@@ -133,8 +181,13 @@ class ObservacionController extends Controller
                 'descripcion' => $base['descripcion'],
                 'sector_id' => $sector->id,
                 'responsable_id' => $base['responsable_id'] ?? null,
+                'created_by' => $request->user()->id,
                 'prioridad' => $base['prioridad'],
                 'tipo_caso' => $base['tipo_caso'],
+                'contacto_numero_cliente' => $base['contacto_numero_cliente'] ?? null,
+                'contacto_nombre' => $base['contacto_nombre'] ?? null,
+                'contacto_email' => $base['contacto_email'] ?? null,
+                'cliente_id' => $this->clienteIdDesdeNumero($base['contacto_numero_cliente'] ?? null),
                 'datos_especificos' => $especificos['datos_especificos'] ?? [],
             ]);
 
@@ -162,6 +215,7 @@ class ObservacionController extends Controller
             'productos.*.producto' => ['required', 'string', 'max:255'],
             'productos.*.codigo' => ['required', 'string', 'max:255'],
             'productos.*.cantidad_afectada' => ['required', 'integer', 'min:1'],
+            'productos.*.tipo_presentacion' => ['required', 'in:'.implode(',', array_keys(ObservationProduct::PRESENTACIONES))],
             'productos.*.lote' => ['required', 'string', 'max:255'],
             'productos.*.fecha_vencimiento' => ['required', 'date'],
             'productos.*.numero_remito' => ['required', 'string', 'max:255'],
@@ -181,8 +235,13 @@ class ObservacionController extends Controller
                 'descripcion' => $base['descripcion'],
                 'sector_id' => $sector->id,
                 'responsable_id' => $base['responsable_id'] ?? null,
+                'created_by' => $request->user()->id,
                 'prioridad' => $base['prioridad'],
                 'tipo_caso' => $base['tipo_caso'],
+                'contacto_numero_cliente' => $base['contacto_numero_cliente'] ?? null,
+                'contacto_nombre' => $base['contacto_nombre'] ?? null,
+                'contacto_email' => $base['contacto_email'] ?? null,
+                'cliente_id' => $this->clienteIdDesdeNumero($base['contacto_numero_cliente'] ?? null),
                 'institucion' => $data['institucion'] ?? null,
                 'provincia' => $data['provincia'] ?? null,
                 'equipamiento' => $data['equipamiento'] ?? null,
@@ -198,6 +257,12 @@ class ObservacionController extends Controller
 
         return redirect()->route('observaciones.index')
             ->with('success', 'Observación interna creada correctamente.');
+    }
+
+    /** Vincula por N° contra la tabla local de clientes (mismo criterio que el portal). */
+    private function clienteIdDesdeNumero(?string $numero): ?int
+    {
+        return filled($numero) ? Cliente::where('numero', trim($numero))->value('id') : null;
     }
 
     private function guardarAdjuntos(Observacion $observacion, Request $request): void

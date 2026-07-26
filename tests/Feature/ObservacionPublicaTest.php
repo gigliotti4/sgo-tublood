@@ -36,6 +36,7 @@ class ObservacionPublicaTest extends TestCase
                     'producto' => 'Set de infusión',
                     'codigo' => 'SET-001',
                     'cantidad_afectada' => 5,
+                    'tipo_presentacion' => 'unidades',
                     'lote' => 'L-2026-01',
                     'fecha_vencimiento' => '2027-01-01',
                     'numero_remito' => 'R-0001',
@@ -71,6 +72,7 @@ class ObservacionPublicaTest extends TestCase
         $this->assertCount(1, $observacion->productos);
         $this->assertSame('Set de infusión', $observacion->productos->first()->producto);
         $this->assertSame('SET-001', $observacion->productos->first()->codigo);
+        $this->assertSame('unidades', $observacion->productos->first()->tipo_presentacion);
 
         Storage::disk('local')->assertExists($observacion->attachments->first()->path);
 
@@ -102,6 +104,7 @@ class ObservacionPublicaTest extends TestCase
             'producto' => 'Catéter venoso',
             'codigo' => 'CAT-002',
             'cantidad_afectada' => 2,
+            'tipo_presentacion' => 'bultos',
             'lote' => 'L-2026-02',
             'fecha_vencimiento' => '2027-03-01',
             'numero_remito' => 'R-0002',

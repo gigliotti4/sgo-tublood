@@ -26,6 +26,13 @@ class Observacion extends Model
         'externa' => 'Externa',
     ];
 
+    /**
+     * Estados en los que la observación sigue en gestión. Es la definición de
+     * "abierta" que comparten el Dashboard y el filtro Abierta/Cerrada del
+     * listado (cerrada = cualquier otro estado: resuelta, cerrada, cancelada).
+     */
+    public const ESTADOS_ABIERTOS = ['pendiente_clasificacion', 'clasificada', 'en_proceso', 'derivada'];
+
     protected $table = 'observations';
 
     protected $fillable = [
@@ -39,6 +46,7 @@ class Observacion extends Model
         'contacto_numero_cliente',
         'cliente_id',
         'responsable_id',
+        'created_by',
         'responsable_asignado_at',
         'vence_at',
         'alerta_nivel',
@@ -87,6 +95,12 @@ class Observacion extends Model
     public function responsable(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /** Quién la cargó desde el panel; null si entró por el portal público. */
+    public function creador(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 
     /** Sector de gestión: define los tipos de incidencia disponibles. */

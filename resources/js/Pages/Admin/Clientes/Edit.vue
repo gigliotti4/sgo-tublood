@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { Head, Link, router, useForm } from '@inertiajs/vue3'
-import Input from '@/Components/Input.vue'
+import InputFecha from '@/Components/InputFecha.vue'
 import Button from '@/Components/Button.vue'
 import type { Cliente } from '@/types'
 
@@ -57,46 +57,45 @@ const formatSize = (bytes: number) => {
     <Head title="Editar cliente" />
 
     <AppLayout>
-        <div class="flex items-center gap-3 mb-6">
-            <Link :href="route('clientes.index')" class="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">← Volver</Link>
-            <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-100">Editar cliente</h1>
+        <div class="mb-6 flex items-center gap-3">
+            <Link :href="route('clientes.index')" class="text-sm text-gray-400 transition hover:text-gray-600 dark:hover:text-gray-300">← Volver</Link>
+            <h1 class="text-xl font-semibold text-gray-800 dark:text-white/90">Editar cliente</h1>
         </div>
 
-        <div class="space-y-6 max-w-2xl">
+        <div class="max-w-2xl space-y-6">
             <!-- Datos del ERP (solo lectura) -->
-            <div class="bg-white dark:bg-slate-800 rounded-xl shadow p-6">
-                <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-3">
+            <div class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
+                <p class="mb-3 text-theme-xs font-medium uppercase tracking-wide text-gray-400">
                     Datos de RP Sistemas (solo lectura — se actualizan con la sincronización)
                 </p>
                 <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                    <dt class="text-slate-400 dark:text-slate-500">N° cliente</dt>
-                    <dd class="text-slate-800 dark:text-slate-100 font-mono">{{ cliente.numero }}</dd>
-                    <dt class="text-slate-400 dark:text-slate-500">Razón social</dt>
-                    <dd class="text-slate-800 dark:text-slate-100">{{ cliente.razon_social }}</dd>
-                    <dt class="text-slate-400 dark:text-slate-500">CUIT</dt>
-                    <dd class="text-slate-800 dark:text-slate-100">{{ cliente.cuit ?? '—' }}</dd>
-                    <dt class="text-slate-400 dark:text-slate-500">IVA</dt>
-                    <dd class="text-slate-800 dark:text-slate-100">{{ cliente.descripcion_iva ?? '—' }}</dd>
-                    <dt class="text-slate-400 dark:text-slate-500">Teléfono</dt>
-                    <dd class="text-slate-800 dark:text-slate-100">{{ cliente.telefono ?? '—' }}</dd>
-                    <dt class="text-slate-400 dark:text-slate-500">Mail</dt>
-                    <dd class="text-slate-800 dark:text-slate-100">{{ cliente.mail ?? '—' }}</dd>
-                    <dt class="text-slate-400 dark:text-slate-500">Domicilio</dt>
-                    <dd class="text-slate-800 dark:text-slate-100">{{ cliente.domicilio ?? '—' }}</dd>
-                    <dt class="text-slate-400 dark:text-slate-500">Localidad</dt>
-                    <dd class="text-slate-800 dark:text-slate-100">
+                    <dt class="text-gray-400">N° cliente</dt>
+                    <dd class="font-mono text-gray-800 dark:text-white/90">{{ cliente.numero }}</dd>
+                    <dt class="text-gray-400">Razón social</dt>
+                    <dd class="text-gray-800 dark:text-white/90">{{ cliente.razon_social }}</dd>
+                    <dt class="text-gray-400">CUIT</dt>
+                    <dd class="text-gray-800 dark:text-white/90">{{ cliente.cuit ?? '—' }}</dd>
+                    <dt class="text-gray-400">IVA</dt>
+                    <dd class="text-gray-800 dark:text-white/90">{{ cliente.descripcion_iva ?? '—' }}</dd>
+                    <dt class="text-gray-400">Teléfono</dt>
+                    <dd class="text-gray-800 dark:text-white/90">{{ cliente.telefono ?? '—' }}</dd>
+                    <dt class="text-gray-400">Mail</dt>
+                    <dd class="text-gray-800 dark:text-white/90">{{ cliente.mail ?? '—' }}</dd>
+                    <dt class="text-gray-400">Domicilio</dt>
+                    <dd class="text-gray-800 dark:text-white/90">{{ cliente.domicilio ?? '—' }}</dd>
+                    <dt class="text-gray-400">Localidad</dt>
+                    <dd class="text-gray-800 dark:text-white/90">
                         {{ [cliente.localidad, cliente.descripcion_provincia].filter(Boolean).join(', ') || '—' }}
                     </dd>
                 </dl>
             </div>
 
             <!-- Campo propio -->
-            <div class="bg-white dark:bg-slate-800 rounded-xl shadow p-6">
-                <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-3">Datos propios</p>
+            <div class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
+                <p class="mb-3 text-theme-xs font-medium uppercase tracking-wide text-gray-400">Datos propios</p>
                 <form @submit.prevent="submit" class="space-y-4">
-                    <Input
+                    <InputFecha
                         v-model="form.fecha_vencimiento"
-                        type="date"
                         label="Fecha de vencimiento"
                         :error="form.errors.fecha_vencimiento"
                     />
@@ -107,41 +106,41 @@ const formatSize = (bytes: number) => {
             </div>
 
             <!-- Archivos -->
-            <div class="bg-white dark:bg-slate-800 rounded-xl shadow p-6 space-y-4">
-                <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Archivos adjuntos</p>
+            <div class="space-y-4 rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
+                <p class="text-theme-xs font-medium uppercase tracking-wide text-gray-400">Archivos adjuntos</p>
 
                 <ul v-if="cliente.attachments?.length" class="space-y-1.5">
                     <li
                         v-for="archivo in cliente.attachments"
                         :key="archivo.id"
-                        class="flex items-center justify-between text-sm bg-slate-50 dark:bg-slate-700/40 rounded-lg px-3 py-2"
+                        class="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm dark:bg-white/[0.05]"
                     >
                         <a
                             :href="route('clientes.archivos.download', [cliente.id, archivo.id])"
-                            class="text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline truncate"
+                            class="truncate text-gray-700 hover:text-brand-500 hover:underline dark:text-gray-200 dark:hover:text-brand-300"
                         >
                             {{ archivo.original_name }}
                         </a>
-                        <div class="flex items-center gap-3 shrink-0 ml-3">
-                            <span class="text-xs text-slate-400 dark:text-slate-500">{{ formatSize(archivo.size) }}</span>
-                            <button type="button" class="text-slate-400 hover:text-red-500" @click="borrarArchivo(archivo.id)">✕</button>
+                        <div class="ml-3 flex shrink-0 items-center gap-3">
+                            <span class="text-theme-xs text-gray-400">{{ formatSize(archivo.size) }}</span>
+                            <button type="button" class="cursor-pointer text-gray-400 hover:text-error-500" @click="borrarArchivo(archivo.id)">✕</button>
                         </div>
                     </li>
                 </ul>
-                <p v-else class="text-sm text-slate-400 dark:text-slate-500">No hay archivos adjuntos todavía.</p>
+                <p v-else class="text-sm text-gray-400">No hay archivos adjuntos todavía.</p>
 
                 <div
-                    class="border-2 border-dashed rounded-xl p-6 text-center transition"
-                    :class="isDragging ? 'border-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/10' : 'border-slate-200 dark:border-slate-600'"
+                    class="rounded-xl border-2 border-dashed p-6 text-center transition"
+                    :class="isDragging ? 'border-brand-300 bg-brand-50/60 dark:border-brand-500/50 dark:bg-brand-500/10' : 'border-gray-200 dark:border-gray-700'"
                     @dragover.prevent="isDragging = true"
                     @dragleave.prevent="isDragging = false"
                     @drop.prevent="onDrop"
                 >
-                    <p class="text-sm font-medium text-slate-700 dark:text-slate-200">Adjuntar archivos</p>
-                    <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">JPG, PNG, PDF, DOC, XLS. Máx 10 MB c/u</p>
+                    <p class="text-sm font-medium text-gray-700 dark:text-gray-200">Adjuntar archivos</p>
+                    <p class="mt-1 text-xs text-gray-400">JPG, PNG, PDF, DOC, XLS. Máx 10 MB c/u</p>
                     <button
                         type="button"
-                        class="mt-3 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium"
+                        class="mt-3 cursor-pointer text-sm font-medium text-brand-500 hover:text-brand-600 dark:text-brand-300 dark:hover:text-brand-200"
                         @click="fileInput?.click()"
                     >
                         Seleccionar archivos
@@ -160,13 +159,13 @@ const formatSize = (bytes: number) => {
                     <li
                         v-for="(file, index) in uploadForm.archivos"
                         :key="index"
-                        class="flex items-center justify-between text-sm bg-slate-50 dark:bg-slate-700/40 rounded-lg px-3 py-2"
+                        class="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm dark:bg-white/[0.05]"
                     >
-                        <span class="text-slate-700 dark:text-slate-200 truncate">{{ file.name }}</span>
-                        <button type="button" class="text-slate-400 hover:text-red-500" @click="removeFile(index)">✕</button>
+                        <span class="truncate text-gray-700 dark:text-gray-200">{{ file.name }}</span>
+                        <button type="button" class="cursor-pointer text-gray-400 hover:text-error-500" @click="removeFile(index)">✕</button>
                     </li>
                 </ul>
-                <p v-if="uploadForm.errors.archivos" class="text-red-500 text-xs">{{ uploadForm.errors.archivos }}</p>
+                <p v-if="uploadForm.errors.archivos" class="text-xs text-error-500">{{ uploadForm.errors.archivos }}</p>
 
                 <div v-if="uploadForm.archivos.length" class="flex gap-3">
                     <Button variant="primary" :disabled="uploadForm.processing" @click="subirArchivos">

@@ -1,11 +1,16 @@
 <script setup lang="ts">
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { Head, Link } from '@inertiajs/vue3'
+import { computed } from 'vue'
 import { route } from 'ziggy-js'
+import VueApexCharts from 'vue3-apexcharts'
+import type { ApexOptions } from 'apexcharts'
 import Badge from '@/Components/Badge.vue'
 import { usePermissions } from '@/composables/usePermissions'
+import { useDarkMode } from '@/composables/useDarkMode'
 
 const { hasPermission } = usePermissions()
+const { isDark } = useDarkMode()
 
 interface EstadoCount {
     estado: string
@@ -54,14 +59,117 @@ const estadoVariant: Record<string, 'amber' | 'blue' | 'indigo' | 'purple' | 'em
     cancelada: 'red',
 }
 
+const estadoColor: Record<string, string> = {
+    pendiente_clasificacion: '#f79009',
+    clasificada: '#3b82f6',
+    en_proceso: '#6373c4',
+    derivada: '#8b5cf6',
+    resuelta: '#12b76a',
+    cerrada: '#98a2b3',
+    cancelada: '#f04438',
+}
+
 const estadoLabel = (estado: string) =>
     props.porEstado.find(e => e.estado === estado)?.label ?? estado
 
 const formatFecha = (d: string) =>
     new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
-const barWidth = (count: number) =>
-    props.stats.total > 0 ? Math.round((count / props.stats.total) * 100) : 0
+const totalEstados = computed(() => props.porEstado.reduce((acc, e) => acc + e.count, 0))
+
+// Barras: observaciones por sector
+const sectorChartOptions = computed<ApexOptions>(() => ({
+    chart: {
+        type: 'bar',
+        fontFamily: 'Outfit, sans-serif',
+        toolbar: { show: false },
+        foreColor: '#98a2b3',
+    },
+    colors: ['#2a3182'],
+    plotOptions: {
+        bar: { horizontal: false, columnWidth: '39%', borderRadius: 5, borderRadiusApplication: 'end' },
+    },
+    dataLabels: { enabled: false },
+    stroke: { show: true, width: 4, colors: ['transparent'] },
+    grid: {
+        borderColor: isDark.value ? 'rgba(255,255,255,0.08)' : '#f2f4f7',
+        yaxis: { lines: { show: true } },
+    },
+    xaxis: {
+        categories: props.porSector.map(s => s.sector),
+        axisBorder: { show: false },
+        axisTicks: { show: false },
+        labels: { style: { fontSize: '12px' } },
+    },
+    yaxis: { labels: { style: { fontSize: '12px' } } },
+    tooltip: { theme: isDark.value ? 'dark' : 'light', y: { formatter: (v: number) => `${v}` } },
+    states: { hover: { filter: { type: 'darken', value: 0.9 } } },
+}))
+
+const sectorChartSeries = computed(() => [
+    { name: 'Observaciones', data: props.porSector.map(s => s.count) },
+])
+
+// Donut: observaciones por estado
+const estadoChartOptions = computed<ApexOptions>(() => ({
+    chart: { type: 'donut', fontFamily: 'Outfit, sans-serif', foreColor: '#98a2b3' },
+    labels: props.porEstado.map(e => e.label),
+    colors: props.porEstado.map(e => estadoColor[e.estado] ?? '#98a2b3'),
+    dataLabels: { enabled: false },
+    legend: { position: 'bottom', fontSize: '13px', markers: { size: 5 }, itemMargin: { horizontal: 8, vertical: 3 } },
+    stroke: { show: false },
+    plotOptions: {
+        pie: {
+            donut: {
+                size: '72%',
+                labels: {
+                    show: true,
+                    total: {
+                        show: true,
+                        label: 'Total',
+                        fontSize: '13px',
+                        color: '#98a2b3',
+                        formatter: () => `${totalEstados.value}`,
+                    },
+                    value: {
+                        fontSize: '24px',
+                        fontWeight: 700,
+                        color: isDark.value ? '#ffffff' : '#101828',
+                    },
+                },
+            },
+        },
+    },
+    tooltip: { theme: isDark.value ? 'dark' : 'light' },
+}))
+
+const estadoChartSeries = computed(() => props.porEstado.map(e => e.count))
+
+// Íconos de las tarjetas de métricas (Heroicons outline)
+const statIcons: Record<string, string> = {
+    document: 'M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m3.75 9h3.75M12 15.75h5.25M8.25 9h1.5m-1.5 3.75h1.5m-1.5 3.75h1.5M6.75 3h6.879a2.25 2.25 0 011.591.659l4.121 4.121a2.25 2.25 0 01.659 1.591V19.5a2.25 2.25 0 01-2.25 2.25H6.75a2.25 2.25 0 01-2.25-2.25V5.25A2.25 2.25 0 016.75 3z',
+    inbox: 'M2.25 13.5h3.86a2.25 2.25 0 012.012 1.244l.256.512a2.25 2.25 0 002.013 1.244h3.218a2.25 2.25 0 002.013-1.244l.256-.512a2.25 2.25 0 012.013-1.244h3.859m-19.5.338V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 00-2.15-1.588H6.911a2.25 2.25 0 00-2.15 1.588L2.35 13.177a2.25 2.25 0 00-.1.661z',
+    check: 'M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+    user: 'M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z',
+    flag: 'M3 3v1.5M3 21v-6m0 0l2.77-.693a9 9 0 016.208.682l.108.054a9 9 0 006.086.71l3.114-.732a48.524 48.524 0 01-.005-10.499l-3.11.732a9 9 0 01-6.085-.711l-.108-.054a9 9 0 00-6.208-.682L3 4.5M3 15V4.5',
+}
+
+interface StatCard {
+    label: string
+    value: number
+    icon: string
+    iconClass: string
+    iconBg: string
+    sub?: string
+}
+
+const statCards = computed<StatCard[]>(() => [
+    { label: 'Observaciones', value: props.stats.total, icon: 'document', iconClass: 'text-brand-500 dark:text-brand-300', iconBg: 'bg-brand-50 dark:bg-brand-500/[0.12]' },
+    { label: 'Abiertas', value: props.stats.abiertas, icon: 'inbox', iconClass: 'text-warning-600 dark:text-warning-400', iconBg: 'bg-warning-50 dark:bg-warning-500/15' },
+    { label: 'Resueltas', value: props.stats.resueltas, icon: 'check', iconClass: 'text-success-600 dark:text-success-400', iconBg: 'bg-success-50 dark:bg-success-500/15' },
+    { label: 'Asignadas a mí', value: props.stats.asignadasAMi, icon: 'user', iconClass: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-50 dark:bg-blue-500/15' },
+    { label: 'No Conformidades', value: props.stats.nc, icon: 'flag', iconClass: 'text-purple-600 dark:text-purple-400', iconBg: 'bg-purple-50 dark:bg-purple-500/15', sub: `${props.stats.ncAbiertas} abiertas` },
+])
 </script>
 
 <template>
@@ -69,130 +177,130 @@ const barWidth = (count: number) =>
 
     <AppLayout>
         <!-- Header -->
-        <div class="flex items-center justify-between mb-6">
+        <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
             <div>
-                <h1 class="text-xl font-bold text-slate-800 dark:text-slate-100">Panel de control</h1>
-                <p class="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Resumen del sistema</p>
+                <h1 class="text-xl font-semibold text-gray-800 dark:text-white/90">Panel de control</h1>
+                <p class="mt-0.5 text-theme-sm text-gray-500 dark:text-gray-400">Resumen del sistema</p>
             </div>
             <Link
                 v-if="hasPermission('observaciones.edit')"
                 :href="route('observaciones.nuevo')"
-                class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition"
+                class="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white shadow-theme-xs transition hover:bg-brand-600"
             >
-                + Nueva
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                Nueva observación
             </Link>
         </div>
 
         <!-- Stat cards -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 mb-4">
-            <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 border-l-4 border-l-blue-500 px-4 py-3.5">
-                <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Observaciones</p>
-                <p class="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">{{ stats.total }}</p>
-            </div>
-            <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 border-l-4 border-l-orange-500 px-4 py-3.5">
-                <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Abiertas</p>
-                <p class="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">{{ stats.abiertas }}</p>
-            </div>
-            <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 border-l-4 border-l-emerald-500 px-4 py-3.5">
-                <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Resueltas</p>
-                <p class="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">{{ stats.resueltas }}</p>
-            </div>
-            <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 border-l-4 border-l-indigo-500 px-4 py-3.5">
-                <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Asignadas a mí</p>
-                <p class="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">{{ stats.asignadasAMi }}</p>
-            </div>
-            <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 border-l-4 border-l-purple-500 px-4 py-3.5">
-                <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">NC</p>
-                <p class="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">{{ stats.nc }}</p>
-                <p class="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{{ stats.ncAbiertas }} abiertas</p>
+        <div class="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5 md:gap-6">
+            <div
+                v-for="card in statCards"
+                :key="card.label"
+                class="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03]"
+            >
+                <div class="flex h-12 w-12 items-center justify-center rounded-xl" :class="card.iconBg">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" class="h-6 w-6" :class="card.iconClass">
+                        <path stroke-linecap="round" stroke-linejoin="round" :d="statIcons[card.icon]" />
+                    </svg>
+                </div>
+                <div class="mt-4">
+                    <p class="text-theme-sm text-gray-500 dark:text-gray-400">{{ card.label }}</p>
+                    <div class="flex items-end justify-between">
+                        <p class="mt-1 text-2xl font-bold text-gray-800 dark:text-white/90">{{ card.value }}</p>
+                        <span v-if="card.sub" class="text-theme-xs text-gray-400">{{ card.sub }}</span>
+                    </div>
+                </div>
             </div>
         </div>
 
         <!-- KPI row -->
-        <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-slate-100 dark:divide-slate-700 mb-4">
-            <div class="px-5 py-4 border-l-4 border-l-rose-500">
-                <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">KPI: Tiempo &lt;72h</p>
-                <p class="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-1">{{ kpis.tiempoSla ?? 0 }}%</p>
-                <p class="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Meta &gt; 85%</p>
+        <div class="mb-6 grid grid-cols-1 divide-y divide-gray-100 rounded-2xl border border-gray-200 bg-white dark:divide-gray-800 dark:border-gray-800 dark:bg-white/[0.03] sm:grid-cols-2 sm:divide-y-0 sm:divide-x xl:grid-cols-4">
+            <div class="px-6 py-5">
+                <p class="text-theme-xs font-medium uppercase tracking-wide text-gray-400">KPI: Tiempo &lt;72h</p>
+                <p class="mt-1 text-2xl font-bold" :class="(kpis.tiempoSla ?? 0) >= 85 ? 'text-success-600 dark:text-success-400' : 'text-error-500 dark:text-error-400'">
+                    {{ kpis.tiempoSla ?? 0 }}%
+                </p>
+                <p class="mt-0.5 text-theme-xs text-gray-400">Meta &gt; 85%</p>
             </div>
-            <div class="px-5 py-4">
-                <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Tecnovigilancia</p>
-                <p class="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">{{ kpis.tecnovigilancia }}</p>
+            <div class="px-6 py-5">
+                <p class="text-theme-xs font-medium uppercase tracking-wide text-gray-400">Tecnovigilancia</p>
+                <p class="mt-1 text-2xl font-bold text-error-500 dark:text-error-400">{{ kpis.tecnovigilancia }}</p>
             </div>
-            <div class="px-5 py-4">
-                <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Crítica</p>
-                <p class="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">{{ kpis.critica }}</p>
+            <div class="px-6 py-5">
+                <p class="text-theme-xs font-medium uppercase tracking-wide text-gray-400">Crítica</p>
+                <p class="mt-1 text-2xl font-bold text-error-500 dark:text-error-400">{{ kpis.critica }}</p>
             </div>
-            <div class="px-5 py-4">
-                <p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide">Sin clasificar</p>
-                <p class="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1">{{ kpis.sinClasificar }}</p>
+            <div class="px-6 py-5">
+                <p class="text-theme-xs font-medium uppercase tracking-wide text-gray-400">Sin clasificar</p>
+                <p class="mt-1 text-2xl font-bold text-warning-600 dark:text-warning-400">{{ kpis.sinClasificar }}</p>
             </div>
         </div>
 
-        <!-- Por sector / Por estado -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-            <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
-                <h2 class="text-sm font-semibold text-slate-700 dark:text-slate-200 pb-3 border-b border-slate-100 dark:border-slate-700 mb-4">Por sector</h2>
-                <div v-if="porSector.length === 0" class="flex items-center justify-center h-40 text-sm text-slate-400 dark:text-slate-500">
+        <!-- Charts -->
+        <div class="mb-6 grid grid-cols-1 gap-4 md:gap-6 lg:grid-cols-2">
+            <div class="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6">
+                <h2 class="text-lg font-semibold text-gray-800 dark:text-white/90">Observaciones por sector</h2>
+                <div v-if="porSector.length === 0" class="flex h-64 items-center justify-center text-sm text-gray-400">
                     Sin datos
                 </div>
-                <div v-else class="space-y-2">
-                    <div v-for="s in porSector" :key="s.sector" class="flex items-center justify-between text-sm">
-                        <span class="text-slate-600 dark:text-slate-300">{{ s.sector }}</span>
-                        <span class="font-semibold text-slate-800 dark:text-slate-100">{{ s.count }}</span>
-                    </div>
-                </div>
+                <VueApexCharts
+                    v-else
+                    type="bar"
+                    height="280"
+                    :options="sectorChartOptions"
+                    :series="sectorChartSeries"
+                />
             </div>
 
-            <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
-                <h2 class="text-sm font-semibold text-slate-700 dark:text-slate-200 pb-3 border-b border-slate-100 dark:border-slate-700 mb-4">Por estado</h2>
-                <div class="space-y-3">
-                    <div v-for="e in porEstado" :key="e.estado" class="flex items-center gap-3 text-sm">
-                        <span class="w-32 shrink-0 text-slate-600 dark:text-slate-300">{{ e.label }}</span>
-                        <div class="flex-1 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-                            <div class="h-full bg-indigo-500 rounded-full" :style="{ width: barWidth(e.count) + '%' }" />
-                        </div>
-                        <span class="w-6 text-right font-semibold text-slate-800 dark:text-slate-100">{{ e.count }}</span>
-                    </div>
+            <div class="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6">
+                <h2 class="text-lg font-semibold text-gray-800 dark:text-white/90">Por estado</h2>
+                <div v-if="totalEstados === 0" class="flex h-64 items-center justify-center text-sm text-gray-400">
+                    Sin datos
                 </div>
+                <VueApexCharts
+                    v-else
+                    type="donut"
+                    height="300"
+                    :options="estadoChartOptions"
+                    :series="estadoChartSeries"
+                />
             </div>
         </div>
 
         <!-- Asignadas a mí -->
-        <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 mb-4">
-            <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-700">
-                <h2 class="text-sm font-semibold text-slate-700 dark:text-slate-200">Asignadas a mí</h2>
-                <a :href="route('observaciones.index')" class="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300">
+        <div class="mb-6 overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
+            <div class="flex items-center justify-between px-6 py-4">
+                <h2 class="text-lg font-semibold text-gray-800 dark:text-white/90">Asignadas a mí</h2>
+                <Link :href="route('observaciones.index')" class="text-theme-sm font-medium text-brand-500 hover:text-brand-600 dark:text-brand-300 dark:hover:text-brand-200">
                     Ver todas →
-                </a>
+                </Link>
             </div>
             <div class="overflow-x-auto">
-                <table class="w-full text-sm">
+                <table class="w-full">
                     <thead>
-                        <tr class="text-left text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide bg-slate-50 dark:bg-slate-700/40">
-                            <th class="px-5 py-2.5">N°</th>
-                            <th class="px-5 py-2.5">Tipo</th>
-                            <th class="px-5 py-2.5">Sector</th>
-                            <th class="px-5 py-2.5">Título</th>
-                            <th class="px-5 py-2.5">Estado</th>
-                            <th class="px-5 py-2.5">Fecha</th>
+                        <tr class="border-y border-gray-100 dark:border-gray-800">
+                            <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">N°</th>
+                            <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Tipo</th>
+                            <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Título</th>
+                            <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Estado</th>
+                            <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Fecha</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
+                    <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
                         <tr v-if="asignadas.length === 0">
-                            <td colspan="6" class="px-5 py-8 text-center text-sm text-slate-400 dark:text-slate-500">
+                            <td colspan="5" class="px-6 py-10 text-center text-sm text-gray-400">
                                 No tenés observaciones asignadas.
                             </td>
                         </tr>
-                        <tr v-for="o in asignadas" :key="o.id" class="hover:bg-slate-50 dark:hover:bg-slate-700/40">
-                            <td class="px-5 py-2.5 font-mono text-xs text-slate-500 dark:text-slate-400">{{ o.numero }}</td>
-                            <td class="px-5 py-2.5 text-slate-600 dark:text-slate-300">{{ tipoLabels[o.tipo] ?? o.tipo }}</td>
-                            <td class="px-5 py-2.5 text-slate-400 dark:text-slate-500">—</td>
-                            <td class="px-5 py-2.5 text-slate-800 dark:text-slate-100">{{ o.titulo }}</td>
-                            <td class="px-5 py-2.5">
+                        <tr v-for="o in asignadas" :key="o.id" class="transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]">
+                            <td class="px-6 py-3.5 font-mono text-theme-xs text-gray-500 dark:text-gray-400">{{ o.numero }}</td>
+                            <td class="px-6 py-3.5 text-theme-sm text-gray-600 dark:text-gray-300">{{ tipoLabels[o.tipo] ?? o.tipo }}</td>
+                            <td class="px-6 py-3.5 text-theme-sm font-medium text-gray-800 dark:text-white/90">{{ o.titulo }}</td>
+                            <td class="px-6 py-3.5">
                                 <Badge :variant="estadoVariant[o.estado] ?? 'slate'">{{ estadoLabel(o.estado) }}</Badge>
                             </td>
-                            <td class="px-5 py-2.5 text-slate-500 dark:text-slate-400">{{ formatFecha(o.created_at) }}</td>
+                            <td class="px-6 py-3.5 text-theme-sm text-gray-500 dark:text-gray-400">{{ formatFecha(o.created_at) }}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -200,35 +308,35 @@ const barWidth = (count: number) =>
         </div>
 
         <!-- Últimas observaciones -->
-        <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
-            <div class="px-5 py-4 border-b border-slate-100 dark:border-slate-700">
-                <h2 class="text-sm font-semibold text-slate-700 dark:text-slate-200">Últimas observaciones</h2>
+        <div class="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
+            <div class="px-6 py-4">
+                <h2 class="text-lg font-semibold text-gray-800 dark:text-white/90">Últimas observaciones</h2>
             </div>
             <div class="overflow-x-auto">
-                <table class="w-full text-sm">
+                <table class="w-full">
                     <thead>
-                        <tr class="text-left text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wide bg-slate-50 dark:bg-slate-700/40">
-                            <th class="px-5 py-2.5">N°</th>
-                            <th class="px-5 py-2.5">Tipo</th>
-                            <th class="px-5 py-2.5">Título</th>
-                            <th class="px-5 py-2.5">Estado</th>
-                            <th class="px-5 py-2.5">Fecha</th>
+                        <tr class="border-y border-gray-100 dark:border-gray-800">
+                            <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">N°</th>
+                            <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Tipo</th>
+                            <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Título</th>
+                            <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Estado</th>
+                            <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Fecha</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
+                    <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
                         <tr v-if="ultimas.length === 0">
-                            <td colspan="5" class="px-5 py-8 text-center text-sm text-slate-400 dark:text-slate-500">
+                            <td colspan="5" class="px-6 py-10 text-center text-sm text-gray-400">
                                 Todavía no se cargaron observaciones.
                             </td>
                         </tr>
-                        <tr v-for="o in ultimas" :key="o.id" class="hover:bg-slate-50 dark:hover:bg-slate-700/40">
-                            <td class="px-5 py-2.5 font-mono text-xs text-slate-500 dark:text-slate-400">{{ o.numero }}</td>
-                            <td class="px-5 py-2.5 text-slate-600 dark:text-slate-300">{{ tipoLabels[o.tipo] ?? o.tipo }}</td>
-                            <td class="px-5 py-2.5 text-slate-800 dark:text-slate-100">{{ o.titulo }}</td>
-                            <td class="px-5 py-2.5">
+                        <tr v-for="o in ultimas" :key="o.id" class="transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]">
+                            <td class="px-6 py-3.5 font-mono text-theme-xs text-gray-500 dark:text-gray-400">{{ o.numero }}</td>
+                            <td class="px-6 py-3.5 text-theme-sm text-gray-600 dark:text-gray-300">{{ tipoLabels[o.tipo] ?? o.tipo }}</td>
+                            <td class="px-6 py-3.5 text-theme-sm font-medium text-gray-800 dark:text-white/90">{{ o.titulo }}</td>
+                            <td class="px-6 py-3.5">
                                 <Badge :variant="estadoVariant[o.estado] ?? 'slate'">{{ estadoLabel(o.estado) }}</Badge>
                             </td>
-                            <td class="px-5 py-2.5 text-slate-500 dark:text-slate-400">{{ formatFecha(o.created_at) }}</td>
+                            <td class="px-6 py-3.5 text-theme-sm text-gray-500 dark:text-gray-400">{{ formatFecha(o.created_at) }}</td>
                         </tr>
                     </tbody>
                 </table>

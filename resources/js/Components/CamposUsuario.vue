@@ -102,11 +102,11 @@ const plazoDelSector = computed(() => {
             </optgroup>
         </Select>
 
-        <label class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300 sm:pt-7">
-            <input type="checkbox" v-model="form.es_gerente" class="rounded mt-0.5" />
+        <label class="flex items-start gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 sm:pt-7">
+            <input type="checkbox" v-model="form.es_gerente" class="mt-0.5 h-4 w-4 rounded accent-brand-500 dark:accent-brand-400" />
             <span>
                 Es gerente
-                <span class="block text-xs text-gray-500 dark:text-slate-400">
+                <span class="block text-xs font-normal text-gray-500 dark:text-gray-400">
                     Aparece primero en la lista de gerentes de los demás usuarios.
                 </span>
             </span>
@@ -119,13 +119,13 @@ const plazoDelSector = computed(() => {
                 <label
                     v-for="role in roles"
                     :key="role.id"
-                    class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer"
+                    class="flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300"
                 >
-                    <input type="checkbox" :value="role.name" v-model="form.roles" class="rounded" />
+                    <input type="checkbox" :value="role.name" v-model="form.roles" class="h-4 w-4 rounded accent-brand-500 dark:accent-brand-400" />
                     {{ role.name }}
                 </label>
             </div>
-            <p v-if="form.errors.roles" class="text-red-500 dark:text-red-400 text-xs mt-1">{{ form.errors.roles }}</p>
+            <p v-if="form.errors.roles" class="mt-1.5 text-xs text-error-500 dark:text-error-400">{{ form.errors.roles }}</p>
         </div>
     </FormSection>
 </template>

@@ -317,6 +317,7 @@ return [
         'productos.*.producto'          => 'producto',
         'productos.*.codigo'            => 'código',
         'productos.*.cantidad_afectada' => 'cantidad afectada',
+        'productos.*.tipo_presentacion' => 'presentación',
         'productos.*.lote'              => 'lote',
         'productos.*.fecha_vencimiento' => 'fecha de vencimiento',
         'productos.*.numero_remito'     => 'N° de remito',

@@ -103,6 +103,7 @@ export interface ObservationProduct {
     producto: string
     codigo: string | null
     cantidad_afectada: number
+    tipo_presentacion: string | null
     lote: string
     fecha_vencimiento: string
     numero_remito: string

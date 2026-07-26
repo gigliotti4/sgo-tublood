@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import Input from '@/Components/Input.vue'
+import InputFecha from '@/Components/InputFecha.vue'
 import RadioGroup from '@/Components/RadioGroup.vue'
 import Select from '@/Components/Select.vue'
 import Textarea from '@/Components/Textarea.vue'
@@ -56,10 +57,18 @@ const model = defineModel<string | number | null>()
         :error="error"
     />
 
+    <InputFecha
+        v-else-if="campo.tipo === 'date'"
+        v-model="model"
+        :label="campo.label"
+        :required="campo.required"
+        :error="error"
+    />
+
     <Input
         v-else
         v-model="model"
-        :type="campo.tipo === 'number' ? 'number' : campo.tipo === 'date' ? 'date' : 'text'"
+        :type="campo.tipo === 'number' ? 'number' : 'text'"
         :label="campo.label"
         :required="campo.required"
         :error="error"

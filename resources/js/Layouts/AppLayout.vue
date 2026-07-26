@@ -13,6 +13,7 @@ const page = usePage<PageProps>()
 const sidebarCollapsed = ref(false)
 const mobileSidebarOpen = ref(false)
 const notificacionesOpen = ref(false)
+const userMenuOpen = ref(false)
 
 const vencimientos = computed(() => page.props.notificaciones?.vencimientos ?? [])
 const alertas = computed(() => page.props.notificaciones?.alertas ?? [])
@@ -86,7 +87,11 @@ const isActive = (routeName: string) => {
 const logout = () => router.post(route('logout'))
 
 const handleEsc = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') mobileSidebarOpen.value = false
+    if (e.key === 'Escape') {
+        mobileSidebarOpen.value = false
+        userMenuOpen.value = false
+        notificacionesOpen.value = false
+    }
 }
 onMounted(() => window.addEventListener('keydown', handleEsc))
 onUnmounted(() => window.removeEventListener('keydown', handleEsc))
@@ -101,85 +106,94 @@ const icons: Record<string, string> = {
     document: 'M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m3.75 9h3.75M12 15.75h5.25M8.25 9h1.5m-1.5 3.75h1.5m-1.5 3.75h1.5M6.75 3h6.879a2.25 2.25 0 011.591.659l4.121 4.121a2.25 2.25 0 01.659 1.591V19.5a2.25 2.25 0 01-2.25 2.25H6.75a2.25 2.25 0 01-2.25-2.25V5.25A2.25 2.25 0 016.75 3z',
     bell: 'M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0',
     logout: 'M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9',
-    chevron: 'M8.25 4.5l7.5 7.5-7.5 7.5',
+    chevronDown: 'M19.5 8.25l-7.5 7.5-7.5-7.5',
     menu: 'M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5',
     x: 'M6 18L18 6M6 6l12 12',
     sun: 'M12 3v1.5m0 15V21m9-9h-1.5M4.5 12H3m15.364 6.364l-1.06-1.06M6.696 6.696l-1.06-1.06m12.728 0l-1.06 1.06M6.696 17.304l-1.06 1.06M16.5 12a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z',
     moon: 'M21.752 15.002A9.72 9.72 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z',
+    dots: 'M6.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM12.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM18.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0z',
 }
 </script>
 
 <template>
-    <div class="min-h-screen bg-slate-50 dark:bg-slate-900 flex">
+    <div class="min-h-screen bg-gray-50 dark:bg-gray-950 flex font-outfit text-gray-700 dark:text-gray-400">
 
         <!-- Overlay mobile -->
         <Transition name="fade">
             <div
                 v-if="mobileSidebarOpen"
-                class="fixed inset-0 bg-black/50 z-30 lg:hidden"
+                class="fixed inset-0 bg-gray-900/50 z-40 lg:hidden"
                 @click="mobileSidebarOpen = false"
             />
         </Transition>
 
         <!-- SIDEBAR -->
         <aside
-            class="fixed top-0 left-0 h-full z-40 flex flex-col transition-all duration-300 bg-[#2a3182]"
+            class="fixed top-0 left-0 z-50 flex h-full flex-col border-r border-gray-200 bg-white transition-all duration-300 dark:border-gray-800 dark:bg-gray-900"
             :class="[
-                sidebarCollapsed ? 'w-16' : 'w-64',
+                sidebarCollapsed ? 'lg:w-[90px] w-[290px]' : 'w-[290px]',
                 mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
             ]"
         >
             <!-- Logo -->
-            <div class="flex items-center h-16 px-4 border-b border-white/10 shrink-0">
-                <div class="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
-                    <svg class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor">
+            <div
+                class="flex h-16 shrink-0 items-center gap-3 px-5"
+                :class="sidebarCollapsed ? 'lg:justify-center lg:px-0' : ''"
+            >
+                <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-500 shadow-theme-xs">
+                    <svg class="h-5 w-5 text-white" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                 </div>
                 <Transition name="slide">
-                    <span v-if="!sidebarCollapsed" class="ml-3 text-white font-bold text-base tracking-tight">
-                        SGO Admin
-                    </span>
+                    <div v-if="!sidebarCollapsed || mobileSidebarOpen" class="min-w-0">
+                        <p class="truncate text-base font-bold tracking-tight text-gray-900 dark:text-white">SGO Tublood</p>
+                        <p class="truncate text-theme-xs text-gray-400">Gestión de Observaciones</p>
+                    </div>
                 </Transition>
             </div>
 
             <!-- Nav -->
-            <nav class="flex-1 overflow-y-auto py-4 space-y-6">
+            <nav class="flex-1 overflow-y-auto px-4 py-4 space-y-6">
                 <div v-for="section in visibleSections" :key="section.title">
                     <p
-                        v-if="!sidebarCollapsed"
-                        class="px-4 mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/40"
+                        class="mb-2 text-xs uppercase leading-5 text-gray-400"
+                        :class="sidebarCollapsed ? 'lg:text-center' : 'px-3'"
                     >
-                        {{ section.title }}
+                        <template v-if="!sidebarCollapsed">{{ section.title }}</template>
+                        <svg v-else class="mx-auto hidden h-4 w-4 lg:block" viewBox="0 0 24 24" fill="currentColor">
+                            <path :d="icons.dots" />
+                        </svg>
+                        <template v-if="sidebarCollapsed"><span class="lg:hidden">{{ section.title }}</span></template>
                     </p>
-                    <div class="space-y-0.5 px-2">
+                    <div class="space-y-1">
                         <Link
                             v-for="item in section.items"
                             :key="item.route"
                             :href="route(item.route)"
-                            class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group relative"
-                            :class="isActive(item.route)
-                                ? 'bg-white/15 text-white'
-                                : 'text-white/60 hover:bg-white/10 hover:text-white'"
+                            class="group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors"
+                            :class="[
+                                isActive(item.route)
+                                    ? 'bg-brand-50 text-brand-500 dark:bg-brand-500/[0.12] dark:text-brand-300'
+                                    : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/[0.05]',
+                                sidebarCollapsed ? 'lg:justify-center lg:px-0' : ''
+                            ]"
                             :title="sidebarCollapsed ? item.label : ''"
                         >
-                            <!-- Active indicator -->
-                            <span
-                                v-if="isActive(item.route)"
-                                class="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-white rounded-r-full"
-                            />
                             <svg
                                 viewBox="0 0 24 24"
                                 fill="none"
                                 stroke="currentColor"
                                 stroke-width="1.75"
-                                class="w-5 h-5 shrink-0"
-                                :class="isActive(item.route) ? 'text-white' : 'text-white/50 group-hover:text-white'"
+                                class="h-5 w-5 shrink-0"
+                                :class="isActive(item.route)
+                                    ? 'text-brand-500 dark:text-brand-300'
+                                    : 'text-gray-500 group-hover:text-gray-700 dark:text-gray-400 dark:group-hover:text-gray-200'"
                             >
                                 <path stroke-linecap="round" stroke-linejoin="round" :d="icons[item.icon]" />
                             </svg>
                             <Transition name="slide">
-                                <span v-if="!sidebarCollapsed" class="truncate">{{ item.label }}</span>
+                                <span v-if="!sidebarCollapsed || mobileSidebarOpen" class="truncate">{{ item.label }}</span>
                             </Transition>
                         </Link>
                     </div>
@@ -187,91 +201,84 @@ const icons: Record<string, string> = {
             </nav>
 
             <!-- User -->
-            <div class="border-t border-white/10 p-3 shrink-0">
+            <div class="shrink-0 border-t border-gray-200 p-4 dark:border-gray-800">
                 <div
-                    class="flex items-center gap-3 rounded-lg p-2"
-                    :class="sidebarCollapsed ? 'justify-center' : ''"
+                    class="flex items-center gap-3 rounded-lg p-1.5"
+                    :class="sidebarCollapsed ? 'lg:justify-center' : ''"
                 >
-                    <div class="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                    <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-500 text-sm font-semibold text-white">
                         {{ user?.name?.charAt(0)?.toUpperCase() ?? 'U' }}
                     </div>
                     <Transition name="slide">
-                        <div v-if="!sidebarCollapsed" class="flex-1 min-w-0">
-                            <p class="text-white text-xs font-semibold truncate">{{ user?.name }}</p>
-                            <p class="text-white/40 text-[11px] truncate">{{ user?.roles[0] ?? '' }}</p>
+                        <div v-if="!sidebarCollapsed || mobileSidebarOpen" class="min-w-0 flex-1">
+                            <p class="truncate text-sm font-medium text-gray-800 dark:text-white/90">{{ user?.name }}</p>
+                            <p class="truncate text-theme-xs text-gray-400">{{ user?.roles[0] ?? '' }}</p>
                         </div>
                     </Transition>
                     <Transition name="slide">
                         <button
-                            v-if="!sidebarCollapsed"
+                            v-if="!sidebarCollapsed || mobileSidebarOpen"
                             @click="logout"
-                            class="text-white/40 hover:text-white transition-colors shrink-0"
+                            class="shrink-0 text-gray-400 transition-colors hover:text-error-500"
                             title="Cerrar sesión"
                         >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" class="w-4 h-4">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" class="h-5 w-5">
                                 <path stroke-linecap="round" stroke-linejoin="round" :d="icons.logout" />
                             </svg>
                         </button>
                     </Transition>
                 </div>
             </div>
-
-            <!-- Collapse toggle (desktop) -->
-            <button
-                class="hidden lg:flex absolute -right-3 top-20 w-6 h-6 rounded-full bg-white dark:bg-slate-700 shadow-md border border-slate-200 dark:border-slate-600 items-center justify-center text-slate-500 dark:text-slate-300 hover:text-slate-700 dark:hover:text-white transition-colors"
-                @click="sidebarCollapsed = !sidebarCollapsed"
-            >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3 h-3 transition-transform" :class="sidebarCollapsed ? 'rotate-0' : 'rotate-180'">
-                    <path stroke-linecap="round" stroke-linejoin="round" :d="icons.chevron" />
-                </svg>
-            </button>
         </aside>
 
         <!-- MAIN -->
         <div
-            class="flex-1 flex flex-col min-w-0 transition-all duration-300"
-            :class="sidebarCollapsed ? 'lg:pl-16' : 'lg:pl-64'"
+            class="flex min-w-0 flex-1 flex-col transition-all duration-300"
+            :class="sidebarCollapsed ? 'lg:pl-[90px]' : 'lg:pl-[290px]'"
         >
             <!-- Header -->
-            <header class="sticky top-0 z-20 h-16 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center gap-4 px-4 lg:px-6 shrink-0">
-                <!-- Mobile toggle -->
+            <header class="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b border-gray-200 bg-white px-4 dark:border-gray-800 dark:bg-gray-900 lg:px-6">
+                <!-- Sidebar toggle -->
                 <button
-                    class="lg:hidden text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                    class="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:border-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.05] dark:hover:text-gray-200 lg:hidden"
                     @click="mobileSidebarOpen = !mobileSidebarOpen"
                 >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" class="h-5 w-5">
+                        <path stroke-linecap="round" stroke-linejoin="round" :d="icons.menu" />
+                    </svg>
+                </button>
+                <button
+                    class="hidden h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:border-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.05] dark:hover:text-gray-200 lg:flex"
+                    @click="sidebarCollapsed = !sidebarCollapsed"
+                >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" class="h-5 w-5">
                         <path stroke-linecap="round" stroke-linejoin="round" :d="icons.menu" />
                     </svg>
                 </button>
 
-                <!-- Page title from Inertia -->
-                <div class="flex-1">
-                    <h1 class="text-sm font-semibold text-slate-800 dark:text-slate-100">
-                        {{ page.props.auth.user ? 'Panel Administrativo' : '' }}
-                    </h1>
-                </div>
+                <div class="flex-1" />
 
                 <!-- Flash success inline -->
                 <Transition name="fade">
                     <span
                         v-if="page.props.flash.success"
-                        class="hidden sm:inline-flex items-center gap-1.5 text-xs bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 rounded-full"
+                        class="hidden items-center gap-1.5 rounded-full bg-success-50 px-3 py-1.5 text-theme-xs font-medium text-success-600 dark:bg-success-500/15 dark:text-success-400 sm:inline-flex"
                     >
-                        <svg class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd" /></svg>
+                        <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd" /></svg>
                         {{ page.props.flash.success }}
                     </span>
                 </Transition>
 
                 <!-- Dark mode toggle -->
                 <button
-                    class="text-slate-400 dark:text-slate-300 hover:text-slate-600 dark:hover:text-white transition-colors"
+                    class="flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:border-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.05] dark:hover:text-gray-200"
                     :title="isDark ? 'Modo claro' : 'Modo oscuro'"
                     @click="toggleTheme"
                 >
-                    <svg v-if="isDark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" class="w-5 h-5">
+                    <svg v-if="isDark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" class="h-5 w-5">
                         <path stroke-linecap="round" stroke-linejoin="round" :d="icons.sun" />
                     </svg>
-                    <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" class="w-5 h-5">
+                    <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" class="h-5 w-5">
                         <path stroke-linecap="round" stroke-linejoin="round" :d="icons.moon" />
                     </svg>
                 </button>
@@ -279,15 +286,15 @@ const icons: Record<string, string> = {
                 <!-- Notification bell -->
                 <div class="relative">
                     <button
-                        class="relative text-slate-400 dark:text-slate-300 hover:text-slate-600 dark:hover:text-white transition-colors"
+                        class="relative flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:border-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.05] dark:hover:text-gray-200"
                         @click="notificacionesOpen = !notificacionesOpen"
                     >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" class="w-5 h-5">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" class="h-5 w-5">
                             <path stroke-linecap="round" stroke-linejoin="round" :d="icons.bell" />
                         </svg>
                         <span
                             v-if="totalNotificaciones > 0"
-                            class="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center"
+                            class="absolute -right-0.5 -top-0.5 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-warning-500 px-1 text-[10px] font-bold text-white ring-2 ring-white dark:ring-gray-900"
                         >
                             {{ totalNotificaciones > 9 ? '9+' : totalNotificaciones }}
                         </span>
@@ -299,34 +306,34 @@ const icons: Record<string, string> = {
                     <Transition name="fade">
                         <div
                             v-if="notificacionesOpen"
-                            class="absolute right-0 top-full mt-2 w-80 max-h-96 overflow-y-auto bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 z-40"
+                            class="absolute right-0 top-full z-40 mt-3 max-h-96 w-80 overflow-y-auto rounded-2xl border border-gray-200 bg-white shadow-theme-lg dark:border-gray-800 dark:bg-gray-900"
                         >
                             <!-- Alertas de observaciones: las deja el comando observaciones:alertas -->
                             <template v-if="alertas.length > 0">
-                                <div class="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between gap-2">
-                                    <p class="text-sm font-semibold text-slate-800 dark:text-slate-100">Observaciones</p>
+                                <div class="flex items-center justify-between gap-2 border-b border-gray-100 px-5 py-3.5 dark:border-gray-800">
+                                    <p class="text-sm font-semibold text-gray-800 dark:text-white/90">Observaciones</p>
                                     <button
-                                        class="text-xs text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer"
+                                        class="cursor-pointer text-theme-xs font-medium text-brand-500 hover:text-brand-600 dark:text-brand-300 dark:hover:text-brand-200"
                                         @click="marcarLeidas"
                                     >
                                         Marcar leídas
                                     </button>
                                 </div>
-                                <ul class="divide-y divide-slate-100 dark:divide-slate-700">
+                                <ul class="divide-y divide-gray-100 dark:divide-gray-800">
                                     <li v-for="a in alertas" :key="a.id">
                                         <Link
                                             :href="route('observaciones.index')"
-                                            class="block px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors"
+                                            class="block px-5 py-3 transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
                                             @click="notificacionesOpen = false"
                                         >
-                                            <p class="text-sm font-medium text-slate-800 dark:text-slate-100 truncate">
+                                            <p class="truncate text-sm font-medium text-gray-800 dark:text-white/90">
                                                 {{ a.data.numero }} — {{ a.data.titulo }}
                                             </p>
                                             <p
-                                                class="text-xs mt-0.5"
+                                                class="mt-0.5 text-theme-xs"
                                                 :class="a.data.tipo === 'observacion_finalizada'
-                                                    ? 'text-emerald-600 dark:text-emerald-400'
-                                                    : 'text-red-500'"
+                                                    ? 'text-success-600 dark:text-success-400'
+                                                    : 'text-error-500'"
                                             >
                                                 {{ a.data.mensaje }}
                                             </p>
@@ -335,58 +342,102 @@ const icons: Record<string, string> = {
                                 </ul>
                             </template>
 
-                            <div class="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
-                                <p class="text-sm font-semibold text-slate-800 dark:text-slate-100">Clientes por vencer</p>
+                            <div class="border-b border-gray-100 px-5 py-3.5 dark:border-gray-800">
+                                <p class="text-sm font-semibold text-gray-800 dark:text-white/90">Clientes por vencer</p>
                             </div>
-                            <ul v-if="vencimientos.length > 0" class="divide-y divide-slate-100 dark:divide-slate-700">
+                            <ul v-if="vencimientos.length > 0" class="divide-y divide-gray-100 dark:divide-gray-800">
                                 <li v-for="c in vencimientos" :key="c.id">
                                     <Link
                                         :href="route('clientes.index', { search: c.numero })"
-                                        class="block px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors"
+                                        class="block px-5 py-3 transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
                                         @click="notificacionesOpen = false"
                                     >
-                                        <p class="text-sm font-medium text-slate-800 dark:text-slate-100 truncate">{{ c.razon_social }}</p>
+                                        <p class="truncate text-sm font-medium text-gray-800 dark:text-white/90">{{ c.razon_social }}</p>
                                         <p
-                                            class="text-xs mt-0.5"
-                                            :class="diasParaVencer(c.fecha_vencimiento) < 0 ? 'text-red-500' : 'text-amber-600 dark:text-amber-400'"
+                                            class="mt-0.5 text-theme-xs"
+                                            :class="diasParaVencer(c.fecha_vencimiento) < 0 ? 'text-error-500' : 'text-warning-600 dark:text-warning-400'"
                                         >
                                             {{ labelVencimiento(c.fecha_vencimiento) }}
                                         </p>
                                     </Link>
                                 </li>
                             </ul>
-                            <p v-else class="px-4 py-6 text-center text-sm text-slate-400 dark:text-slate-500">
+                            <p v-else class="px-5 py-6 text-center text-sm text-gray-400">
                                 No hay clientes por vencer.
                             </p>
                         </div>
                     </Transition>
                 </div>
 
-                <!-- User avatar -->
-                <div class="flex items-center gap-2.5">
-                    <div class="w-8 h-8 rounded-full bg-[#2a3182] flex items-center justify-center text-white text-xs font-bold">
-                        {{ user?.name?.charAt(0)?.toUpperCase() ?? 'U' }}
-                    </div>
-                    <div class="hidden sm:block">
-                        <p class="text-xs font-semibold text-slate-700 dark:text-slate-200 leading-tight">{{ user?.name }}</p>
-                        <p class="text-[11px] text-slate-400 dark:text-slate-500 leading-tight">{{ user?.roles[0] ?? '' }}</p>
-                    </div>
+                <!-- User dropdown -->
+                <div class="relative">
+                    <button
+                        class="flex cursor-pointer items-center gap-2.5 rounded-full py-1 pl-1 pr-2 transition-colors hover:bg-gray-100 dark:hover:bg-white/[0.05]"
+                        @click="userMenuOpen = !userMenuOpen"
+                    >
+                        <div class="flex h-9 w-9 items-center justify-center rounded-full bg-brand-500 text-sm font-semibold text-white">
+                            {{ user?.name?.charAt(0)?.toUpperCase() ?? 'U' }}
+                        </div>
+                        <span class="hidden text-sm font-medium text-gray-700 dark:text-gray-300 sm:block">{{ user?.name }}</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="hidden h-4 w-4 text-gray-400 transition-transform sm:block" :class="userMenuOpen ? 'rotate-180' : ''">
+                            <path stroke-linecap="round" stroke-linejoin="round" :d="icons.chevronDown" />
+                        </svg>
+                    </button>
+
+                    <div v-if="userMenuOpen" class="fixed inset-0 z-30" @click="userMenuOpen = false" />
+
+                    <Transition name="fade">
+                        <div
+                            v-if="userMenuOpen"
+                            class="absolute right-0 top-full z-40 mt-3 w-64 rounded-2xl border border-gray-200 bg-white p-3 shadow-theme-lg dark:border-gray-800 dark:bg-gray-900"
+                        >
+                            <div class="border-b border-gray-100 px-2 pb-3 dark:border-gray-800">
+                                <p class="truncate text-sm font-medium text-gray-800 dark:text-white/90">{{ user?.name }}</p>
+                                <p class="truncate text-theme-xs text-gray-400">{{ user?.email }}</p>
+                                <p v-if="user?.roles[0]" class="mt-0.5 truncate text-theme-xs text-gray-400">{{ user?.roles[0] }}</p>
+                            </div>
+                            <button
+                                class="mt-2 flex w-full cursor-pointer items-center gap-3 rounded-lg px-2 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/[0.05]"
+                                @click="logout"
+                            >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" class="h-5 w-5 text-gray-500 dark:text-gray-400">
+                                    <path stroke-linecap="round" stroke-linejoin="round" :d="icons.logout" />
+                                </svg>
+                                Cerrar sesión
+                            </button>
+                        </div>
+                    </Transition>
                 </div>
             </header>
 
             <!-- Flash error banner -->
             <Transition name="slide-down">
-                <div v-if="page.props.flash.error" class="bg-red-50 dark:bg-red-900/30 border-b border-red-200 dark:border-red-800 px-6 py-3 flex items-center gap-2 text-sm text-red-700 dark:text-red-300">
-                    <svg class="w-4 h-4 shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clip-rule="evenodd" /></svg>
+                <div v-if="page.props.flash.error" class="flex items-center gap-2 border-b border-error-200 bg-error-50 px-6 py-3 text-sm text-error-600 dark:border-error-500/30 dark:bg-error-500/15 dark:text-error-400">
+                    <svg class="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clip-rule="evenodd" /></svg>
                     {{ page.props.flash.error }}
                 </div>
             </Transition>
 
             <!-- Content -->
-            <main class="flex-1 p-4 lg:p-6 overflow-auto">
-                <slot />
+            <main class="flex-1 overflow-auto p-4 md:p-6">
+                <div class="mx-auto w-full max-w-[1536px]">
+                    <slot />
+                </div>
             </main>
         </div>
+
+        <!-- FAB: nueva observación, visible en todas las secciones -->
+        <Link
+            v-if="hasPermission('observaciones.edit')"
+            :href="route('observaciones.nuevo')"
+            class="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-brand-500 text-white shadow-theme-lg transition hover:scale-105 hover:bg-brand-600"
+            title="Nueva observación"
+        >
+            <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            <span class="sr-only">Nueva observación</span>
+        </Link>
     </div>
 </template>
 

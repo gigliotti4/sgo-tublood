@@ -59,13 +59,13 @@ const formatFechaVencimiento = (d: string | null) => {
 <template>
     <Head title="Clientes" />
     <AppLayout>
-        <div class="space-y-5">
+        <div class="space-y-6">
 
             <!-- Header -->
-            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h2 class="text-lg font-semibold text-slate-800 dark:text-slate-100">Clientes</h2>
-                    <p class="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                    <h1 class="text-xl font-semibold text-gray-800 dark:text-white/90">Clientes</h1>
+                    <p class="mt-0.5 text-theme-sm text-gray-500 dark:text-gray-400">
                         Última sincronización: {{ formatDate(lastSync) }}
                     </p>
                 </div>
@@ -88,7 +88,7 @@ const formatFechaVencimiento = (d: string | null) => {
             <div class="max-w-sm">
                 <Input v-model="search" type="text" placeholder="Buscar por razón social, CUIT, N°...">
                     <template #icon>
-                        <svg class="w-4 h-4 text-slate-400 dark:text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
                         </svg>
                     </template>
@@ -96,25 +96,25 @@ const formatFechaVencimiento = (d: string | null) => {
             </div>
 
             <!-- Tabla -->
-            <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+            <div class="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
                 <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
+                    <table class="w-full">
                         <thead>
-                            <tr class="border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/40 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                                <th class="px-4 py-3">N°</th>
-                                <th class="px-4 py-3">Razón Social</th>
-                                <th class="px-4 py-3">CUIT</th>
-                                <th class="px-4 py-3">IVA</th>
-                                <th class="px-4 py-3">Localidad</th>
-                                <th class="px-4 py-3">Teléfono</th>
-                                <th class="px-4 py-3">Mail</th>
-                                <th class="px-4 py-3">Vencimiento</th>
+                            <tr class="border-b border-gray-100 dark:border-gray-800">
+                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">N°</th>
+                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Razón Social</th>
+                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">CUIT</th>
+                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">IVA</th>
+                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Localidad</th>
+                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Teléfono</th>
+                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Mail</th>
+                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Vencimiento</th>
                                 <th v-if="hasPermission('clientes.edit')" class="px-4 py-3" />
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
+                        <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
                             <tr v-if="clientes.data.length === 0">
-                                <td colspan="9" class="px-4 py-12 text-center text-slate-400 dark:text-slate-500 text-sm">
+                                <td colspan="9" class="px-4 py-12 text-center text-sm text-gray-400">
                                     <template v-if="search">
                                         No se encontraron clientes para "<span class="font-medium">{{ search }}</span>".
                                     </template>
@@ -126,32 +126,32 @@ const formatFechaVencimiento = (d: string | null) => {
                             <tr
                                 v-for="cliente in clientes.data"
                                 :key="cliente.id"
-                                class="hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors"
+                                class="transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
                             >
-                                <td class="px-4 py-3 font-mono text-slate-500 dark:text-slate-400 text-xs">{{ cliente.numero }}</td>
-                                <td class="px-4 py-3 font-medium text-slate-800 dark:text-slate-100">
+                                <td class="px-4 py-3.5 font-mono text-theme-xs text-gray-500 dark:text-gray-400">{{ cliente.numero }}</td>
+                                <td class="px-4 py-3.5 text-theme-sm font-medium text-gray-800 dark:text-white/90">
                                     {{ cliente.razon_social }}
-                                    <span v-if="cliente.nombre_fantasia" class="block text-xs text-slate-400 dark:text-slate-500 font-normal">
+                                    <span v-if="cliente.nombre_fantasia" class="block text-theme-xs font-normal text-gray-400">
                                         {{ cliente.nombre_fantasia }}
                                     </span>
                                 </td>
-                                <td class="px-4 py-3 font-mono text-slate-600 dark:text-slate-300 text-xs">{{ cliente.cuit ?? '—' }}</td>
-                                <td class="px-4 py-3 text-slate-500 dark:text-slate-400 text-xs">{{ cliente.descripcion_iva ?? '—' }}</td>
-                                <td class="px-4 py-3 text-slate-600 dark:text-slate-300 text-xs">
+                                <td class="px-4 py-3.5 font-mono text-theme-xs text-gray-600 dark:text-gray-300">{{ cliente.cuit ?? '—' }}</td>
+                                <td class="px-4 py-3.5 text-theme-xs text-gray-500 dark:text-gray-400">{{ cliente.descripcion_iva ?? '—' }}</td>
+                                <td class="px-4 py-3.5 text-theme-xs text-gray-600 dark:text-gray-300">
                                     {{ [cliente.localidad, cliente.descripcion_provincia].filter(Boolean).join(', ') || '—' }}
                                 </td>
-                                <td class="px-4 py-3 text-slate-500 dark:text-slate-400 text-xs">{{ cliente.telefono || '—' }}</td>
-                                <td class="px-4 py-3 text-slate-500 dark:text-slate-400 text-xs truncate max-w-45">
-                                    <a v-if="cliente.mail" :href="`mailto:${cliente.mail}`" class="hover:text-[#2a3182] dark:hover:text-indigo-300 hover:underline">
+                                <td class="px-4 py-3.5 text-theme-xs text-gray-500 dark:text-gray-400">{{ cliente.telefono || '—' }}</td>
+                                <td class="max-w-45 truncate px-4 py-3.5 text-theme-xs text-gray-500 dark:text-gray-400">
+                                    <a v-if="cliente.mail" :href="`mailto:${cliente.mail}`" class="hover:text-brand-500 hover:underline dark:hover:text-brand-300">
                                         {{ cliente.mail }}
                                     </a>
                                     <span v-else>—</span>
                                 </td>
-                                <td class="px-4 py-3 text-slate-500 dark:text-slate-400 text-xs">{{ formatFechaVencimiento(cliente.fecha_vencimiento) }}</td>
-                                <td v-if="hasPermission('clientes.edit')" class="px-4 py-3 text-right">
+                                <td class="px-4 py-3.5 text-theme-xs text-gray-500 dark:text-gray-400">{{ formatFechaVencimiento(cliente.fecha_vencimiento) }}</td>
+                                <td v-if="hasPermission('clientes.edit')" class="px-4 py-3.5 text-right">
                                     <Link
                                         :href="route('clientes.edit', cliente.id)"
-                                        class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 text-xs font-medium"
+                                        class="text-theme-sm font-medium text-brand-500 hover:text-brand-600 dark:text-brand-300 dark:hover:text-brand-200"
                                     >
                                         Editar
                                     </Link>
@@ -162,7 +162,7 @@ const formatFechaVencimiento = (d: string | null) => {
                 </div>
 
                 <!-- Footer: total + paginación -->
-                <div class="px-4 py-3 border-t border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
+                <div class="flex flex-col gap-3 border-t border-gray-100 px-4 py-3.5 text-theme-sm text-gray-500 dark:border-gray-800 dark:text-gray-400 sm:flex-row sm:items-center sm:justify-between">
                     <span>{{ clientes.total }} cliente{{ clientes.total !== 1 ? 's' : '' }} encontrado{{ clientes.total !== 1 ? 's' : '' }}</span>
                     <Pagination :links="clientes.links" />
                 </div>

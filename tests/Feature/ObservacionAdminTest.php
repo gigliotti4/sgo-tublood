@@ -284,6 +284,7 @@ class ObservacionAdminTest extends TestCase
                     'producto' => 'Guía de infusión',
                     'codigo' => 'GUIA-123',
                     'cantidad_afectada' => 3,
+                    'tipo_presentacion' => 'presentacion_venta',
                     'lote' => 'L-123',
                     'fecha_vencimiento' => '2027-01-01',
                     'numero_remito' => 'R-999',
@@ -300,6 +301,7 @@ class ObservacionAdminTest extends TestCase
         $this->assertSame($sector->id, $observacion->sector_id);
         $this->assertSame('Clínica Test', $observacion->institucion);
         $this->assertNull($observacion->contacto_nombre);
+        $this->assertSame($user->id, $observacion->created_by);
         $this->assertCount(1, $observacion->productos);
     }
 
@@ -469,5 +471,141 @@ class ObservacionAdminTest extends TestCase
         $this->actingAs($user)
             ->put("/observaciones/{$observacion->id}", ['estado' => 'no_existe'])
             ->assertSessionHasErrors('estado');
+    }
+
+    public function test_store_interna_guarda_cliente_y_vincula_por_numero(): void
+    {
+        $cliente = Cliente::create([
+            'numero' => '456',
+            'razon_social' => 'Cliente Vinculable SA',
+            'mail' => 'contacto@vinculable.com',
+        ]);
+
+        $user = $this->userWith('observaciones.edit');
+        $sector = Sector::create(['nombre' => 'Garantía de Calidad', 'slug' => 'garantia_calidad']);
+
+        $this->actingAs($user)
+            ->post('/observaciones', [
+                'origen' => 'interna',
+                'sector_id' => $sector->id,
+                'tipo' => 'disconformidad_servicio',
+                'titulo' => 'Reclamo cargado a mano',
+                'descripcion' => 'Cliente disconforme con la entrega.',
+                'prioridad' => 'alta',
+                'tipo_caso' => 'Producto defectuoso',
+                'contacto_numero_cliente' => '456',
+                'contacto_nombre' => 'Cliente Vinculable SA',
+                'contacto_email' => 'contacto@vinculable.com',
+            ])
+            ->assertRedirect(route('observaciones.index'));
+
+        $observacion = Observacion::first();
+        $this->assertSame('456', $observacion->contacto_numero_cliente);
+        $this->assertSame('Cliente Vinculable SA', $observacion->contacto_nombre);
+        $this->assertSame('contacto@vinculable.com', $observacion->contacto_email);
+        $this->assertSame($cliente->id, $observacion->cliente_id);
+    }
+
+    /** Alta mínima para los tests del buscador. */
+    private function observacion(array $attrs = []): Observacion
+    {
+        static $correlativo = 0;
+        $correlativo++;
+
+        return Observacion::create([
+            'numero' => sprintf('%04d-26', $correlativo),
+            'anio' => 2026,
+            'tipo' => 'falla_producto',
+            'estado' => 'pendiente_clasificacion',
+            'contacto_nombre' => 'Cliente Test',
+            'contacto_email' => 'cliente@example.com',
+            'titulo' => 'Título de prueba',
+            'descripcion' => 'Descripción de prueba',
+            ...$attrs,
+        ]);
+    }
+
+    public function test_buscador_texto_libre_encuentra_por_codigo_de_producto(): void
+    {
+        $conProducto = $this->observacion(['titulo' => 'Con producto']);
+        $conProducto->productos()->create([
+            'producto' => 'Guía de infusión',
+            'codigo' => 'GUIA-123',
+            'cantidad_afectada' => 1,
+            'lote' => 'L-1',
+            'fecha_vencimiento' => '2027-01-01',
+            'numero_remito' => 'R-1',
+            'tipo_comprobante' => 'remito',
+        ]);
+        $this->observacion(['titulo' => 'Sin producto']);
+
+        $user = $this->userWith('observaciones.view');
+
+        $this->actingAs($user)->get('/observaciones?q=GUIA-123')
+            ->assertInertia(fn ($page) => $page
+                ->has('observaciones.data', 1)
+                ->where('observaciones.data.0.titulo', 'Con producto')
+                ->where('filters.q', 'GUIA-123')
+            );
+    }
+
+    public function test_buscador_filtra_abiertas_y_cerradas(): void
+    {
+        $this->observacion(['titulo' => 'En gestión', 'estado' => 'en_proceso']);
+        $this->observacion(['titulo' => 'Terminada', 'estado' => 'cerrada']);
+
+        $user = $this->userWith('observaciones.view');
+
+        $this->actingAs($user)->get('/observaciones?apertura=abierta')
+            ->assertInertia(fn ($page) => $page
+                ->has('observaciones.data', 1)
+                ->where('observaciones.data.0.titulo', 'En gestión')
+            );
+
+        $this->actingAs($user)->get('/observaciones?apertura=cerrada')
+            ->assertInertia(fn ($page) => $page
+                ->has('observaciones.data', 1)
+                ->where('observaciones.data.0.titulo', 'Terminada')
+            );
+    }
+
+    public function test_buscador_filtra_por_responsable_origen_y_fecha(): void
+    {
+        $responsable = User::factory()->create();
+        $this->observacion([
+            'titulo' => 'La buscada',
+            'origen' => 'interna',
+            'responsable_id' => $responsable->id,
+        ]);
+        $this->observacion(['titulo' => 'Otra', 'origen' => 'externa']);
+
+        $user = $this->userWith('observaciones.view');
+
+        $this->actingAs($user)
+            ->get("/observaciones?origen=interna&responsable_id={$responsable->id}&desde=".now()->toDateString())
+            ->assertInertia(fn ($page) => $page
+                ->has('observaciones.data', 1)
+                ->where('observaciones.data.0.titulo', 'La buscada')
+            );
+
+        // Un rango de fechas que no incluye hoy no devuelve nada.
+        $this->actingAs($user)
+            ->get('/observaciones?hasta='.now()->subDay()->toDateString())
+            ->assertInertia(fn ($page) => $page->has('observaciones.data', 0));
+    }
+
+    public function test_buscador_filtra_por_creador(): void
+    {
+        $creador = User::factory()->create();
+        $this->observacion(['titulo' => 'Cargada por él', 'created_by' => $creador->id]);
+        $this->observacion(['titulo' => 'Del portal']);
+
+        $user = $this->userWith('observaciones.view');
+
+        $this->actingAs($user)->get("/observaciones?creado_por={$creador->id}")
+            ->assertInertia(fn ($page) => $page
+                ->has('observaciones.data', 1)
+                ->where('observaciones.data.0.titulo', 'Cargada por él')
+            );
     }
 }

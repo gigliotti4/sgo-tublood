@@ -7,7 +7,7 @@ use App\Support\TaxonomiaIncidencias;
 
 class DashboardController extends Controller
 {
-    private const ESTADOS_ABIERTOS = ['pendiente_clasificacion', 'clasificada', 'en_proceso', 'derivada'];
+    private const ESTADOS_ABIERTOS = Observacion::ESTADOS_ABIERTOS;
 
     private const ESTADOS_RESUELTOS = ['resuelta', 'cerrada'];
 

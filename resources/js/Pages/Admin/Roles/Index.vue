@@ -35,40 +35,44 @@ const destroy = () => {
     <Head title="Roles" />
 
     <AppLayout>
-        <div class="flex justify-between items-center mb-6">
-            <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-100">Roles</h1>
+        <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
+            <div>
+                <h1 class="text-xl font-semibold text-gray-800 dark:text-white/90">Roles</h1>
+                <p class="mt-0.5 text-theme-sm text-gray-500 dark:text-gray-400">Roles y permisos del sistema</p>
+            </div>
             <Link
                 v-if="hasPermission('roles.create')"
                 :href="route('roles.create')"
-                class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-indigo-700 transition"
+                class="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white shadow-theme-xs transition hover:bg-brand-600"
             >
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
                 Nuevo rol
             </Link>
         </div>
 
-        <div class="bg-white dark:bg-slate-800 rounded-xl shadow overflow-hidden">
-            <table class="w-full text-sm">
-                <thead class="bg-gray-50 dark:bg-slate-700/40 text-gray-500 dark:text-slate-400 uppercase text-xs">
-                    <tr>
-                        <th class="px-6 py-3 text-left">Nombre</th>
-                        <th class="px-6 py-3 text-left">Permisos</th>
-                        <th class="px-6 py-3 text-left">Acciones</th>
+        <div class="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b border-gray-100 dark:border-gray-800">
+                        <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Nombre</th>
+                        <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Permisos</th>
+                        <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Acciones</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-100 dark:divide-slate-700">
-                    <tr v-for="role in roles.data" :key="role.id" class="hover:bg-gray-50 dark:hover:bg-slate-700/40">
-                        <td class="px-6 py-4 font-medium text-gray-800 dark:text-slate-100">{{ role.name }}</td>
-                        <td class="px-6 py-4">
+                <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+                    <tr v-for="role in roles.data" :key="role.id" class="transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]">
+                        <td class="px-6 py-3.5 text-theme-sm font-medium text-gray-800 dark:text-white/90">{{ role.name }}</td>
+                        <td class="px-6 py-3.5">
                             <Badge v-for="perm in role.permissions" :key="perm.name" variant="slate" :pill="false">
                                 {{ perm.name }}
                             </Badge>
-                            <span v-if="role.permissions.length === 0" class="text-gray-400 dark:text-slate-500">Sin permisos</span>
+                            <span v-if="role.permissions.length === 0" class="text-theme-sm text-gray-400">Sin permisos</span>
                         </td>
-                        <td class="px-6 py-4 flex gap-3">
+                        <td class="flex gap-3 px-6 py-3.5 text-theme-sm">
                             <Link
                                 v-if="hasPermission('roles.edit')"
                                 :href="route('roles.edit', role.id)"
-                                class="text-blue-600 dark:text-blue-400 hover:underline"
+                                class="font-medium text-brand-500 hover:text-brand-600 dark:text-brand-300 dark:hover:text-brand-200"
                             >
                                 Editar
                             </Link>
@@ -82,7 +86,7 @@ const destroy = () => {
                         </td>
                     </tr>
                     <tr v-if="roles.data.length === 0">
-                        <td colspan="3" class="px-6 py-8 text-center text-gray-400 dark:text-slate-500">No hay roles.</td>
+                        <td colspan="3" class="px-6 py-10 text-center text-sm text-gray-400">No hay roles.</td>
                     </tr>
                 </tbody>
             </table>
@@ -98,11 +102,9 @@ const destroy = () => {
             <p class="text-sm text-gray-600 dark:text-gray-300">
                 ¿Eliminar el rol <strong>{{ roleToDelete?.name }}</strong>? Esta acción no se puede deshacer.
             </p>
-            <div class="flex gap-3 mt-6">
+            <div class="mt-6 flex gap-3">
                 <Button variant="danger" @click="destroy">Eliminar</Button>
-                <button class="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200" @click="roleToDelete = null">
-                    Cancelar
-                </button>
+                <Button variant="outline" @click="roleToDelete = null">Cancelar</Button>
             </div>
         </Modal>
     </AppLayout>

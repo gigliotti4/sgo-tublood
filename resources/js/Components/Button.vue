@@ -1,17 +1,20 @@
 <script setup lang="ts">
 withDefaults(defineProps<{
-    variant?: 'primary' | 'brand' | 'danger' | 'danger-text'
+    variant?: 'primary' | 'brand' | 'outline' | 'danger' | 'danger-text'
     type?: 'button' | 'submit'
 }>(), {
     variant: 'primary',
     type: 'button',
 })
 
+const base = 'inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50'
+
 const variantClasses: Record<string, string> = {
-    primary: 'bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition',
-    brand: 'inline-flex items-center gap-2 bg-[#2a3182] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#1e2460] disabled:opacity-60 disabled:cursor-not-allowed transition-colors',
-    danger: 'bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition',
-    'danger-text': 'text-red-600 dark:text-red-400 hover:underline text-sm',
+    primary: `${base} bg-brand-500 text-white shadow-theme-xs hover:bg-brand-600`,
+    brand: `${base} bg-brand-500 text-white shadow-theme-xs hover:bg-brand-600`,
+    outline: `${base} border border-gray-300 bg-white text-gray-700 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-white/[0.05]`,
+    danger: `${base} bg-error-500 text-white shadow-theme-xs hover:bg-error-600`,
+    'danger-text': 'text-sm font-medium text-error-600 hover:text-error-700 hover:underline dark:text-error-400 disabled:cursor-not-allowed disabled:opacity-50',
 }
 </script>
 

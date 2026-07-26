@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Portal;
 use App\Http\Controllers\Controller;
 use App\Models\Cliente;
 use App\Models\Observacion;
+use App\Models\ObservationProduct;
 use App\Models\Sector;
 use App\Models\User;
 use App\Notifications\ObservacionExternaRecibidaNotification;
@@ -31,6 +32,7 @@ class ObservacionController extends Controller
     {
         return inertia('Portal/CargarObservacion', [
             'provincias' => self::PROVINCIAS,
+            'presentaciones' => ObservationProduct::PRESENTACIONES,
             'tipoOptions' => [
                 ['value' => 'falla_producto', 'label' => 'Falla de Producto'],
                 ['value' => 'disconformidad_servicio', 'label' => 'Disconformidad de Servicio'],
@@ -60,6 +62,7 @@ class ObservacionController extends Controller
             'productos.*.producto' => ['required', 'string', 'max:255'],
             'productos.*.codigo' => ['required', 'string', 'max:255'],
             'productos.*.cantidad_afectada' => ['required', 'integer', 'min:1'],
+            'productos.*.tipo_presentacion' => ['required', 'in:'.implode(',', array_keys(ObservationProduct::PRESENTACIONES))],
             'productos.*.lote' => ['required', 'string', 'max:255'],
             'productos.*.fecha_vencimiento' => ['required', 'date'],
             'productos.*.numero_remito' => ['required', 'string', 'max:255'],

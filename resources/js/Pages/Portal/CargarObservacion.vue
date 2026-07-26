@@ -1,6 +1,12 @@
 <script setup lang="ts">
-import { Head, Link, useForm } from '@inertiajs/vue3'
-import { ref } from 'vue'
+import { Head, Link, useForm, usePage } from '@inertiajs/vue3'
+import { computed, ref } from 'vue'
+import type { PageProps } from '@/types'
+
+const page = usePage<PageProps>()
+
+// Lo deja el handler de 419 de bootstrap/app.php si el form expiró.
+const flashError = computed(() => page.props.flash?.error)
 
 interface TipoOption { value: string; label: string }
 
@@ -8,6 +14,7 @@ interface ProductoForm {
     producto: string
     codigo: string
     cantidad_afectada: number | null
+    tipo_presentacion: string
     lote: string
     fecha_vencimiento: string
     numero_remito: string
@@ -16,6 +23,7 @@ interface ProductoForm {
 
 const props = defineProps<{
     provincias: string[]
+    presentaciones: Record<string, string>
     tipoOptions: TipoOption[]
 }>()
 
@@ -23,6 +31,7 @@ const nuevoProducto = (): ProductoForm => ({
     producto: '',
     codigo: '',
     cantidad_afectada: null,
+    tipo_presentacion: '',
     lote: '',
     fecha_vencimiento: '',
     numero_remito: '',
@@ -48,8 +57,45 @@ const form = useForm({
 const agregarProducto = () => form.productos.push(nuevoProducto())
 const quitarProducto = (index: number) => form.productos.splice(index, 1)
 
+/**
+ * La fecha de vencimiento se tipea como dd/mm/aaaa (un input de texto, no el
+ * date picker del navegador). Mientras se escribe se van intercalando las
+ * barras, y al enviar se convierte a aaaa-mm-dd, que es lo que valida el
+ * backend (regla `date`). Si lo tipeado no forma una fecha completa se manda
+ * tal cual y el backend la rechaza con su mensaje de validación.
+ */
+const tipearFecha = (producto: ProductoForm, e: Event) => {
+    const input = e.target as HTMLInputElement
+    const digitos = input.value.replace(/\D/g, '').slice(0, 8)
+
+    let out = digitos
+    if (digitos.length > 4) out = `${digitos.slice(0, 2)}/${digitos.slice(2, 4)}/${digitos.slice(4)}`
+    else if (digitos.length > 2) out = `${digitos.slice(0, 2)}/${digitos.slice(2)}`
+
+    producto.fecha_vencimiento = out
+    input.value = out
+}
+
+const aFechaISO = (valor: string) => {
+    const m = valor.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+    return m ? `${m[3]}-${m[2]}-${m[1]}` : valor
+}
+
+form.transform(data => ({
+    ...data,
+    productos: data.productos.map(p => ({ ...p, fecha_vencimiento: aFechaISO(p.fecha_vencimiento) })),
+}))
+
 const errorProducto = (index: number, campo: keyof ProductoForm) =>
     (form.errors as Record<string, string>)[`productos.${index}.${campo}`]
+
+// El portal es siempre claro (sin dark:), por eso no reusa los componentes del panel.
+const inputClass = (error?: string) => [
+    'h-11 w-full rounded-lg border bg-white px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs transition placeholder:text-gray-400 focus:outline-none focus:ring-3',
+    error
+        ? 'border-error-300 focus:border-error-300 focus:ring-error-500/10'
+        : 'border-gray-300 focus:border-brand-300 focus:ring-brand-500/10',
+]
 
 const isDragging = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
@@ -74,174 +120,186 @@ const submit = () => form.post(route('observaciones.public.store'), { forceFormD
 <template>
     <Head title="Cargar observación" />
 
-    <div class="min-h-screen bg-slate-50 px-4 py-10">
-        <div class="max-w-2xl mx-auto">
+    <div class="min-h-screen bg-gray-50 px-4 py-10 font-outfit">
+        <div class="mx-auto max-w-2xl">
             <!-- Encabezado -->
-            <div class="bg-linear-to-br from-indigo-950 via-indigo-900 to-slate-900 rounded-2xl p-8 mb-6 text-center shadow-lg shadow-indigo-900/20">
-                <h1 class="text-white font-bold text-2xl">📋 Cargar observación</h1>
-                <p class="text-indigo-300 text-sm mt-1">Espacio exclusivo para clientes</p>
+            <div class="mb-6 rounded-2xl bg-linear-to-br from-brand-900 via-brand-700 to-brand-500 p-8 text-center shadow-theme-lg">
+                <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-white/15">
+                    <svg class="h-6 w-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                    </svg>
+                </div>
+                <h1 class="text-2xl font-bold text-white">Cargar observación</h1>
+                <p class="mt-1 text-sm text-brand-200">Espacio exclusivo para clientes de Tublood</p>
             </div>
 
-            <form @submit.prevent="submit" class="bg-white rounded-2xl shadow p-6 sm:p-8 space-y-8">
+            <!-- Aviso de formulario expirado (419) -->
+            <div
+                v-if="flashError"
+                class="mb-5 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-3 text-sm text-amber-800"
+            >
+                <svg class="mt-0.5 h-4 w-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                </svg>
+                {{ flashError }}
+            </div>
+
+            <form @submit.prevent="submit" class="space-y-8 rounded-2xl border border-gray-200 bg-white p-6 shadow-theme-sm sm:p-8">
                 <!-- Tipo -->
-                <section class="space-y-4">
-                    <h2 class="text-sm font-semibold text-slate-800 border-b border-slate-100 pb-2">Tipo</h2>
-                    <div class="space-y-1.5">
-                        <label for="tipo" class="block text-sm font-medium text-slate-700">
-                            Tipo <span class="text-red-500">*</span>
+                <section class="space-y-5">
+                    <h2 class="border-b border-gray-100 pb-3 text-base font-semibold text-gray-800">Tipo</h2>
+                    <div>
+                        <label for="tipo" class="mb-1.5 block text-sm font-medium text-gray-700">
+                            Tipo <span class="text-error-500">*</span>
                         </label>
                         <select
                             id="tipo"
                             v-model="form.tipo"
-                            class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                            :class="form.errors.tipo ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
+                            :class="inputClass(form.errors.tipo)"
                         >
                             <option value="" disabled>— Seleccionar —</option>
                             <option v-for="opt in props.tipoOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
                         </select>
-                        <p v-if="form.errors.tipo" class="text-red-500 text-xs">{{ form.errors.tipo }}</p>
+                        <p v-if="form.errors.tipo" class="mt-1.5 text-xs text-error-500">{{ form.errors.tipo }}</p>
                     </div>
                 </section>
 
                 <!-- Tus datos -->
-                <section class="space-y-4">
-                    <h2 class="text-sm font-semibold text-slate-800 border-b border-slate-100 pb-2">Tus datos</h2>
-                    <div class="grid sm:grid-cols-3 gap-4">
-                        <div class="space-y-1.5 sm:col-span-1">
-                            <label for="contacto_nombre" class="block text-sm font-medium text-slate-700">
-                                Nombre / Razón social <span class="text-red-500">*</span>
+                <section class="space-y-5">
+                    <h2 class="border-b border-gray-100 pb-3 text-base font-semibold text-gray-800">Tus datos</h2>
+                    <div class="grid gap-5 sm:grid-cols-3">
+                        <div class="sm:col-span-1">
+                            <label for="contacto_nombre" class="mb-1.5 block text-sm font-medium text-gray-700">
+                                Nombre / Razón social <span class="text-error-500">*</span>
                             </label>
                             <input
                                 id="contacto_nombre"
                                 v-model="form.contacto_nombre"
                                 type="text"
-                                class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                :class="form.errors.contacto_nombre ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
+                                :class="inputClass(form.errors.contacto_nombre)"
                             />
-                            <p v-if="form.errors.contacto_nombre" class="text-red-500 text-xs">{{ form.errors.contacto_nombre }}</p>
+                            <p v-if="form.errors.contacto_nombre" class="mt-1.5 text-xs text-error-500">{{ form.errors.contacto_nombre }}</p>
                         </div>
 
-                        <div class="space-y-1.5">
-                            <label for="contacto_email" class="block text-sm font-medium text-slate-700">
-                                Email <span class="text-red-500">*</span>
+                        <div>
+                            <label for="contacto_email" class="mb-1.5 block text-sm font-medium text-gray-700">
+                                Email <span class="text-error-500">*</span>
                             </label>
                             <input
                                 id="contacto_email"
                                 v-model="form.contacto_email"
                                 type="email"
-                                class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                :class="form.errors.contacto_email ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
+                                :class="inputClass(form.errors.contacto_email)"
                             />
-                            <p v-if="form.errors.contacto_email" class="text-red-500 text-xs">{{ form.errors.contacto_email }}</p>
+                            <p v-if="form.errors.contacto_email" class="mt-1.5 text-xs text-error-500">{{ form.errors.contacto_email }}</p>
                         </div>
 
-                        <div class="space-y-1.5">
-                            <label for="contacto_numero_cliente" class="block text-sm font-medium text-slate-700">N° cliente</label>
+                        <div>
+                            <label for="contacto_numero_cliente" class="mb-1.5 block text-sm font-medium text-gray-700">N° cliente</label>
                             <input
                                 id="contacto_numero_cliente"
                                 v-model="form.contacto_numero_cliente"
                                 type="text"
-                                class="w-full px-3 py-2.5 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                :class="inputClass()"
                             />
                         </div>
                     </div>
 
-                    <div class="space-y-1.5 sm:w-1/3">
-                        <label for="contacto_telefono" class="block text-sm font-medium text-slate-700">Teléfono</label>
+                    <div class="sm:w-1/3">
+                        <label for="contacto_telefono" class="mb-1.5 block text-sm font-medium text-gray-700">Teléfono</label>
                         <input
                             id="contacto_telefono"
                             v-model="form.contacto_telefono"
                             type="text"
-                            class="w-full px-3 py-2.5 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            :class="inputClass()"
                         />
                     </div>
                 </section>
 
                 <!-- Detalle -->
-                <section class="space-y-4">
-                    <h2 class="text-sm font-semibold text-slate-800 border-b border-slate-100 pb-2">Detalle</h2>
+                <section class="space-y-5">
+                    <h2 class="border-b border-gray-100 pb-3 text-base font-semibold text-gray-800">Detalle</h2>
 
-                    <div class="space-y-1.5">
-                        <label for="titulo" class="block text-sm font-medium text-slate-700">
-                            Título <span class="text-red-500">*</span>
+                    <div>
+                        <label for="titulo" class="mb-1.5 block text-sm font-medium text-gray-700">
+                            Título <span class="text-error-500">*</span>
                         </label>
                         <input
                             id="titulo"
                             v-model="form.titulo"
                             type="text"
-                            class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                            :class="form.errors.titulo ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
+                            :class="inputClass(form.errors.titulo)"
                         />
-                        <p v-if="form.errors.titulo" class="text-red-500 text-xs">{{ form.errors.titulo }}</p>
+                        <p v-if="form.errors.titulo" class="mt-1.5 text-xs text-error-500">{{ form.errors.titulo }}</p>
                     </div>
 
-                    <div class="space-y-1.5">
-                        <label for="descripcion" class="block text-sm font-medium text-slate-700">
-                            Descripción <span class="text-red-500">*</span>
+                    <div>
+                        <label for="descripcion" class="mb-1.5 block text-sm font-medium text-gray-700">
+                            Descripción <span class="text-error-500">*</span>
                         </label>
                         <textarea
                             id="descripcion"
                             v-model="form.descripcion"
                             rows="4"
-                            class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                            :class="form.errors.descripcion ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
+                            class="w-full rounded-lg border bg-white px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs transition placeholder:text-gray-400 focus:outline-none focus:ring-3"
+                            :class="form.errors.descripcion
+                                ? 'border-error-300 focus:border-error-300 focus:ring-error-500/10'
+                                : 'border-gray-300 focus:border-brand-300 focus:ring-brand-500/10'"
                         />
-                        <p v-if="form.errors.descripcion" class="text-red-500 text-xs">{{ form.errors.descripcion }}</p>
+                        <p v-if="form.errors.descripcion" class="mt-1.5 text-xs text-error-500">{{ form.errors.descripcion }}</p>
                     </div>
                 </section>
 
                 <!-- Falla de Producto -->
-                <section v-if="form.tipo === 'falla_producto'" class="space-y-4">
-                    <h2 class="text-sm font-semibold text-slate-800 border-b border-slate-100 pb-2">Falla de Producto</h2>
+                <section v-if="form.tipo === 'falla_producto'" class="space-y-5">
+                    <h2 class="border-b border-gray-100 pb-3 text-base font-semibold text-gray-800">Falla de Producto</h2>
 
-                    <div class="grid sm:grid-cols-2 gap-4">
-                        <div class="space-y-1.5">
-                            <label for="institucion" class="block text-sm font-medium text-slate-700">
-                                Institución <span class="text-red-500">*</span>
+                    <div class="grid gap-5 sm:grid-cols-2">
+                        <div>
+                            <label for="institucion" class="mb-1.5 block text-sm font-medium text-gray-700">
+                                Institución <span class="text-error-500">*</span>
                             </label>
                             <input
                                 id="institucion"
                                 v-model="form.institucion"
                                 type="text"
-                                class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                :class="form.errors.institucion ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
+                                :class="inputClass(form.errors.institucion)"
                             />
-                            <p v-if="form.errors.institucion" class="text-red-500 text-xs">{{ form.errors.institucion }}</p>
+                            <p v-if="form.errors.institucion" class="mt-1.5 text-xs text-error-500">{{ form.errors.institucion }}</p>
                         </div>
 
-                        <div class="space-y-1.5">
-                            <label for="provincia" class="block text-sm font-medium text-slate-700">
-                                Provincia <span class="text-red-500">*</span>
+                        <div>
+                            <label for="provincia" class="mb-1.5 block text-sm font-medium text-gray-700">
+                                Provincia <span class="text-error-500">*</span>
                             </label>
                             <select
                                 id="provincia"
                                 v-model="form.provincia"
-                                class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                :class="form.errors.provincia ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
+                                :class="inputClass(form.errors.provincia)"
                             >
                                 <option value="" disabled>— Seleccionar —</option>
                                 <option v-for="p in props.provincias" :key="p" :value="p">{{ p }}</option>
                             </select>
-                            <p v-if="form.errors.provincia" class="text-red-500 text-xs">{{ form.errors.provincia }}</p>
+                            <p v-if="form.errors.provincia" class="mt-1.5 text-xs text-error-500">{{ form.errors.provincia }}</p>
                         </div>
 
-                        <div class="space-y-1.5">
-                            <label for="equipamiento" class="block text-sm font-medium text-slate-700">Equipamiento utilizado</label>
+                        <div>
+                            <label for="equipamiento" class="mb-1.5 block text-sm font-medium text-gray-700">Equipamiento utilizado</label>
                             <input
                                 id="equipamiento"
                                 v-model="form.equipamiento"
                                 type="text"
-                                class="w-full px-3 py-2.5 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                :class="inputClass()"
                             />
                         </div>
 
-                        <div class="space-y-1.5">
-                            <label for="ejecutivo_cuenta" class="block text-sm font-medium text-slate-700">Ejecutivo de cuenta a cargo</label>
+                        <div>
+                            <label for="ejecutivo_cuenta" class="mb-1.5 block text-sm font-medium text-gray-700">Ejecutivo de cuenta a cargo</label>
                             <input
                                 id="ejecutivo_cuenta"
                                 v-model="form.ejecutivo_cuenta"
                                 type="text"
-                                class="w-full px-3 py-2.5 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                :class="inputClass()"
                             />
                         </div>
                     </div>
@@ -251,128 +309,142 @@ const submit = () => form.post(route('observaciones.public.store'), { forceFormD
                         <div
                             v-for="(producto, index) in form.productos"
                             :key="index"
-                            class="rounded-xl border border-slate-200 p-4 space-y-4"
+                            class="space-y-4 rounded-xl border border-gray-200 bg-gray-50 p-4"
                         >
                             <div class="flex items-center justify-between">
-                                <span class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Producto {{ index + 1 }}</span>
+                                <span class="text-theme-xs font-medium uppercase tracking-wide text-gray-500">Producto {{ index + 1 }}</span>
                                 <button
                                     v-if="form.productos.length > 1"
                                     type="button"
-                                    class="text-xs text-red-500 hover:text-red-600"
+                                    class="cursor-pointer text-theme-xs font-medium text-error-500 hover:text-error-600"
                                     @click="quitarProducto(index)"
                                 >
                                     Quitar
                                 </button>
                             </div>
 
-                            <div class="grid sm:grid-cols-2 gap-4">
-                                <div class="space-y-1.5">
-                                    <label :for="`producto-${index}-producto`" class="block text-sm font-medium text-slate-700">
-                                        Producto <span class="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        :id="`producto-${index}-producto`"
-                                        v-model="producto.producto"
-                                        type="text"
-                                        class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                        :class="errorProducto(index, 'producto') ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
-                                    />
-                                    <p v-if="errorProducto(index, 'producto')" class="text-red-500 text-xs">{{ errorProducto(index, 'producto') }}</p>
-                                </div>
-
-                                <div class="space-y-1.5">
-                                    <label :for="`producto-${index}-codigo`" class="block text-sm font-medium text-slate-700">
-                                        Código <span class="text-red-500">*</span>
+                            <div class="grid gap-5 sm:grid-cols-2">
+                                <div>
+                                    <label :for="`producto-${index}-codigo`" class="mb-1.5 block text-sm font-medium text-gray-700">
+                                        Código de producto <span class="text-error-500">*</span>
                                     </label>
                                     <input
                                         :id="`producto-${index}-codigo`"
                                         v-model="producto.codigo"
                                         type="text"
-                                        class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                        :class="errorProducto(index, 'codigo') ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
+                                        :class="inputClass(errorProducto(index, 'codigo'))"
                                     />
-                                    <p v-if="errorProducto(index, 'codigo')" class="text-red-500 text-xs">{{ errorProducto(index, 'codigo') }}</p>
+                                    <p v-if="errorProducto(index, 'codigo')" class="mt-1.5 text-xs text-error-500">{{ errorProducto(index, 'codigo') }}</p>
                                 </div>
 
-                                <div class="space-y-1.5">
-                                    <label :for="`producto-${index}-cantidad`" class="block text-sm font-medium text-slate-700">
-                                        Cantidad afectada <span class="text-red-500">*</span>
+                                <div>
+                                    <label :for="`producto-${index}-producto`" class="mb-1.5 block text-sm font-medium text-gray-700">
+                                        Nombre de producto <span class="text-error-500">*</span>
+                                    </label>
+                                    <input
+                                        :id="`producto-${index}-producto`"
+                                        v-model="producto.producto"
+                                        type="text"
+                                        :class="inputClass(errorProducto(index, 'producto'))"
+                                    />
+                                    <p v-if="errorProducto(index, 'producto')" class="mt-1.5 text-xs text-error-500">{{ errorProducto(index, 'producto') }}</p>
+                                </div>
+
+                                <div>
+                                    <label :for="`producto-${index}-cantidad`" class="mb-1.5 block text-sm font-medium text-gray-700">
+                                        Cantidad afectada <span class="text-error-500">*</span>
                                     </label>
                                     <input
                                         :id="`producto-${index}-cantidad`"
                                         v-model.number="producto.cantidad_afectada"
                                         type="number"
                                         min="1"
-                                        class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                        :class="errorProducto(index, 'cantidad_afectada') ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
+                                        :class="inputClass(errorProducto(index, 'cantidad_afectada'))"
                                     />
-                                    <p v-if="errorProducto(index, 'cantidad_afectada')" class="text-red-500 text-xs">{{ errorProducto(index, 'cantidad_afectada') }}</p>
+                                    <p v-if="errorProducto(index, 'cantidad_afectada')" class="mt-1.5 text-xs text-error-500">{{ errorProducto(index, 'cantidad_afectada') }}</p>
                                 </div>
 
-                                <div class="space-y-1.5">
-                                    <label :for="`producto-${index}-lote`" class="block text-sm font-medium text-slate-700">
-                                        Lote <span class="text-red-500">*</span>
+                                <div>
+                                    <label :for="`producto-${index}-presentacion`" class="mb-1.5 block text-sm font-medium text-gray-700">
+                                        Presentación <span class="text-error-500">*</span>
+                                    </label>
+                                    <select
+                                        :id="`producto-${index}-presentacion`"
+                                        v-model="producto.tipo_presentacion"
+                                        :class="inputClass(errorProducto(index, 'tipo_presentacion'))"
+                                    >
+                                        <option value="" disabled>— Seleccionar —</option>
+                                        <option v-for="(label, key) in props.presentaciones" :key="key" :value="key">{{ label }}</option>
+                                    </select>
+                                    <p v-if="errorProducto(index, 'tipo_presentacion')" class="mt-1.5 text-xs text-error-500">{{ errorProducto(index, 'tipo_presentacion') }}</p>
+                                    <p v-else class="mt-1.5 text-xs text-gray-400">A qué corresponde la cantidad afectada.</p>
+                                </div>
+
+                                <div>
+                                    <label :for="`producto-${index}-lote`" class="mb-1.5 block text-sm font-medium text-gray-700">
+                                        Lote <span class="text-error-500">*</span>
                                     </label>
                                     <input
                                         :id="`producto-${index}-lote`"
                                         v-model="producto.lote"
                                         type="text"
-                                        class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                        :class="errorProducto(index, 'lote') ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
+                                        :class="inputClass(errorProducto(index, 'lote'))"
                                     />
-                                    <p v-if="errorProducto(index, 'lote')" class="text-red-500 text-xs">{{ errorProducto(index, 'lote') }}</p>
+                                    <p v-if="errorProducto(index, 'lote')" class="mt-1.5 text-xs text-error-500">{{ errorProducto(index, 'lote') }}</p>
                                 </div>
 
-                                <div class="space-y-1.5">
-                                    <label :for="`producto-${index}-vencimiento`" class="block text-sm font-medium text-slate-700">
-                                        Fecha de vencimiento <span class="text-red-500">*</span>
+                                <div>
+                                    <label :for="`producto-${index}-vencimiento`" class="mb-1.5 block text-sm font-medium text-gray-700">
+                                        Fecha de vencimiento <span class="text-error-500">*</span>
                                     </label>
                                     <input
                                         :id="`producto-${index}-vencimiento`"
-                                        v-model="producto.fecha_vencimiento"
-                                        type="date"
-                                        class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                        :class="errorProducto(index, 'fecha_vencimiento') ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
+                                        :value="producto.fecha_vencimiento"
+                                        type="text"
+                                        inputmode="numeric"
+                                        placeholder="dd/mm/aaaa"
+                                        maxlength="10"
+                                        :class="inputClass(errorProducto(index, 'fecha_vencimiento'))"
+                                        @input="tipearFecha(producto, $event)"
                                     />
-                                    <p v-if="errorProducto(index, 'fecha_vencimiento')" class="text-red-500 text-xs">{{ errorProducto(index, 'fecha_vencimiento') }}</p>
+                                    <p v-if="errorProducto(index, 'fecha_vencimiento')" class="mt-1.5 text-xs text-error-500">{{ errorProducto(index, 'fecha_vencimiento') }}</p>
                                 </div>
 
-                                <div class="space-y-1.5">
-                                    <label :for="`producto-${index}-remito`" class="block text-sm font-medium text-slate-700">
-                                        N° de remito <span class="text-red-500">*</span>
+                                <div>
+                                    <label :for="`producto-${index}-remito`" class="mb-1.5 block text-sm font-medium text-gray-700">
+                                        N° de remito <span class="text-error-500">*</span>
                                     </label>
                                     <input
                                         :id="`producto-${index}-remito`"
                                         v-model="producto.numero_remito"
                                         type="text"
-                                        class="w-full px-3 py-2.5 text-sm rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                        :class="errorProducto(index, 'numero_remito') ? 'border-red-400 ring-1 ring-red-300' : 'border-slate-200'"
+                                        :class="inputClass(errorProducto(index, 'numero_remito'))"
                                     />
-                                    <p v-if="errorProducto(index, 'numero_remito')" class="text-red-500 text-xs">{{ errorProducto(index, 'numero_remito') }}</p>
+                                    <p v-if="errorProducto(index, 'numero_remito')" class="mt-1.5 text-xs text-error-500">{{ errorProducto(index, 'numero_remito') }}</p>
                                 </div>
                             </div>
 
-                            <div class="space-y-1.5">
-                                <span class="block text-sm font-medium text-slate-700">
-                                    Tipo de comprobante <span class="text-red-500">*</span>
+                            <div>
+                                <span class="mb-1.5 block text-sm font-medium text-gray-700">
+                                    Tipo de comprobante <span class="text-error-500">*</span>
                                 </span>
-                                <div class="flex gap-6">
-                                    <label class="flex items-center gap-2 text-sm text-slate-700">
-                                        <input v-model="producto.tipo_comprobante" type="radio" value="factura" class="text-indigo-600 focus:ring-indigo-500" />
+                                <div class="flex gap-6 pt-1">
+                                    <label class="flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-700">
+                                        <input v-model="producto.tipo_comprobante" type="radio" value="factura" class="h-4 w-4 accent-brand-500" />
                                         Factura
                                     </label>
-                                    <label class="flex items-center gap-2 text-sm text-slate-700">
-                                        <input v-model="producto.tipo_comprobante" type="radio" value="remito" class="text-indigo-600 focus:ring-indigo-500" />
+                                    <label class="flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-700">
+                                        <input v-model="producto.tipo_comprobante" type="radio" value="remito" class="h-4 w-4 accent-brand-500" />
                                         Remito
                                     </label>
                                 </div>
-                                <p v-if="errorProducto(index, 'tipo_comprobante')" class="text-red-500 text-xs">{{ errorProducto(index, 'tipo_comprobante') }}</p>
+                                <p v-if="errorProducto(index, 'tipo_comprobante')" class="mt-1.5 text-xs text-error-500">{{ errorProducto(index, 'tipo_comprobante') }}</p>
                             </div>
                         </div>
 
                         <button
                             type="button"
-                            class="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+                            class="cursor-pointer text-sm font-medium text-brand-500 hover:text-brand-600"
                             @click="agregarProducto"
                         >
                             + Agregar producto
@@ -381,24 +453,24 @@ const submit = () => form.post(route('observaciones.public.store'), { forceFormD
                 </section>
 
                 <!-- Adjuntos -->
-                <section class="space-y-4">
-                    <h2 class="text-sm font-semibold text-slate-800 border-b border-slate-100 pb-2">Adjuntos</h2>
+                <section class="space-y-5">
+                    <h2 class="border-b border-gray-100 pb-3 text-base font-semibold text-gray-800">Adjuntos</h2>
 
                     <div
-                        class="border-2 border-dashed rounded-xl p-8 text-center transition"
-                        :class="isDragging ? 'border-indigo-400 bg-indigo-50/50' : 'border-slate-200'"
+                        class="rounded-xl border-2 border-dashed p-8 text-center transition"
+                        :class="isDragging ? 'border-brand-300 bg-brand-50/60' : 'border-gray-200'"
                         @dragover.prevent="isDragging = true"
                         @dragleave.prevent="isDragging = false"
                         @drop.prevent="onDrop"
                     >
-                        <svg class="w-6 h-6 mx-auto text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <svg class="mx-auto h-6 w-6 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.485 8.486L20.5 13"/>
                         </svg>
-                        <p class="text-sm font-medium text-slate-700 mt-2">Adjuntar archivos</p>
-                        <p class="text-xs text-slate-400 mt-1">JPG, PNG, PDF. Máx 3 MB</p>
+                        <p class="mt-2 text-sm font-medium text-gray-700">Adjuntar archivos</p>
+                        <p class="mt-1 text-xs text-gray-400">JPG, PNG, PDF. Máx 3 MB</p>
                         <button
                             type="button"
-                            class="mt-3 text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+                            class="mt-3 cursor-pointer text-sm font-medium text-brand-500 hover:text-brand-600"
                             @click="fileInput?.click()"
                         >
                             Seleccionar archivos
@@ -417,27 +489,27 @@ const submit = () => form.post(route('observaciones.public.store'), { forceFormD
                         <li
                             v-for="(file, index) in form.attachments"
                             :key="index"
-                            class="flex items-center justify-between text-sm bg-slate-50 rounded-lg px-3 py-2"
+                            class="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm"
                         >
-                            <span class="text-slate-700 truncate">{{ file.name }}</span>
-                            <button type="button" class="text-slate-400 hover:text-red-500" @click="removeFile(index)">✕</button>
+                            <span class="truncate text-gray-700">{{ file.name }}</span>
+                            <button type="button" class="cursor-pointer text-gray-400 hover:text-error-500" @click="removeFile(index)">✕</button>
                         </li>
                     </ul>
-                    <p v-if="form.errors.attachments" class="text-red-500 text-xs">{{ form.errors.attachments }}</p>
+                    <p v-if="form.errors.attachments" class="text-xs text-error-500">{{ form.errors.attachments }}</p>
                 </section>
 
                 <!-- Acciones -->
-                <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <div class="flex justify-end gap-3 border-t border-gray-100 pt-5">
                     <Link
                         :href="route('login')"
-                        class="px-4 py-2.5 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition"
+                        class="inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs transition hover:bg-gray-50"
                     >
                         ← Volver
                     </Link>
                     <button
                         type="submit"
                         :disabled="form.processing"
-                        class="px-5 py-2.5 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed transition"
+                        class="cursor-pointer rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-medium text-white shadow-theme-xs transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                         {{ form.processing ? 'Enviando...' : 'Enviar' }}
                     </button>

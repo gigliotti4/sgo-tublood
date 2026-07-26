@@ -8,4 +8,80 @@
 @theme {
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
+    /* Fuente del panel interno (estilo TailAdmin). El portal público y el login mantienen --font-sans. */
+    --font-outfit: 'Outfit', ui-sans-serif, system-ui, sans-serif;
+
+    /* Paleta brand: azul corporativo Tublood #2a3182 como brand-500 */
+    --color-brand-25: #f7f8fd;
+    --color-brand-50: #eef0fa;
+    --color-brand-100: #dee2f6;
+    --color-brand-200: #bfc6ec;
+    --color-brand-300: #93a0dd;
+    --color-brand-400: #6373c4;
+    --color-brand-500: #2a3182;
+    --color-brand-600: #232970;
+    --color-brand-700: #1c215c;
+    --color-brand-800: #161a49;
+    --color-brand-900: #101336;
+    --color-brand-950: #0a0c24;
+
+    /* Grises TailAdmin (tinte azulado) — pisan el gray default de Tailwind */
+    --color-gray-25: #fcfcfd;
+    --color-gray-50: #f9fafb;
+    --color-gray-100: #f2f4f7;
+    --color-gray-200: #e4e7ec;
+    --color-gray-300: #d0d5dd;
+    --color-gray-400: #98a2b3;
+    --color-gray-500: #667085;
+    --color-gray-600: #475467;
+    --color-gray-700: #344054;
+    --color-gray-800: #1d2939;
+    --color-gray-900: #101828;
+    --color-gray-950: #0c111d;
+
+    --color-success-25: #f6fef9;
+    --color-success-50: #ecfdf3;
+    --color-success-100: #d1fadf;
+    --color-success-200: #a6f4c5;
+    --color-success-300: #6ce9a6;
+    --color-success-400: #32d583;
+    --color-success-500: #12b76a;
+    --color-success-600: #039855;
+    --color-success-700: #027a48;
+
+    --color-error-25: #fffbfa;
+    --color-error-50: #fef3f2;
+    --color-error-100: #fee4e2;
+    --color-error-200: #fecdca;
+    --color-error-300: #fda29b;
+    --color-error-400: #f97066;
+    --color-error-500: #f04438;
+    --color-error-600: #d92d20;
+    --color-error-700: #b42318;
+
+    --color-warning-25: #fffcf5;
+    --color-warning-50: #fffaeb;
+    --color-warning-100: #fef0c7;
+    --color-warning-200: #fedf89;
+    --color-warning-300: #fec84b;
+    --color-warning-400: #fdb022;
+    --color-warning-500: #f79009;
+    --color-warning-600: #dc6803;
+    --color-warning-700: #b54708;
+
+    /* Sombras TailAdmin */
+    --shadow-theme-xs: 0 1px 2px 0 rgba(16, 24, 40, 0.05);
+    --shadow-theme-sm: 0 1px 3px 0 rgba(16, 24, 40, 0.1), 0 1px 2px 0 rgba(16, 24, 40, 0.06);
+    --shadow-theme-md: 0 4px 8px -2px rgba(16, 24, 40, 0.1), 0 2px 4px -2px rgba(16, 24, 40, 0.06);
+    --shadow-theme-lg: 0 12px 16px -4px rgba(16, 24, 40, 0.08), 0 4px 6px -2px rgba(16, 24, 40, 0.03);
+
+    /* Tamaños de texto TailAdmin */
+    --text-theme-xs: 0.75rem;
+    --text-theme-xs--line-height: 1.125rem;
+    --text-theme-sm: 0.875rem;
+    --text-theme-sm--line-height: 1.25rem;
+    --text-theme-xl: 1.25rem;
+    --text-theme-xl--line-height: 1.875rem;
+    --text-title-sm: 1.875rem;
+    --text-title-sm--line-height: 2.375rem;
 }

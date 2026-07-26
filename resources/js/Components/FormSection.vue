@@ -13,12 +13,12 @@ withDefaults(defineProps<{
 </script>
 
 <template>
-    <section class="space-y-4">
-        <div class="border-b border-slate-100 dark:border-slate-700 pb-2">
-            <h2 class="text-sm font-semibold text-slate-800 dark:text-slate-100">{{ title }}</h2>
-            <p v-if="description" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{{ description }}</p>
+    <section class="space-y-5">
+        <div class="border-b border-gray-100 pb-3 dark:border-gray-800">
+            <h2 class="text-base font-semibold text-gray-800 dark:text-white/90">{{ title }}</h2>
+            <p v-if="description" class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{{ description }}</p>
         </div>
-        <div :class="columns === 2 ? 'grid sm:grid-cols-2 gap-4' : 'space-y-4'">
+        <div :class="columns === 2 ? 'grid gap-5 sm:grid-cols-2' : 'space-y-5'">
             <slot />
         </div>
     </section>
