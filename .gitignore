@@ -30,3 +30,13 @@ Thumbs.db
 /database/*.sqlite
 /database/*.sqlite-wal
 /database/*.sqlite-shm
+
+# Notas de trabajo en la raíz: planes, informes y minutas de reunión. Quedan
+# locales a propósito. La documentación que sí se versiona vive en /docs
+# (más CLAUDE.md, README.md y DEPLOY-HOSTINGER-RUNBOOK.md, ya trackeados).
+/GUIA-FUNCIONAL-SGO.md
+/INFORME-*.md
+/PLAN-*.md
+/PREGUNTAS-*.md
+/PROMPT-*.md
+/Reunion.md
