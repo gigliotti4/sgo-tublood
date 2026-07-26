@@ -1,11 +1,20 @@
 <script setup lang="ts">
-import { useForm, Head, Link } from '@inertiajs/vue3'
-import { ref } from 'vue'
+import { useForm, Head, Link, usePage } from '@inertiajs/vue3'
+import { computed, ref } from 'vue'
+import type { PageProps } from '@/types'
 
+const page = usePage<PageProps>()
+
+// Lo deja el handler de 419 de bootstrap/app.php cuando venció la sesión.
+const flashError = computed(() => page.props.flash?.error)
+
+// `remember` viene tildado: es un sistema interno de uso diario y la cookie de
+// recordarme (30 días, ver AppServiceProvider) es lo que evita tener que
+// reloguearse cada mañana. Queda el checkbox para quien prefiera destildarlo.
 const form = useForm({
     email: '',
     password: '',
-    remember: false,
+    remember: true,
 })
 
 const showPassword = ref(false)
@@ -101,6 +110,17 @@ const submit = () => form.post(route('login'))
                 <div class="mb-8">
                     <h1 class="text-2xl font-bold text-slate-900 tracking-tight">Bienvenido de nuevo</h1>
                     <p class="text-slate-500 text-sm mt-1.5">Ingresá tus credenciales para acceder al sistema</p>
+                </div>
+
+                <!-- Aviso de sesión vencida -->
+                <div
+                    v-if="flashError"
+                    class="mb-5 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-3 text-sm text-amber-800"
+                >
+                    <svg class="mt-0.5 h-4 w-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                    </svg>
+                    {{ flashError }}
                 </div>
 
                 <!-- Formulario -->
