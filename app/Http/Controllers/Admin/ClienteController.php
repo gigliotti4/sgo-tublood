@@ -83,14 +83,7 @@ class ClienteController extends Controller
         ]);
 
         foreach ($data['archivos'] as $file) {
-            $path = $file->store('clientes', 'local');
-
-            $cliente->attachments()->create([
-                'path' => $path,
-                'original_name' => $file->getClientOriginalName(),
-                'mime_type' => $file->getClientMimeType(),
-                'size' => $file->getSize(),
-            ]);
+            $cliente->guardarAdjunto($file);
         }
 
         return redirect()->route('clientes.edit', $cliente)

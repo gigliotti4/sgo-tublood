@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\GuardaAdjuntos;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Cliente extends Model
 {
+    use GuardaAdjuntos;
+
     protected $fillable = [
         'numero',
         'razon_social',
@@ -39,5 +42,11 @@ class Cliente extends Model
     public function attachments(): HasMany
     {
         return $this->hasMany(ClienteAttachment::class);
+    }
+
+    /** Los adjuntos van a `clientes/{numero}/` — ver GuardaAdjuntos. */
+    protected function carpetaDeAdjuntos(): string
+    {
+        return 'clientes/'.$this->segmentoSeguro($this->numero, 'sin-numero-'.$this->id);
     }
 }

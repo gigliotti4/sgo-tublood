@@ -99,6 +99,36 @@ class ClienteControllerTest extends TestCase
         $this->assertSame('2027-01-15', $cliente->fresh()->fecha_vencimiento->toDateString());
     }
 
+    public function test_los_archivos_van_a_una_carpeta_con_el_numero_de_cliente(): void
+    {
+        Storage::fake('local');
+
+        $cliente = Cliente::create(['numero' => '1234', 'razon_social' => 'Empresa Test SA']);
+
+        $this->actingAs($this->userWith('clientes.view', 'clientes.edit'))
+            ->post("/clientes/{$cliente->id}/archivos", [
+                'archivos' => [
+                    UploadedFile::fake()->create('Contrato Marco.pdf', 50, 'application/pdf'),
+                    // Mismo nombre: no se tiene que pisar al anterior.
+                    UploadedFile::fake()->create('Contrato Marco.pdf', 50, 'application/pdf'),
+                ],
+            ]);
+
+        $paths = $cliente->fresh()->attachments->pluck('path')->all();
+
+        $this->assertSame([
+            'clientes/1234/contrato-marco.pdf',
+            'clientes/1234/contrato-marco-2.pdf',
+        ], $paths);
+
+        foreach ($paths as $path) {
+            Storage::disk('local')->assertExists($path);
+        }
+
+        // El nombre real se conserva para mostrar y descargar.
+        $this->assertSame('Contrato Marco.pdf', $cliente->attachments->first()->original_name);
+    }
+
     public function test_subir_archivo_crea_adjunto_y_lo_guarda_en_disco(): void
     {
         Storage::fake('local');
