@@ -10,7 +10,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Response;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ClienteController extends Controller
 {
@@ -97,7 +97,7 @@ class ClienteController extends Controller
             ->with('success', 'Archivos subidos correctamente.');
     }
 
-    public function downloadArchivo(Cliente $cliente, ClienteAttachment $attachment): BinaryFileResponse
+    public function downloadArchivo(Cliente $cliente, ClienteAttachment $attachment): StreamedResponse
     {
         $this->authorize('clientes.view');
 

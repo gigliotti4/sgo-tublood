@@ -116,6 +116,30 @@ class ClienteControllerTest extends TestCase
         Storage::disk('local')->assertExists($cliente->attachments->first()->path);
     }
 
+    /**
+     * El caso feliz de la descarga no estaba cubierto: el único test que había
+     * chequeaba el 403, así que un return type equivocado en el controller
+     * (BinaryFileResponse en vez de StreamedResponse) devolvía 500 sin que
+     * ningún test lo notara.
+     */
+    public function test_descargar_archivo_devuelve_el_contenido(): void
+    {
+        $cliente = Cliente::create(['numero' => '1', 'razon_social' => 'Empresa Test SA']);
+        Storage::disk('local')->put('clientes/contrato.pdf', 'contenido de prueba');
+
+        $archivo = $cliente->attachments()->create([
+            'path' => 'clientes/contrato.pdf',
+            'original_name' => 'contrato.pdf',
+            'mime_type' => 'application/pdf',
+            'size' => 19,
+        ]);
+
+        $this->actingAs($this->userWith('clientes.view'))
+            ->get("/clientes/{$cliente->id}/archivos/{$archivo->id}")
+            ->assertOk()
+            ->assertDownload('contrato.pdf');
+    }
+
     public function test_descargar_archivo_requiere_permiso_clientes_view(): void
     {
         $cliente = Cliente::create(['numero' => '1', 'razon_social' => 'Empresa Test SA']);
