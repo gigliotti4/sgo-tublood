@@ -42,6 +42,15 @@ class ObservacionController extends Controller
 
     public function store(Request $request)
     {
+        // El formulario oculta el bloque de productos cuando el tipo no los
+        // lleva, pero la fila vacía viaja igual en el post. Se descarta acá y no
+        // con reglas condicionales: si no, `productos.*` la rechaza campo por
+        // campo y esos errores caen en inputs que no están en pantalla — el
+        // cliente ve que "no pasa nada" al enviar y el reclamo se pierde.
+        if (! TaxonomiaIncidencias::llevaProductos($request->input('tipo'))) {
+            $request->merge(['productos' => []]);
+        }
+
         $data = $request->validate([
             'tipo' => ['required', 'in:falla_producto,disconformidad_servicio'],
 

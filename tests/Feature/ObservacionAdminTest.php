@@ -327,6 +327,38 @@ class ObservacionAdminTest extends TestCase
         $this->assertSame('clasificada', $observacion->estado);
     }
 
+    /** Espeja al portal público: la fila vacía del bloque oculto no puede frenar el alta. */
+    public function test_store_interna_disconformidad_servicio_ignora_la_fila_vacia_de_productos(): void
+    {
+        $user = $this->userWith('observaciones.edit');
+        $sector = Sector::create(['nombre' => 'Garantía de Calidad', 'slug' => 'garantia_calidad']);
+
+        $this->actingAs($user)
+            ->post('/observaciones', [
+                'origen' => 'interna',
+                'sector_id' => $sector->id,
+                'tipo' => 'disconformidad_servicio',
+                'titulo' => 'Demora en la entrega',
+                'descripcion' => 'Se demoró el envío.',
+                'prioridad' => 'media',
+                'tipo_caso' => 'Demora logística',
+                'productos' => [[
+                    'producto' => '',
+                    'codigo' => '',
+                    'cantidad_afectada' => null,
+                    'tipo_presentacion' => '',
+                    'lote' => '',
+                    'fecha_vencimiento' => '',
+                    'numero_remito' => '',
+                    'tipo_comprobante' => '',
+                ]],
+            ])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect(route('observaciones.index'));
+
+        $this->assertCount(0, Observacion::first()->productos);
+    }
+
     public function test_store_interna_falla_producto_rechaza_sector_que_no_es_garantia_calidad(): void
     {
         $user = $this->userWith('observaciones.edit');

@@ -143,6 +143,45 @@ class ObservacionPublicaTest extends TestCase
         $this->assertSame($sector->id, Observacion::first()->sector_id);
     }
 
+    /**
+     * El bloque de productos del formulario se oculta cuando el tipo no es
+     * "Falla de Producto", pero la fila vacía sigue viajando en el post. Sin
+     * descartarla, `productos.*` la rechazaba campo por campo y el reclamo se
+     * perdía: los errores caían en inputs ocultos, así que el cliente no veía
+     * nada y creía que el formulario estaba roto.
+     */
+    public function test_disconformidad_de_servicio_ignora_la_fila_vacia_de_productos(): void
+    {
+        $this->post('/cargar-observacion', [
+            'tipo' => 'disconformidad_servicio',
+            'contacto_nombre' => 'Cliente de Prueba SA',
+            'contacto_email' => 'cliente@example.com',
+            'titulo' => 'Demora en la respuesta',
+            'descripcion' => 'Nadie contestó el pedido.',
+            'institucion' => '',
+            'provincia' => '',
+            'equipamiento' => '',
+            'ejecutivo_cuenta' => '',
+            'productos' => [[
+                'producto' => '',
+                'codigo' => '',
+                'cantidad_afectada' => null,
+                'tipo_presentacion' => '',
+                'lote' => '',
+                'fecha_vencimiento' => '',
+                'numero_remito' => '',
+                'tipo_comprobante' => '',
+            ]],
+        ])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect(route('observaciones.public.confirmacion'));
+
+        $observacion = Observacion::first();
+        $this->assertNotNull($observacion);
+        $this->assertSame('disconformidad_servicio', $observacion->tipo);
+        $this->assertCount(0, $observacion->productos);
+    }
+
     public function test_sin_el_sector_cargado_el_reclamo_se_guarda_igual(): void
     {
         // El portal es público: un sector faltante no puede hacer perder un reclamo.

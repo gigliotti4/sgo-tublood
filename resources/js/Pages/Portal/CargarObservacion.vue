@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { PageProps } from '@/types'
 
 const page = usePage<PageProps>()
@@ -56,6 +56,14 @@ const form = useForm({
 
 const agregarProducto = () => form.productos.push(nuevoProducto())
 const quitarProducto = (index: number) => form.productos.splice(index, 1)
+
+// Solo "Falla de Producto" lleva productos. Sin vaciar la lista al cambiar de
+// tipo, la fila que se muestra por defecto seguía viajando en el post desde el
+// bloque ya oculto y el backend la rechazaba campo por campo, con los errores
+// cayendo en inputs que no están en pantalla.
+watch(() => form.tipo, () => {
+    form.productos = form.tipo === 'falla_producto' ? [nuevoProducto()] : []
+})
 
 /**
  * La fecha de vencimiento se tipea como dd/mm/aaaa (un input de texto, no el

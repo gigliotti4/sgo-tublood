@@ -67,6 +67,19 @@ class TaxonomiaIncidencias
         return ! empty(static::tipo($sectorSlug, $tipoKey)['especial']);
     }
 
+    /**
+     * True si el tipo lleva la lista de productos afectados.
+     *
+     * Hoy solo "Falla de producto": "Disconformidad de servicio" comparte el
+     * resto del formulario pero no tiene productos. Lo consultan el portal
+     * público y la carga interna para descartar las filas vacías que manda el
+     * bloque oculto del formulario antes de validar.
+     */
+    public static function llevaProductos(?string $tipoKey): bool
+    {
+        return $tipoKey === 'falla_producto';
+    }
+
     /** Campos "Datos específicos" de un tipo. */
     public static function campos(string $sectorSlug, string $tipoKey): array
     {

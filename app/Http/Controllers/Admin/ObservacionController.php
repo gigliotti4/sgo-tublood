@@ -323,6 +323,12 @@ class ObservacionController extends Controller
      */
     private function storeInternaEspecial(Request $request, array $base, Sector $sector)
     {
+        // Misma razón que en el portal público: la fila vacía del bloque de
+        // productos oculto haría fallar `productos.*` con errores invisibles.
+        if (! TaxonomiaIncidencias::llevaProductos($base['tipo'])) {
+            $request->merge(['productos' => []]);
+        }
+
         $data = $request->validate([
             'institucion' => ['required_if:tipo,falla_producto', 'nullable', 'string', 'max:255'],
             'provincia' => ['required_if:tipo,falla_producto', 'nullable', 'string', 'max:255'],
