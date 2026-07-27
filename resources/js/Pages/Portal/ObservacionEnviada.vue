@@ -19,7 +19,7 @@ defineProps<{
 
             <h1 class="text-xl font-bold text-gray-900">¡Observación registrada!</h1>
             <p class="mt-2 text-sm text-gray-500">
-                Tu observación fue recibida correctamente y será revisada por nuestro equipo de Garantía de Calidad.
+                Tu observación fue recibida correctamente y será revisada por nuestro equipo de Calidad.
             </p>
 
             <div class="mt-6 rounded-xl border border-gray-200 bg-gray-50 py-4">
