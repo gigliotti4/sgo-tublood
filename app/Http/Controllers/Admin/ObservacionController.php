@@ -5,14 +5,19 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Cliente;
 use App\Models\Observacion;
+use App\Models\ObservationAttachment;
 use App\Models\ObservationProduct;
 use App\Models\Sector;
 use App\Models\User;
 use App\Support\TaxonomiaIncidencias;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ObservacionController extends Controller
 {
@@ -42,7 +47,7 @@ class ObservacionController extends Controller
 
         return inertia('Admin/Observaciones/Index', [
             'observaciones' => Observacion::query()
-                ->with(['responsable:id,name', 'sector:id,nombre', 'cliente:id,numero,razon_social,mail,telefono', 'productos'])
+                ->with(['responsable:id,name', 'sector:id,nombre', 'cliente:id,numero,razon_social,mail,telefono', 'productos', 'attachments:id,observation_id,original_name,size'])
                 // Texto libre: un solo campo que barre número, título, descripción,
                 // cliente (vinculado o los datos tipeados en el portal) y productos.
                 ->when($filters['q'] ?? null, fn ($query, $q) => $query->where(function ($query) use ($q) {
@@ -81,6 +86,78 @@ class ObservacionController extends Controller
             'prioridades' => config('incidencias.prioridades'),
             'tiposCaso' => config('incidencias.tipos_caso'),
         ]);
+    }
+
+    /**
+     * Detalle de solo lectura.
+     *
+     * El modal del listado solo lo abre quien puede editar (responsable o
+     * super-admin), así que sin esta pantalla alguien con `observaciones.view`
+     * no tenía forma de ver el caso completo ni de bajarse los adjuntos.
+     */
+    public function show(Request $request, Observacion $observacion)
+    {
+        $this->authorize('observaciones.view');
+
+        return inertia('Admin/Observaciones/Show', [
+            'observacion' => $observacion->load([
+                'responsable:id,name,apellido',
+                'sector:id,nombre,dias_gestion',
+                'cliente:id,numero,razon_social,mail,telefono',
+                'productos',
+                'attachments:id,observation_id,original_name,size',
+            ]),
+            'presentaciones' => ObservationProduct::PRESENTACIONES,
+            'tipoLabels' => TaxonomiaIncidencias::etiquetasTipos(),
+            'prioridades' => config('incidencias.prioridades'),
+            'puedeEditar' => $request->user()?->can('update', $observacion) ?? false,
+        ]);
+    }
+
+    /**
+     * PDF del detalle, para expediente o para mandarle al cliente.
+     *
+     * Se usa DomPDF (PHP puro) y no Browsershot: el deploy es hosting
+     * compartido, donde no hay Node ni Chromium. La contra es que la plantilla
+     * (resources/views/pdf/observacion.blade.php) es CSS 2.1 y no reusa
+     * Tailwind, así que hay que mantenerla junto con Show.vue.
+     */
+    public function pdf(Observacion $observacion): Response
+    {
+        $this->authorize('observaciones.view');
+
+        $observacion->load([
+            'responsable:id,name,apellido',
+            'sector:id,nombre',
+            'cliente:id,numero,razon_social,mail,telefono',
+            'productos',
+            'attachments:id,observation_id,original_name,size',
+        ]);
+
+        $pdf = Pdf::loadView('pdf.observacion', [
+            'observacion' => $observacion,
+            'presentaciones' => ObservationProduct::PRESENTACIONES,
+            'tipoLabels' => TaxonomiaIncidencias::etiquetasTipos(),
+            'prioridades' => config('incidencias.prioridades'),
+            'estados' => Observacion::ESTADOS,
+            'emitido' => now()->format('d/m/Y H:i'),
+        ])->setPaper('a4');
+
+        return $pdf->download("observacion-{$observacion->numero}.pdf");
+    }
+
+    /**
+     * Descarga un adjunto de la observación.
+     *
+     * Los adjuntos se venían guardando desde el alta (portal y carga interna)
+     * pero no había ninguna ruta que los sirviera: quedaban en el disco privado
+     * sin forma de abrirlos. Espeja a ClienteController::downloadArchivo.
+     */
+    public function downloadArchivo(Observacion $observacion, ObservationAttachment $attachment): StreamedResponse
+    {
+        $this->authorize('observaciones.view');
+
+        return Storage::disk('local')->download($attachment->path, $attachment->original_name);
     }
 
     public function nuevo(Request $request)

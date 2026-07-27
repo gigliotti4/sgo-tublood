@@ -80,6 +80,16 @@ Route::middleware(['auth'])->group(function () {
     // Observaciones
     Route::middleware('can:observaciones.view')->group(function () {
         Route::get('/observaciones', [AdminObservacionController::class, 'index'])->name('observaciones.index');
+        // El parámetro se llama {attachment} (no {archivo}) porque scopeBindings
+        // busca la relación por el plural del nombre: Observacion::attachments().
+        Route::get('/observaciones/{observacion}/archivos/{attachment}', [AdminObservacionController::class, 'downloadArchivo'])
+            ->name('observaciones.archivos.download')->scopeBindings();
+        Route::get('/observaciones/{observacion}/pdf', [AdminObservacionController::class, 'pdf'])
+            ->name('observaciones.pdf');
+        // Va después de /observaciones/nuevo y /observaciones/crear en el archivo,
+        // pero igual se restringe a numérico para que no se las coma.
+        Route::get('/observaciones/{observacion}', [AdminObservacionController::class, 'show'])
+            ->whereNumber('observacion')->name('observaciones.show');
         // Editar: solo el responsable asignado (o super-admin, vía Gate::before) — ver ObservacionPolicy.
         Route::put('/observaciones/{observacion}', [AdminObservacionController::class, 'update'])
             ->middleware('can:update,observacion')->name('observaciones.update');

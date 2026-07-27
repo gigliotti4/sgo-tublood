@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import { Head, router, useForm } from '@inertiajs/vue3'
+import { Head, Link, router, useForm } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { usePermissions } from '@/composables/usePermissions'
 import Badge from '@/Components/Badge.vue'
 import Button from '@/Components/Button.vue'
 import FormSection from '@/Components/FormSection.vue'
+import Icon from '@/Components/Icon.vue'
 import Input from '@/Components/Input.vue'
 import InputFecha from '@/Components/InputFecha.vue'
 import Modal from '@/Components/Modal.vue'
@@ -127,6 +128,12 @@ const estadoVariant: Record<string, 'amber' | 'blue' | 'indigo' | 'purple' | 'em
 
 const formatFecha = (d: string) =>
     new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+
+const formatSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
 
 const ESTADOS_FINALES = ['cerrada', 'cancelada']
 
@@ -340,14 +347,27 @@ const guardar = () => {
                                     </Badge>
                                 </td>
                                 <td class="px-5 py-3.5 text-theme-xs text-gray-500 dark:text-gray-400">{{ formatFecha(o.created_at) }}</td>
-                                <td class="px-5 py-3.5 text-right">
-                                    <button
-                                        v-if="puedeEditar(o)"
-                                        class="cursor-pointer text-theme-sm font-medium text-brand-500 hover:text-brand-600 dark:text-brand-300 dark:hover:text-brand-200"
-                                        @click="abrirEdicion(o)"
-                                    >
-                                        Editar
-                                    </button>
+                                <td class="px-5 py-3.5">
+                                    <div class="flex items-center justify-end gap-1">
+                                        <Link
+                                            :href="route('observaciones.show', o.id)"
+                                            class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-brand-500 dark:hover:bg-white/[0.05] dark:hover:text-brand-300"
+                                            title="Ver detalle"
+                                        >
+                                            <Icon name="eye" class="h-4.5 w-4.5" />
+                                            <span class="sr-only">Ver detalle de {{ o.numero }}</span>
+                                        </Link>
+                                        <button
+                                            v-if="puedeEditar(o)"
+                                            type="button"
+                                            class="cursor-pointer rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-brand-500 dark:hover:bg-white/[0.05] dark:hover:text-brand-300"
+                                            title="Editar"
+                                            @click="abrirEdicion(o)"
+                                        >
+                                            <Icon name="pencil" class="h-4.5 w-4.5" />
+                                            <span class="sr-only">Editar {{ o.numero }}</span>
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         </tbody>
@@ -459,6 +479,25 @@ const guardar = () => {
                                     </tbody>
                                 </table>
                             </div>
+                        </div>
+
+                        <!-- Adjuntos: los sube el cliente desde el portal o quien carga la observación -->
+                        <div v-if="observacionEnEdicion.attachments?.length" class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                            <p class="mb-2 text-theme-xs font-medium uppercase tracking-wide text-gray-400">
+                                Archivos adjuntos ({{ observacionEnEdicion.attachments.length }})
+                            </p>
+                            <ul class="space-y-1.5">
+                                <li v-for="a in observacionEnEdicion.attachments" :key="a.id">
+                                    <a
+                                        :href="route('observaciones.archivos.download', [observacionEnEdicion.id, a.id])"
+                                        class="flex items-center gap-2 text-theme-xs text-brand-500 hover:text-brand-600 dark:text-brand-300 dark:hover:text-brand-200"
+                                    >
+                                        <Icon name="paperclip" class="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                                        <span class="truncate">{{ a.original_name }}</span>
+                                        <span class="shrink-0 text-gray-400">({{ formatSize(a.size) }})</span>
+                                    </a>
+                                </li>
+                            </ul>
                         </div>
                     </div>
 
