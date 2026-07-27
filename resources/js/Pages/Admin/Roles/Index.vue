@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { Head, Link, router } from '@inertiajs/vue3'
 import { usePermissions } from '@/composables/usePermissions'
 import Badge from '@/Components/Badge.vue'
 import Button from '@/Components/Button.vue'
+import Icon from '@/Components/Icon.vue'
 import Modal from '@/Components/Modal.vue'
 import Pagination from '@/Components/Pagination.vue'
-import type { PaginatedData } from '@/types'
+import type { PaginatedData, PermisoEtiquetado } from '@/types'
 
 interface RoleRow {
     id: number
@@ -15,7 +16,18 @@ interface RoleRow {
     permissions: { name: string }[]
 }
 
-defineProps<{ roles: PaginatedData<RoleRow> }>()
+const props = defineProps<{
+    roles: PaginatedData<RoleRow>
+    permisos: PermisoEtiquetado[]
+}>()
+
+// El rol trae solo el nombre técnico del permiso; la etiqueta en español sale
+// de config/permisos.php vía el controller.
+const etiquetas = computed(() =>
+    Object.fromEntries(props.permisos.map(p => [p.name, p.label])),
+)
+
+const etiquetaPermiso = (name: string) => etiquetas.value[name] ?? name
 
 const { hasPermission } = usePermissions()
 
@@ -63,26 +75,33 @@ const destroy = () => {
                     <tr v-for="role in roles.data" :key="role.id" class="transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]">
                         <td class="px-6 py-3.5 text-theme-sm font-medium text-gray-800 dark:text-white/90">{{ role.name }}</td>
                         <td class="px-6 py-3.5">
-                            <Badge v-for="perm in role.permissions" :key="perm.name" variant="slate" :pill="false">
-                                {{ perm.name }}
+                            <Badge v-for="perm in role.permissions" :key="perm.name" variant="slate" :pill="false" :title="perm.name">
+                                {{ etiquetaPermiso(perm.name) }}
                             </Badge>
                             <span v-if="role.permissions.length === 0" class="text-theme-sm text-gray-400">Sin permisos</span>
                         </td>
-                        <td class="flex gap-3 px-6 py-3.5 text-theme-sm">
-                            <Link
-                                v-if="hasPermission('roles.edit')"
-                                :href="route('roles.edit', role.id)"
-                                class="font-medium text-brand-500 hover:text-brand-600 dark:text-brand-300 dark:hover:text-brand-200"
-                            >
-                                Editar
-                            </Link>
-                            <Button
-                                v-if="hasPermission('roles.delete') && role.name !== 'super-admin'"
-                                variant="danger-text"
-                                @click="confirmDestroy(role)"
-                            >
-                                Eliminar
-                            </Button>
+                        <td class="px-6 py-3.5">
+                            <div class="flex items-center gap-1">
+                                <Link
+                                    v-if="hasPermission('roles.edit')"
+                                    :href="route('roles.edit', role.id)"
+                                    class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-brand-500 dark:hover:bg-white/[0.05] dark:hover:text-brand-300"
+                                    title="Editar"
+                                >
+                                    <Icon name="pencil" class="h-4.5 w-4.5" />
+                                    <span class="sr-only">Editar rol {{ role.name }}</span>
+                                </Link>
+                                <button
+                                    v-if="hasPermission('roles.delete') && role.name !== 'super-admin'"
+                                    type="button"
+                                    class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-error-50 hover:text-error-500 dark:hover:bg-error-500/15"
+                                    title="Eliminar"
+                                    @click="confirmDestroy(role)"
+                                >
+                                    <Icon name="trash" class="h-4.5 w-4.5" />
+                                    <span class="sr-only">Eliminar rol {{ role.name }}</span>
+                                </button>
+                            </div>
                         </td>
                     </tr>
                     <tr v-if="roles.data.length === 0">

@@ -65,6 +65,14 @@ export interface Permission {
     name: string
 }
 
+/** Permiso con su nombre en español y su grupo (config/permisos.php). */
+export interface PermisoEtiquetado {
+    id: number
+    name: string
+    label: string
+    grupo: string
+}
+
 export interface ClienteAttachment {
     id: number
     original_name: string
@@ -135,7 +143,14 @@ export interface Observacion {
     datos_especificos: Record<string, string | number | null> | null
     cliente: { id: number; numero: string; razon_social: string; mail: string | null; telefono: string | null } | null
     productos: ObservationProduct[]
+    attachments?: ObservationAttachment[]
     created_at: string
+}
+
+export interface ObservationAttachment {
+    id: number
+    original_name: string
+    size: number
 }
 
 export interface PaginatedData<T> {

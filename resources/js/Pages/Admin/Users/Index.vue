@@ -4,6 +4,7 @@ import AppLayout from '@/Layouts/AppLayout.vue'
 import { Head, Link, router, useForm } from '@inertiajs/vue3'
 import { usePermissions } from '@/composables/usePermissions'
 import Badge from '@/Components/Badge.vue'
+import Icon from '@/Components/Icon.vue'
 import Button from '@/Components/Button.vue'
 import Modal from '@/Components/Modal.vue'
 import Pagination from '@/Components/Pagination.vue'
@@ -146,21 +147,28 @@ const copiarCredenciales = () => navigator.clipboard.writeText(credencialesComoT
                                     {{ role.name }}
                                 </Badge>
                             </td>
-                            <td class="flex gap-3 px-6 py-3.5 text-theme-sm">
-                                <Link
-                                    v-if="hasPermission('users.edit')"
-                                    :href="route('users.edit', user.id)"
-                                    class="font-medium text-brand-500 hover:text-brand-600 dark:text-brand-300 dark:hover:text-brand-200"
-                                >
-                                    Editar
-                                </Link>
-                                <Button
-                                    v-if="hasPermission('users.delete')"
-                                    variant="danger-text"
-                                    @click="confirmDestroy(user)"
-                                >
-                                    Eliminar
-                                </Button>
+                            <td class="px-6 py-3.5">
+                                <div class="flex items-center gap-1">
+                                    <Link
+                                        v-if="hasPermission('users.edit')"
+                                        :href="route('users.edit', user.id)"
+                                        class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-brand-500 dark:hover:bg-white/[0.05] dark:hover:text-brand-300"
+                                        title="Editar"
+                                    >
+                                        <Icon name="pencil" class="h-4.5 w-4.5" />
+                                        <span class="sr-only">Editar usuario {{ user.name }}</span>
+                                    </Link>
+                                    <button
+                                        v-if="hasPermission('users.delete')"
+                                        type="button"
+                                        class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-error-50 hover:text-error-500 dark:hover:bg-error-500/15"
+                                        title="Eliminar"
+                                        @click="confirmDestroy(user)"
+                                    >
+                                        <Icon name="trash" class="h-4.5 w-4.5" />
+                                        <span class="sr-only">Eliminar usuario {{ user.name }}</span>
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                         <tr v-if="users.data.length === 0">
