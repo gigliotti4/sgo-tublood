@@ -26,6 +26,20 @@ class User extends Authenticatable
         return $this->belongsTo(Sector::class);
     }
 
+    /**
+     * ¿Forma parte del equipo que clasifica los reclamos externos?
+     *
+     * Vale tanto por el rol como por el sector: son dos formas de decir lo
+     * mismo que conviven mientras se termina de cargar la estructura de
+     * usuarios, y un reclamo de cliente no puede quedar sin ver porque a
+     * alguien le falte una de las dos.
+     */
+    public function esDeCalidad(): bool
+    {
+        return $this->hasRole(Sector::GARANTIA_CALIDAD)
+            || $this->sector?->slug === Sector::GARANTIA_CALIDAD;
+    }
+
     /** A quién se escala si este usuario no gestiona a tiempo. */
     public function supervisor(): BelongsTo
     {

@@ -4,6 +4,7 @@ import { Link, router, usePage } from '@inertiajs/vue3'
 import { route } from 'ziggy-js'
 import { usePermissions } from '@/composables/usePermissions'
 import { useDarkMode } from '@/composables/useDarkMode'
+import Modal from '@/Components/Modal.vue'
 import type { PageProps } from '@/types'
 
 const { user, hasPermission } = usePermissions()
@@ -20,6 +21,30 @@ const alertas = computed(() => page.props.notificaciones?.alertas ?? [])
 const totalNotificaciones = computed(() => vencimientos.value.length + alertas.value.length)
 
 const marcarLeidas = () => router.post(route('notificaciones.leidas'), {}, { preserveScroll: true })
+
+/**
+ * Aviso de reclamos nuevos del portal para el equipo de Garantía de Calidad.
+ *
+ * El backend solo manda la lista en la primera pantalla de cada sesión, así que
+ * alcanza con abrir el modal cuando viene con algo. `descartado` es nada más
+ * para que se cierre en el acto: quien decide que no vuelva a aparecer es el
+ * post, que además marca los avisos como vistos.
+ */
+const externasNuevas = computed(() => page.props.notificaciones?.externas ?? [])
+const externasDescartado = ref(false)
+const mostrarExternas = computed(() => !externasDescartado.value && externasNuevas.value.length > 0)
+
+const cerrarExternas = (observacionId?: number) => {
+    externasDescartado.value = true
+    router.post(
+        route('notificaciones.externas.vistas'),
+        observacionId ? { observacion_id: observacionId } : {},
+        { preserveScroll: true },
+    )
+}
+
+const fechaCorta = (fecha: string) =>
+    new Date(fecha).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
 const diasParaVencer = (fecha: string) => {
     const hoy = new Date()
@@ -438,6 +463,58 @@ const icons: Record<string, string> = {
             </svg>
             <span class="sr-only">Nueva observación</span>
         </Link>
+
+        <!-- Reclamos nuevos del portal, para el equipo de Garantía de Calidad -->
+        <Modal
+            :show="mostrarExternas"
+            size="lg"
+            :title="externasNuevas.length === 1 ? 'Entró un reclamo nuevo' : `Entraron ${externasNuevas.length} reclamos nuevos`"
+            @close="cerrarExternas()"
+        >
+            <p class="-mt-2 mb-4 text-theme-sm text-gray-500 dark:text-gray-400">
+                Cargados por clientes desde el portal y pendientes de clasificación.
+                Tocá uno para abrirlo.
+            </p>
+
+            <ul class="divide-y divide-gray-100 dark:divide-gray-800">
+                <li v-for="e in externasNuevas" :key="e.id">
+                    <button
+                        type="button"
+                        class="flex w-full cursor-pointer items-start justify-between gap-4 px-1 py-3.5 text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
+                        @click="cerrarExternas(e.data.observacion_id)"
+                    >
+                        <div class="min-w-0">
+                            <p class="truncate text-sm font-medium text-gray-800 dark:text-white/90">
+                                {{ e.data.numero }} — {{ e.data.titulo }}
+                            </p>
+                            <p class="mt-0.5 text-theme-xs text-gray-500 dark:text-gray-400">
+                                {{ e.data.mensaje }}
+                            </p>
+                        </div>
+                        <span class="shrink-0 pt-0.5 text-theme-xs text-gray-400">
+                            {{ fechaCorta(e.created_at) }}
+                        </span>
+                    </button>
+                </li>
+            </ul>
+
+            <div class="mt-5 flex justify-end gap-3 border-t border-gray-100 pt-4 dark:border-gray-800">
+                <button
+                    type="button"
+                    class="cursor-pointer rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-white/[0.05]"
+                    @click="cerrarExternas()"
+                >
+                    Después los veo
+                </button>
+                <Link
+                    :href="route('observaciones.index')"
+                    class="cursor-pointer rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white shadow-theme-xs transition hover:bg-brand-600"
+                    @click="cerrarExternas()"
+                >
+                    Ver todos
+                </Link>
+            </div>
+        </Modal>
     </div>
 </template>
 

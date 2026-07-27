@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -53,6 +54,10 @@ class AuthenticatedSessionController extends Controller
         RateLimiter::clear($this->claveCuenta($request));
 
         $request->session()->regenerate();
+
+        // `regenerate()` conserva los datos de la sesión, así que hay que
+        // bajarla a mano: cada ingreso estrena el aviso de reclamos externos.
+        $request->session()->forget(HandleInertiaRequests::EXTERNAS_AVISADAS);
 
         return redirect()->intended(route('dashboard'));
     }

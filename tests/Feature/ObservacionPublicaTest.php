@@ -219,17 +219,25 @@ class ObservacionPublicaTest extends TestCase
         Notification::assertNotSentTo($ajeno, ObservacionExternaRecibidaNotification::class);
     }
 
-    public function test_avisa_a_los_usuarios_del_sector_antes_que_al_rol(): void
+    public function test_avisa_al_sector_y_al_rol_de_garantia_de_calidad(): void
     {
         Notification::fake();
 
         $sector = Sector::create(['nombre' => 'Garantía de Calidad', 'slug' => 'garantia_calidad']);
         $delSector = User::factory()->create(['sector_id' => $sector->id]);
+
+        // Con el rol pero cargado en otro sector: también se tiene que enterar,
+        // porque este mismo aviso alimenta el modal de reclamos nuevos del panel.
+        Role::firstOrCreate(['name' => 'garantia_calidad', 'guard_name' => 'web']);
+        $porRol = User::factory()->create();
+        $porRol->assignRole('garantia_calidad');
+
         $ajeno = User::factory()->create();
 
         $this->post('/cargar-observacion', $this->datosFallaProducto());
 
         Notification::assertSentTo($delSector, ObservacionExternaRecibidaNotification::class);
+        Notification::assertSentTo($porRol, ObservacionExternaRecibidaNotification::class);
         Notification::assertNotSentTo($ajeno, ObservacionExternaRecibidaNotification::class);
     }
 

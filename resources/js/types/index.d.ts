@@ -25,7 +25,11 @@ export interface AlertaNotificacion {
     id: string
     created_at: string
     data: {
-        tipo: 'observacion_vencida' | 'observacion_escalada' | 'observacion_finalizada'
+        tipo:
+            | 'observacion_vencida'
+            | 'observacion_escalada'
+            | 'observacion_finalizada'
+            | 'observacion_externa_recibida'
         observacion_id: number
         numero: string
         titulo: string
@@ -51,6 +55,12 @@ export interface PageProps extends Record<string, unknown> {
     notificaciones: {
         vencimientos: ClienteVencimiento[]
         alertas: AlertaNotificacion[]
+        /**
+         * Reclamos del portal que este usuario de Calidad todavía no vio. Solo
+         * viene cargada en la primera pantalla de cada sesión: alimenta el modal
+         * de aviso, no la campana.
+         */
+        externas: AlertaNotificacion[]
     }
 }
 

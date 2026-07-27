@@ -7,6 +7,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Sector extends Model
 {
+    /**
+     * Garantía de Calidad, el sector que clasifica los reclamos externos.
+     *
+     * El slug es a la vez la clave del sector en `config/incidencias.php` y el
+     * nombre del rol homónimo en Spatie, así que se comparte para las dos cosas.
+     */
+    public const GARANTIA_CALIDAD = 'garantia_calidad';
+
     protected $fillable = [
         'nombre',
         'slug',

@@ -28,6 +28,22 @@ abstract class ObservacionNotification extends Notification implements ShouldQue
         return ['database', 'mail'];
     }
 
+    /**
+     * El canal `database` se resuelve en el momento, sin pasar por la cola.
+     *
+     * Es un INSERT local —no hay nada que pueda colgar la request— y es lo que
+     * alimenta la campana y el modal de reclamos nuevos del panel: si esperara a
+     * un worker, alguien podría entrar al sistema y no ver un reclamo que ya
+     * está cargado. Encolar solo tiene sentido para `mail`, que sí sale por HTTP
+     * a Resend, y ese sigue yendo a la conexión por defecto.
+     *
+     * @return array<string, string>
+     */
+    public function viaConnections(): array
+    {
+        return ['database' => 'sync'];
+    }
+
     /** Clave estable para que el frontend distinga el tipo de aviso. */
     abstract protected function tipo(): string;
 

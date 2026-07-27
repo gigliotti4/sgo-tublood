@@ -31,6 +31,9 @@ Route::middleware(['auth'])->group(function () {
 
     Route::post('/notificaciones/leidas', [NotificacionController::class, 'marcarLeidas'])
         ->name('notificaciones.leidas');
+    // Cierre del modal de reclamos externos nuevos (equipo de Garantía de Calidad).
+    Route::post('/notificaciones/externas-vistas', [NotificacionController::class, 'marcarExternasVistas'])
+        ->name('notificaciones.externas.vistas');
 
     // Usuarios
     Route::middleware('can:users.view')->group(function () {
