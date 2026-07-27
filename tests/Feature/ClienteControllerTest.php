@@ -124,6 +124,8 @@ class ClienteControllerTest extends TestCase
      */
     public function test_descargar_archivo_devuelve_el_contenido(): void
     {
+        Storage::fake('local');
+
         $cliente = Cliente::create(['numero' => '1', 'razon_social' => 'Empresa Test SA']);
         Storage::disk('local')->put('clientes/contrato.pdf', 'contenido de prueba');
 

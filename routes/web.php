@@ -86,6 +86,12 @@ Route::middleware(['auth'])->group(function () {
             ->name('observaciones.archivos.download')->scopeBindings();
         Route::get('/observaciones/{observacion}/pdf', [AdminObservacionController::class, 'pdf'])
             ->name('observaciones.pdf');
+        // Subir y borrar archivos es gestionar el caso: lo autoriza la Policy
+        // (responsable asignado), no el permiso global observaciones.edit.
+        Route::post('/observaciones/{observacion}/archivos', [AdminObservacionController::class, 'uploadArchivo'])
+            ->middleware('can:update,observacion')->name('observaciones.archivos.store');
+        Route::delete('/observaciones/{observacion}/archivos/{attachment}', [AdminObservacionController::class, 'destroyArchivo'])
+            ->middleware('can:update,observacion')->name('observaciones.archivos.destroy')->scopeBindings();
         // Va después de /observaciones/nuevo y /observaciones/crear en el archivo,
         // pero igual se restringe a numérico para que no se las coma.
         Route::get('/observaciones/{observacion}', [AdminObservacionController::class, 'show'])

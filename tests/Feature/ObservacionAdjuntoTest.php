@@ -6,6 +6,7 @@ use App\Models\Observacion;
 use App\Models\ObservationAttachment;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
@@ -13,6 +14,17 @@ use Tests\TestCase;
 class ObservacionAdjuntoTest extends TestCase
 {
     use RefreshDatabase;
+
+    /**
+     * Sin esto los tests escriben en storage/app/private de verdad: RefreshDatabase
+     * revierte las filas pero los archivos quedan en el entorno de desarrollo.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        Storage::fake('local');
+    }
 
     private function userWith(string ...$permissions): User
     {
@@ -50,6 +62,117 @@ class ObservacionAdjuntoTest extends TestCase
             'mime_type' => 'application/pdf',
             'size' => 19,
         ]);
+    }
+
+    public function test_los_archivos_van_a_una_carpeta_con_el_numero_de_la_observacion(): void
+    {
+        $user = $this->userWith('observaciones.view');
+        $observacion = $this->observacion('0042-26');
+        $observacion->update(['responsable_id' => $user->id]);
+
+        $this->actingAs($user)->post("/observaciones/{$observacion->id}/archivos", [
+            'archivos' => [UploadedFile::fake()->create('Informe técnico final.pdf', 50, 'application/pdf')],
+        ]);
+
+        $adjunto = $observacion->fresh()->attachments->first();
+
+        // Carpeta por número y nombre legible (no el hash que genera store()).
+        $this->assertSame('observaciones/0042-26/informe-tecnico-final.pdf', $adjunto->path);
+        Storage::disk('local')->assertExists($adjunto->path);
+
+        // El nombre original se conserva para mostrar y descargar.
+        $this->assertSame('Informe técnico final.pdf', $adjunto->original_name);
+    }
+
+    public function test_dos_archivos_con_el_mismo_nombre_no_se_pisan(): void
+    {
+        $user = $this->userWith('observaciones.view');
+        $observacion = $this->observacion('0007-26');
+        $observacion->update(['responsable_id' => $user->id]);
+
+        foreach ([1, 2] as $_) {
+            $this->actingAs($user)->post("/observaciones/{$observacion->id}/archivos", [
+                'archivos' => [UploadedFile::fake()->create('informe.pdf', 50, 'application/pdf')],
+            ]);
+        }
+
+        $paths = $observacion->fresh()->attachments->pluck('path')->all();
+
+        $this->assertSame([
+            'observaciones/0007-26/informe.pdf',
+            'observaciones/0007-26/informe-2.pdf',
+        ], $paths);
+
+        foreach ($paths as $path) {
+            Storage::disk('local')->assertExists($path);
+        }
+    }
+
+    public function test_el_responsable_puede_subir_archivos(): void
+    {
+        $user = $this->userWith('observaciones.view');
+        $observacion = $this->observacion();
+        $observacion->update(['responsable_id' => $user->id]);
+
+        // Vuelve a donde estaba: los adjuntos se cargan desde el detalle y
+        // también desde el modal del listado.
+        $this->actingAs($user)
+            ->from('/observaciones')
+            ->post("/observaciones/{$observacion->id}/archivos", [
+                'archivos' => [UploadedFile::fake()->create('informe.pdf', 120, 'application/pdf')],
+            ])
+            ->assertRedirect('/observaciones');
+
+        $this->assertCount(1, $observacion->fresh()->attachments);
+        Storage::disk('local')->assertExists($observacion->attachments->first()->path);
+    }
+
+    /**
+     * Subir es gestionar el caso: lo gatea ObservacionPolicy (responsable
+     * asignado), no el permiso global observaciones.view.
+     */
+    public function test_quien_no_es_responsable_no_puede_subir(): void
+    {
+        $observacion = $this->observacion();
+
+        $this->actingAs($this->userWith('observaciones.view'))
+            ->post("/observaciones/{$observacion->id}/archivos", [
+                'archivos' => [UploadedFile::fake()->create('informe.pdf', 120, 'application/pdf')],
+            ])
+            ->assertStatus(403);
+
+        $this->assertCount(0, $observacion->fresh()->attachments);
+    }
+
+    public function test_rechaza_un_tipo_de_archivo_no_permitido(): void
+    {
+        $user = $this->userWith('observaciones.view');
+        $observacion = $this->observacion();
+        $observacion->update(['responsable_id' => $user->id]);
+
+        $this->actingAs($user)
+            ->post("/observaciones/{$observacion->id}/archivos", [
+                'archivos' => [UploadedFile::fake()->create('script.exe', 10)],
+            ])
+            ->assertSessionHasErrors('archivos.0');
+
+        $this->assertCount(0, $observacion->fresh()->attachments);
+    }
+
+    public function test_borrar_un_adjunto_elimina_fila_y_archivo(): void
+    {
+        $user = $this->userWith('observaciones.view');
+        $observacion = $this->observacion();
+        $observacion->update(['responsable_id' => $user->id]);
+        $adjunto = $this->adjuntoDe($observacion);
+
+        $this->actingAs($user)
+            ->from(route('observaciones.show', $observacion))
+            ->delete("/observaciones/{$observacion->id}/archivos/{$adjunto->id}")
+            ->assertRedirect(route('observaciones.show', $observacion));
+
+        $this->assertCount(0, $observacion->fresh()->attachments);
+        Storage::disk('local')->assertMissing('observaciones/informe.pdf');
     }
 
     public function test_descarga_el_adjunto_con_permiso_de_ver(): void

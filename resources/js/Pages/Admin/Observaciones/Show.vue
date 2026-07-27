@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import AdjuntosObservacion from '@/Components/AdjuntosObservacion.vue'
 import Badge from '@/Components/Badge.vue'
 import Icon from '@/Components/Icon.vue'
 import type { Observacion } from '@/types'
@@ -37,12 +38,6 @@ const estadoVariant: Record<string, 'amber' | 'blue' | 'indigo' | 'purple' | 'em
 const formatFecha = (d: string | null) =>
     d ? new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'
 
-const formatSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
 // El cliente ingresó un N° que no matcheó ningún cliente cargado (dato para revisar).
 const clienteNoEncontrado =
     !props.observacion.cliente && !!props.observacion.contacto_numero_cliente
@@ -50,6 +45,7 @@ const clienteNoEncontrado =
 /** Las claves del bloque JSON vienen en snake_case desde config/incidencias.php. */
 const humanizar = (clave: string) =>
     clave.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase())
+
 </script>
 
 <template>
@@ -166,19 +162,11 @@ const humanizar = (clave: string) =>
                     <p class="mb-3 text-theme-xs font-medium uppercase tracking-wide text-gray-400">
                         Archivos adjuntos ({{ observacion.attachments?.length ?? 0 }})
                     </p>
-                    <ul v-if="observacion.attachments?.length" class="space-y-2">
-                        <li v-for="a in observacion.attachments" :key="a.id">
-                            <a
-                                :href="route('observaciones.archivos.download', [observacion.id, a.id])"
-                                class="flex items-center gap-2 text-theme-sm text-brand-500 hover:text-brand-600 dark:text-brand-300 dark:hover:text-brand-200"
-                            >
-                                <Icon name="paperclip" class="h-4 w-4 shrink-0 text-gray-400" />
-                                <span class="truncate">{{ a.original_name }}</span>
-                                <span class="shrink-0 text-theme-xs text-gray-400">({{ formatSize(a.size) }})</span>
-                            </a>
-                        </li>
-                    </ul>
-                    <p v-else class="text-theme-sm text-gray-400">Sin archivos adjuntos.</p>
+                    <AdjuntosObservacion
+                        :observacion-id="observacion.id"
+                        :adjuntos="observacion.attachments ?? []"
+                        :puede-editar="puedeEditar"
+                    />
                 </div>
             </div>
 

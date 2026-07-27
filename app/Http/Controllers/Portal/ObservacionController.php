@@ -102,14 +102,7 @@ class ObservacionController extends Controller
             }
 
             foreach ($request->file('attachments', []) as $file) {
-                $path = $file->store('observaciones', 'local');
-
-                $observacion->attachments()->create([
-                    'path' => $path,
-                    'original_name' => $file->getClientOriginalName(),
-                    'mime_type' => $file->getClientMimeType(),
-                    'size' => $file->getSize(),
-                ]);
+                $observacion->guardarAdjunto($file);
             }
 
             return $observacion;

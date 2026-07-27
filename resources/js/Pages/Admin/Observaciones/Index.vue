@@ -5,6 +5,7 @@ import AppLayout from '@/Layouts/AppLayout.vue'
 import { usePermissions } from '@/composables/usePermissions'
 import Badge from '@/Components/Badge.vue'
 import Button from '@/Components/Button.vue'
+import AdjuntosObservacion from '@/Components/AdjuntosObservacion.vue'
 import FormSection from '@/Components/FormSection.vue'
 import Icon from '@/Components/Icon.vue'
 import Input from '@/Components/Input.vue'
@@ -129,12 +130,6 @@ const estadoVariant: Record<string, 'amber' | 'blue' | 'indigo' | 'purple' | 'em
 const formatFecha = (d: string) =>
     new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
-const formatSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
 const ESTADOS_FINALES = ['cerrada', 'cancelada']
 
 /**
@@ -152,7 +147,17 @@ const estadoPlazo = (o: Observacion): { label: string; variant: 'red' | 'amber' 
     return null
 }
 
-const observacionEnEdicion = ref<Observacion | null>(null)
+/**
+ * Se guarda el id, no la fila: al subir o borrar un adjunto el listado se
+ * recarga con `preserveState`, y una copia del objeto quedaría vieja (el
+ * archivo nuevo no aparecería hasta cerrar y reabrir el modal). Derivándolo de
+ * los props, cualquier refresco se refleja solo.
+ */
+const idEnEdicion = ref<number | null>(null)
+
+const observacionEnEdicion = computed(
+    () => props.observaciones.data.find(o => o.id === idEnEdicion.value) ?? null,
+)
 
 const form = useForm({
     responsable_id: null as number | null,
@@ -163,7 +168,7 @@ const form = useForm({
 })
 
 const abrirEdicion = (o: Observacion) => {
-    observacionEnEdicion.value = o
+    idEnEdicion.value = o.id
     form.clearErrors()
     form.responsable_id = o.responsable_id
     form.sector_id = o.sector_id
@@ -172,7 +177,7 @@ const abrirEdicion = (o: Observacion) => {
     form.tipo_caso = o.tipo_caso
 }
 
-const cerrarEdicion = () => { observacionEnEdicion.value = null }
+const cerrarEdicion = () => { idEnEdicion.value = null }
 
 const nombreCompleto = (u: UsuarioOption) => [u.name, u.apellido].filter(Boolean).join(' ')
 
@@ -481,23 +486,17 @@ const guardar = () => {
                             </div>
                         </div>
 
-                        <!-- Adjuntos: los sube el cliente desde el portal o quien carga la observación -->
-                        <div v-if="observacionEnEdicion.attachments?.length" class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                        <!-- Adjuntos: del portal, del alta, o cargados acá mismo -->
+                        <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
                             <p class="mb-2 text-theme-xs font-medium uppercase tracking-wide text-gray-400">
-                                Archivos adjuntos ({{ observacionEnEdicion.attachments.length }})
+                                Archivos adjuntos ({{ observacionEnEdicion.attachments?.length ?? 0 }})
                             </p>
-                            <ul class="space-y-1.5">
-                                <li v-for="a in observacionEnEdicion.attachments" :key="a.id">
-                                    <a
-                                        :href="route('observaciones.archivos.download', [observacionEnEdicion.id, a.id])"
-                                        class="flex items-center gap-2 text-theme-xs text-brand-500 hover:text-brand-600 dark:text-brand-300 dark:hover:text-brand-200"
-                                    >
-                                        <Icon name="paperclip" class="h-3.5 w-3.5 shrink-0 text-gray-400" />
-                                        <span class="truncate">{{ a.original_name }}</span>
-                                        <span class="shrink-0 text-gray-400">({{ formatSize(a.size) }})</span>
-                                    </a>
-                                </li>
-                            </ul>
+                            <AdjuntosObservacion
+                                compacto
+                                :observacion-id="observacionEnEdicion.id"
+                                :adjuntos="observacionEnEdicion.attachments ?? []"
+                                :puede-editar="puedeEditar(observacionEnEdicion)"
+                            />
                         </div>
                     </div>
 

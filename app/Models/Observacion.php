@@ -7,6 +7,9 @@ use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 #[ObservedBy(ObservacionObserver::class)]
 class Observacion extends Model
@@ -107,6 +110,65 @@ class Observacion extends Model
     public function sector(): BelongsTo
     {
         return $this->belongsTo(Sector::class);
+    }
+
+    /**
+     * Guarda un archivo en `observaciones/{numero}/` y registra la fila.
+     *
+     * Vive acá porque los adjuntos entran desde tres lugares (portal, alta
+     * externa y carga desde el detalle) y antes cada uno repetía el bloque.
+     *
+     * Se conserva el nombre original (saneado) en vez del hash que genera
+     * `store()`: la carpeta por número existe para que alguien pueda entrar a
+     * buscar un documento, y una lista de hashes no sirve para eso. El nombre
+     * real se guarda igual en `original_name`, que es lo que se muestra y con
+     * lo que se descarga.
+     */
+    public function guardarAdjunto(UploadedFile $file): ObservationAttachment
+    {
+        $carpeta = 'observaciones/'.$this->carpetaDeArchivos();
+
+        return $this->attachments()->create([
+            'path' => $file->storeAs($carpeta, $this->nombreDisponible($carpeta, $file), 'local'),
+            'original_name' => $file->getClientOriginalName(),
+            'mime_type' => $file->getClientMimeType(),
+            'size' => $file->getSize(),
+        ]);
+    }
+
+    /**
+     * El número ya es seguro como nombre de carpeta (`0001-26`), pero se sanea
+     * igual para que un formato futuro no pueda escaparse del directorio.
+     */
+    private function carpetaDeArchivos(): string
+    {
+        $limpio = preg_replace('/[^A-Za-z0-9\-_]/', '', (string) $this->numero);
+
+        return $limpio !== '' ? $limpio : 'sin-numero-'.$this->id;
+    }
+
+    /**
+     * Nombre saneado y libre dentro de la carpeta. `storeAs` pisa sin avisar,
+     * así que dos archivos que se llaman igual necesitan sufijo.
+     */
+    private function nombreDisponible(string $carpeta, UploadedFile $file): string
+    {
+        $original = $file->getClientOriginalName();
+        $extension = strtolower(preg_replace('/[^A-Za-z0-9]/', '', $file->getClientOriginalExtension()));
+        $base = Str::limit(Str::slug(pathinfo($original, PATHINFO_FILENAME)), 80, '');
+
+        if ($base === '') {
+            $base = 'archivo';
+        }
+
+        $sufijo = $extension !== '' ? '.'.$extension : '';
+        $candidato = $base.$sufijo;
+
+        for ($i = 2; Storage::disk('local')->exists($carpeta.'/'.$candidato); $i++) {
+            $candidato = "{$base}-{$i}{$sufijo}";
+        }
+
+        return $candidato;
     }
 
     public static function generarNumero(int $anio): string

@@ -11,6 +11,7 @@ use App\Models\Sector;
 use App\Models\User;
 use App\Support\TaxonomiaIncidencias;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
@@ -144,6 +145,46 @@ class ObservacionController extends Controller
         ])->setPaper('a4');
 
         return $pdf->download("observacion-{$observacion->numero}.pdf");
+    }
+
+    /**
+     * Suma archivos a una observación ya creada.
+     *
+     * Hasta acá los adjuntos solo se podían cargar en el alta. Autoriza con la
+     * Policy y no con el permiso `observaciones.edit`: subir documentación es
+     * parte de gestionar el caso, así que lo hace quien lo tiene asignado.
+     *
+     * Las reglas son más amplias que las del portal (que es público y por eso
+     * acepta solo imágenes y PDF de hasta 3 MB): acá se suben informes y
+     * planillas, igual que en los adjuntos de cliente.
+     */
+    public function uploadArchivo(Request $request, Observacion $observacion): RedirectResponse
+    {
+        $this->authorize('update', $observacion);
+
+        $data = $request->validate([
+            'archivos' => ['required', 'array'],
+            'archivos.*' => ['file', 'mimes:jpg,jpeg,png,pdf,doc,docx,xls,xlsx', 'max:10240'],
+        ]);
+
+        foreach ($data['archivos'] as $file) {
+            $observacion->guardarAdjunto($file);
+        }
+
+        // back() y no la pantalla de detalle: los adjuntos se gestionan desde
+        // ahí y también desde el modal del listado, y mandarlo al detalle
+        // sacaría al usuario del listado en el que estaba trabajando.
+        return back()->with('success', 'Archivos subidos correctamente.');
+    }
+
+    public function destroyArchivo(Observacion $observacion, ObservationAttachment $attachment): RedirectResponse
+    {
+        $this->authorize('update', $observacion);
+
+        Storage::disk('local')->delete($attachment->path);
+        $attachment->delete();
+
+        return back()->with('success', 'Archivo eliminado correctamente.');
     }
 
     /**
@@ -345,14 +386,7 @@ class ObservacionController extends Controller
     private function guardarAdjuntos(Observacion $observacion, Request $request): void
     {
         foreach ($request->file('attachments', []) as $file) {
-            $path = $file->store('observaciones', 'local');
-
-            $observacion->attachments()->create([
-                'path' => $path,
-                'original_name' => $file->getClientOriginalName(),
-                'mime_type' => $file->getClientMimeType(),
-                'size' => $file->getSize(),
-            ]);
+            $observacion->guardarAdjunto($file);
         }
     }
 
