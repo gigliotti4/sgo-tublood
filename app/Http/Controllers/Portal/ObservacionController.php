@@ -74,8 +74,8 @@ class ObservacionController extends Controller
             'productos.*.tipo_presentacion' => ['required', 'in:'.implode(',', array_keys(ObservationProduct::PRESENTACIONES))],
             'productos.*.lote' => ['required', 'string', 'max:255'],
             'productos.*.fecha_vencimiento' => ['required', 'date'],
-            'productos.*.numero_remito' => ['required', 'string', 'max:255'],
-            'productos.*.tipo_comprobante' => ['required', 'in:factura,remito'],
+            'productos.*.numero_remito' => ['nullable', 'string', 'max:255'],
+            'productos.*.tipo_comprobante' => ['nullable', 'in:factura,remito'],
 
             'attachments' => ['array'],
             'attachments.*' => ['file', 'mimes:jpg,jpeg,png,pdf', 'max:3072'],

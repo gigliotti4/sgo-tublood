@@ -378,14 +378,12 @@ const submit = () => form.post(route('observaciones.store'), { forceFormData: tr
                                 />
                                 <Input
                                     v-model="producto.numero_remito"
-                                    required
                                     label="N° de remito"
                                     :error="errorProducto(index, 'numero_remito')"
                                 />
                                 <RadioGroup
                                     v-model="producto.tipo_comprobante"
                                     full
-                                    required
                                     label="Tipo de comprobante"
                                     :opciones="[
                                         { value: 'factura', label: 'Factura' },

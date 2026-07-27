@@ -97,6 +97,26 @@ class ObservacionPublicaTest extends TestCase
         $this->assertDatabaseCount('observations', 0);
     }
 
+    /**
+     * Un reclamo telefónico muchas veces no trae el remito a mano: el campo no
+     * puede frenar el alta. El tipo de comprobante lo acompaña porque describe
+     * justamente a ese documento.
+     */
+    public function test_numero_de_remito_y_tipo_de_comprobante_no_son_obligatorios(): void
+    {
+        $data = $this->datosFallaProducto();
+        $data['productos'][0]['numero_remito'] = '';
+        $data['productos'][0]['tipo_comprobante'] = '';
+
+        $this->post('/cargar-observacion', $data)
+            ->assertSessionHasNoErrors()
+            ->assertRedirect(route('observaciones.public.confirmacion'));
+
+        $producto = Observacion::first()->productos->first();
+        $this->assertNull($producto->numero_remito);
+        $this->assertNull($producto->tipo_comprobante);
+    }
+
     public function test_permite_cargar_multiples_productos(): void
     {
         $data = $this->datosFallaProducto();

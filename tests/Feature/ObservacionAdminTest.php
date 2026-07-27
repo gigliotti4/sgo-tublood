@@ -305,6 +305,45 @@ class ObservacionAdminTest extends TestCase
         $this->assertCount(1, $observacion->productos);
     }
 
+    /**
+     * Espeja el equivalente del portal público: un reclamo cargado a mano por
+     * teléfono muchas veces no tiene el remito a la vista.
+     */
+    public function test_store_interna_falla_producto_numero_de_remito_no_es_obligatorio(): void
+    {
+        $user = $this->userWith('observaciones.edit');
+        $sector = Sector::create(['nombre' => 'Garantía de Calidad', 'slug' => 'garantia_calidad']);
+
+        $this->actingAs($user)
+            ->post('/observaciones', [
+                'origen' => 'interna',
+                'sector_id' => $sector->id,
+                'tipo' => 'falla_producto',
+                'titulo' => 'Producto con falla',
+                'descripcion' => 'El producto llegó dañado.',
+                'prioridad' => 'alta',
+                'tipo_caso' => 'Producto defectuoso',
+                'institucion' => 'Clínica Test',
+                'provincia' => 'Córdoba',
+                'productos' => [[
+                    'producto' => 'Guía de infusión',
+                    'codigo' => 'GUIA-123',
+                    'cantidad_afectada' => 3,
+                    'tipo_presentacion' => 'presentacion_venta',
+                    'lote' => 'L-123',
+                    'fecha_vencimiento' => '2027-01-01',
+                    'numero_remito' => '',
+                    'tipo_comprobante' => '',
+                ]],
+            ])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect(route('observaciones.index'));
+
+        $producto = Observacion::first()->productos->first();
+        $this->assertNull($producto->numero_remito);
+        $this->assertNull($producto->tipo_comprobante);
+    }
+
     public function test_store_interna_disconformidad_servicio_en_garantia_calidad(): void
     {
         $user = $this->userWith('observaciones.edit');

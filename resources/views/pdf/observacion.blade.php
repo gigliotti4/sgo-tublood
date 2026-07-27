@@ -179,7 +179,7 @@
                     <td>{{ $producto->tipo_presentacion ? ($presentaciones[$producto->tipo_presentacion] ?? $producto->tipo_presentacion) : '—' }}</td>
                     <td class="mono">{{ $producto->lote }}</td>
                     <td>{{ $producto->fecha_vencimiento?->format('d/m/Y') ?? '—' }}</td>
-                    <td class="mono">{{ $producto->numero_remito }}</td>
+                    <td class="mono">{{ $producto->numero_remito ?? '—' }}</td>
                 </tr>
             @endforeach
         </tbody>

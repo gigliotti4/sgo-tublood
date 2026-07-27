@@ -149,8 +149,8 @@ const humanizar = (clave: string) =>
                                     <td class="py-2 pr-4">{{ p.tipo_presentacion ? (presentaciones[p.tipo_presentacion] ?? p.tipo_presentacion) : '—' }}</td>
                                     <td class="py-2 pr-4">{{ p.lote }}</td>
                                     <td class="py-2 pr-4">{{ formatFecha(p.fecha_vencimiento) }}</td>
-                                    <td class="py-2 pr-4">{{ p.numero_remito }}</td>
-                                    <td class="py-2 capitalize">{{ p.tipo_comprobante }}</td>
+                                    <td class="py-2 pr-4">{{ p.numero_remito ?? '—' }}</td>
+                                    <td class="py-2 capitalize">{{ p.tipo_comprobante ?? '—' }}</td>
                                 </tr>
                             </tbody>
                         </table>

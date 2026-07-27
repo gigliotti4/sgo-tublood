@@ -420,7 +420,7 @@ const submit = () => form.post(route('observaciones.public.store'), { forceFormD
 
                                 <div>
                                     <label :for="`producto-${index}-remito`" class="mb-1.5 block text-sm font-medium text-gray-700">
-                                        N° de remito <span class="text-error-500">*</span>
+                                        N° de remito
                                     </label>
                                     <input
                                         :id="`producto-${index}-remito`"
@@ -434,7 +434,7 @@ const submit = () => form.post(route('observaciones.public.store'), { forceFormD
 
                             <div>
                                 <span class="mb-1.5 block text-sm font-medium text-gray-700">
-                                    Tipo de comprobante <span class="text-error-500">*</span>
+                                    Tipo de comprobante
                                 </span>
                                 <div class="flex gap-6 pt-1">
                                     <label class="flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-700">
