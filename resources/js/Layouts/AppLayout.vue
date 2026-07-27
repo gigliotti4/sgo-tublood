@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { Link, router, usePage } from '@inertiajs/vue3'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { Link, router, usePage, usePoll } from '@inertiajs/vue3'
 import { route } from 'ziggy-js'
 import { usePermissions } from '@/composables/usePermissions'
 import { useDarkMode } from '@/composables/useDarkMode'
-import Modal from '@/Components/Modal.vue'
+import Modal, { modalesAbiertos } from '@/Components/Modal.vue'
 import type { PageProps } from '@/types'
 
 const { user, hasPermission } = usePermissions()
@@ -18,28 +18,61 @@ const userMenuOpen = ref(false)
 
 const vencimientos = computed(() => page.props.notificaciones?.vencimientos ?? [])
 const alertas = computed(() => page.props.notificaciones?.alertas ?? [])
-const totalNotificaciones = computed(() => vencimientos.value.length + alertas.value.length)
+// Reclamos sin clasificar: sale de una consulta viva contra `observations`, no
+// de una notificación, así que se autolimpia sola en cuanto alguien clasifica
+// el caso. Es la fuente de verdad; `externasNuevas` (más abajo) es un
+// subconjunto de esta misma lista.
+const sinClasificar = computed(() => page.props.notificaciones?.sinClasificar ?? [])
+const totalNotificaciones = computed(() => vencimientos.value.length + alertas.value.length + sinClasificar.value.length)
 
 const marcarLeidas = () => router.post(route('notificaciones.leidas'), {}, { preserveScroll: true })
 
+const origenLabels: Record<string, string> = { interna: 'Interna', externa: 'Externa' }
+
 /**
- * Aviso de reclamos nuevos del portal para el equipo de Garantía de Calidad.
+ * Aviso (una sola vez) de reclamos nuevos del portal para el equipo de
+ * Garantía de Calidad. Es el subconjunto de `sinClasificar` que este usuario
+ * todavía no vio — cerrar el modal solo calla el popup, el reclamo se sigue
+ * viendo en la campana hasta que alguien lo clasifique de verdad.
  *
- * El backend solo manda la lista en la primera pantalla de cada sesión, así que
- * alcanza con abrir el modal cuando viene con algo. `descartado` es nada más
- * para que se cierre en el acto: quien decide que no vuelva a aparecer es el
- * post, que además marca los avisos como vistos.
+ * Se refresca con polling (no solo al entrar), así que puede aparecer en
+ * cualquier pantalla mientras la persona ya está trabajando — por eso se
+ * abstiene mientras haya un formulario en pantalla o cualquier otro modal
+ * abierto (ver `modalesAbiertos` en Modal.vue), y solo se evalúa mientras está
+ * cerrado: una vez abierto no se vuelve a tocar hasta que el usuario lo cierra.
  */
 const externasNuevas = computed(() => page.props.notificaciones?.externas ?? [])
-const externasDescartado = ref(false)
-const mostrarExternas = computed(() => !externasDescartado.value && externasNuevas.value.length > 0)
+const mostrarExternas = ref(false)
+const cerrandoExternas = ref(false)
+
+const esPantallaDeFormulario = computed(() => /Crear|Create|Edit|Nuevo/.test(page.component))
+
+watch(
+    [externasNuevas, () => page.component, modalesAbiertos],
+    () => {
+        if (mostrarExternas.value || cerrandoExternas.value) return
+        if (externasNuevas.value.length === 0) return
+        if (esPantallaDeFormulario.value) return
+        if (modalesAbiertos.value > 0) return
+
+        mostrarExternas.value = true
+    },
+    { immediate: true },
+)
+
+usePoll(60000, { only: ['notificaciones'] })
 
 const cerrarExternas = (observacionId?: number) => {
-    externasDescartado.value = true
+    mostrarExternas.value = false
+    // Bloquea la reapertura mientras page.props todavía tiene la lista vieja
+    // (la respuesta del post es lo que la actualiza): sin esto, el watch de
+    // arriba reabriría el modal en el instante entre el clic y esa respuesta.
+    cerrandoExternas.value = true
+
     router.post(
         route('notificaciones.externas.vistas'),
         observacionId ? { observacion_id: observacionId } : {},
-        { preserveScroll: true },
+        { preserveScroll: true, onFinish: () => { cerrandoExternas.value = false } },
     )
 }
 
@@ -333,6 +366,33 @@ const icons: Record<string, string> = {
                             v-if="notificacionesOpen"
                             class="absolute right-0 top-full z-40 mt-3 max-h-96 w-80 overflow-y-auto rounded-2xl border border-gray-200 bg-white shadow-theme-lg dark:border-gray-800 dark:bg-gray-900"
                         >
+                            <!--
+                                Sin clasificar: consulta viva contra `observations`, no una
+                                notificación — no lleva "Marcar leídas" porque esta lista no se
+                                descarta a mano, se limpia sola cuando alguien clasifica el caso.
+                            -->
+                            <template v-if="sinClasificar.length > 0">
+                                <div class="border-b border-gray-100 px-5 py-3.5 dark:border-gray-800">
+                                    <p class="text-sm font-semibold text-gray-800 dark:text-white/90">Sin clasificar</p>
+                                </div>
+                                <ul class="divide-y divide-gray-100 dark:divide-gray-800">
+                                    <li v-for="o in sinClasificar" :key="o.id">
+                                        <Link
+                                            :href="route('observaciones.show', o.id)"
+                                            class="block px-5 py-3 transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
+                                            @click="notificacionesOpen = false"
+                                        >
+                                            <p class="truncate text-sm font-medium text-gray-800 dark:text-white/90">
+                                                {{ o.numero }} — {{ o.titulo }}
+                                            </p>
+                                            <p class="mt-0.5 text-theme-xs text-warning-600 dark:text-warning-400">
+                                                {{ origenLabels[o.origen] ?? o.origen }}<template v-if="o.contacto_nombre"> · {{ o.contacto_nombre }}</template>
+                                            </p>
+                                        </Link>
+                                    </li>
+                                </ul>
+                            </template>
+
                             <!-- Alertas de observaciones: las deja el comando observaciones:alertas -->
                             <template v-if="alertas.length > 0">
                                 <div class="flex items-center justify-between gap-2 border-b border-gray-100 px-5 py-3.5 dark:border-gray-800">
@@ -472,8 +532,7 @@ const icons: Record<string, string> = {
             @close="cerrarExternas()"
         >
             <p class="-mt-2 mb-4 text-theme-sm text-gray-500 dark:text-gray-400">
-                Cargados por clientes desde el portal y pendientes de clasificación.
-                Tocá uno para abrirlo.
+                Cargados por clientes desde el portal. Tocá uno para abrirlo.
             </p>
 
             <ul class="divide-y divide-gray-100 dark:divide-gray-800">
@@ -481,14 +540,15 @@ const icons: Record<string, string> = {
                     <button
                         type="button"
                         class="flex w-full cursor-pointer items-start justify-between gap-4 px-1 py-3.5 text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
-                        @click="cerrarExternas(e.data.observacion_id)"
+                        @click="cerrarExternas(e.id)"
                     >
                         <div class="min-w-0">
                             <p class="truncate text-sm font-medium text-gray-800 dark:text-white/90">
-                                {{ e.data.numero }} — {{ e.data.titulo }}
+                                {{ e.numero }} — {{ e.titulo }}
                             </p>
                             <p class="mt-0.5 text-theme-xs text-gray-500 dark:text-gray-400">
-                                {{ e.data.mensaje }}
+                                <template v-if="e.contacto_nombre">Cargado por {{ e.contacto_nombre }}</template>
+                                <template v-else>{{ origenLabels[e.origen] ?? e.origen }}</template>
                             </p>
                         </div>
                         <span class="shrink-0 pt-0.5 text-theme-xs text-gray-400">

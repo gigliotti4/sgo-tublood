@@ -25,16 +25,27 @@ export interface AlertaNotificacion {
     id: string
     created_at: string
     data: {
-        tipo:
-            | 'observacion_vencida'
-            | 'observacion_escalada'
-            | 'observacion_finalizada'
-            | 'observacion_externa_recibida'
+        tipo: 'observacion_vencida' | 'observacion_escalada' | 'observacion_finalizada'
         observacion_id: number
         numero: string
         titulo: string
         mensaje: string
     }
+}
+
+/**
+ * Observación pendiente de clasificación, para la sección propia de la campana
+ * del equipo de Garantía de Calidad. Sale de una consulta viva contra
+ * `observations` (no de una notificación), así que se autolimpia sola en
+ * cuanto alguien la clasifica.
+ */
+export interface ObservacionSinClasificar {
+    id: number
+    numero: string
+    titulo: string
+    origen: 'interna' | 'externa'
+    contacto_nombre: string | null
+    created_at: string
 }
 
 export interface ClienteVencimiento {
@@ -54,13 +65,12 @@ export interface PageProps extends Record<string, unknown> {
     }
     notificaciones: {
         vencimientos: ClienteVencimiento[]
+        /** Alertas de vencimiento/escalamiento de observaciones. No incluye reclamos externos: esos tienen su propia sección. */
         alertas: AlertaNotificacion[]
-        /**
-         * Reclamos del portal que este usuario de Calidad todavía no vio. Solo
-         * viene cargada en la primera pantalla de cada sesión: alimenta el modal
-         * de aviso, no la campana.
-         */
-        externas: AlertaNotificacion[]
+        /** Todos los reclamos sin clasificar, para la sección "Sin clasificar" de la campana. */
+        sinClasificar: ObservacionSinClasificar[]
+        /** Subconjunto de `sinClasificar` que este usuario todavía no vio: dispara el modal una sola vez. */
+        externas: ObservacionSinClasificar[]
     }
 }
 

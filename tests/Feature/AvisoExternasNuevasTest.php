@@ -6,26 +6,31 @@ use App\Models\Observacion;
 use App\Models\Sector;
 use App\Models\User;
 use App\Notifications\ObservacionExternaRecibidaNotification;
+use App\Notifications\ObservacionVencidaNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 /**
- * Modal que le avisa al equipo de Garantía de Calidad, al entrar al panel, que
- * entraron reclamos nuevos por el portal público.
+ * Dos capas independientes para el equipo de Garantía de Calidad:
+ *
+ * - "Sin clasificar" en la campana: consulta viva contra `observations`, se
+ *   autolimpia sola cuando alguien clasifica el caso.
+ * - El modal: un aviso de una sola vez (el subconjunto de arriba que este
+ *   usuario todavía no vio), que cerrar solo calla — no clasifica nada.
  */
 class AvisoExternasNuevasTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function observacionExterna(string $numero = '0001-26'): Observacion
+    private function observacionExterna(string $numero = '0001-26', string $estado = 'pendiente_clasificacion'): Observacion
     {
         return Observacion::create([
             'numero' => $numero,
             'anio' => 2026,
             'tipo' => 'disconformidad_servicio',
-            'estado' => 'pendiente_clasificacion',
+            'estado' => $estado,
             'origen' => 'externa',
             'contacto_nombre' => 'Cliente Test',
             'contacto_email' => 'cliente@example.com',
@@ -60,8 +65,8 @@ class AvisoExternasNuevasTest extends TestCase
             ->get('/dashboard')
             ->assertInertia(fn ($page) => $page
                 ->has('notificaciones.externas', 1)
-                ->where('notificaciones.externas.0.data.numero', '0001-26')
-                ->where('notificaciones.externas.0.data.observacion_id', $observacion->id)
+                ->where('notificaciones.externas.0.id', $observacion->id)
+                ->where('notificaciones.externas.0.numero', '0001-26')
             );
     }
 
@@ -83,7 +88,10 @@ class AvisoExternasNuevasTest extends TestCase
 
         $this->actingAs($ajeno)
             ->get('/dashboard')
-            ->assertInertia(fn ($page) => $page->has('notificaciones.externas', 0));
+            ->assertInertia(fn ($page) => $page
+                ->has('notificaciones.externas', 0)
+                ->has('notificaciones.sinClasificar', 0)
+            );
     }
 
     /**
@@ -128,37 +136,144 @@ class AvisoExternasNuevasTest extends TestCase
     }
 
     /**
-     * El aviso es para el momento de entrar al panel: un reclamo que llega
-     * después de cerrado el modal espera al próximo ingreso en vez de
-     * interrumpir la gestión en curso.
+     * El aviso ya no depende de una bandera de sesión: se recalcula en cada
+     * request (el frontend hace polling de esta prop), así que un reclamo que
+     * llega después de cerrado el modal tiene que volver a aparecer sin
+     * necesidad de un nuevo login.
      */
-    public function test_una_vez_cerrado_no_reaparece_en_la_misma_sesion(): void
+    public function test_un_reclamo_nuevo_reaparece_despues_de_cerrar_el_modal(): void
     {
         $user = $this->usuarioConRolCalidad();
         $user->notify(new ObservacionExternaRecibidaNotification($this->observacionExterna()));
 
         $this->actingAs($user)->post(route('notificaciones.externas.vistas'));
-
-        $user->notify(new ObservacionExternaRecibidaNotification($this->observacionExterna('0002-26')));
 
         $this->get('/dashboard')
             ->assertInertia(fn ($page) => $page->has('notificaciones.externas', 0));
-    }
-
-    public function test_el_siguiente_ingreso_vuelve_a_habilitar_el_aviso(): void
-    {
-        $user = $this->usuarioConRolCalidad();
-        $user->notify(new ObservacionExternaRecibidaNotification($this->observacionExterna()));
-
-        $this->actingAs($user)->post(route('notificaciones.externas.vistas'));
-        $this->post('/logout');
 
         $user->notify(new ObservacionExternaRecibidaNotification($this->observacionExterna('0002-26')));
 
-        $this->post('/login', ['email' => $user->email, 'password' => 'password'])
-            ->assertRedirect(route('dashboard'));
+        $this->get('/dashboard')
+            ->assertInertia(fn ($page) => $page
+                ->has('notificaciones.externas', 1)
+                ->where('notificaciones.externas.0.numero', '0002-26')
+            );
+    }
+
+    /**
+     * El caso que motivó este rediseño: cerrar el modal (sin clasificar nada)
+     * no puede hacer desaparecer el reclamo de todos lados. La campana tiene
+     * que seguir mostrándolo, porque el trabajo real —clasificarlo— no se hizo.
+     */
+    public function test_cerrar_el_modal_no_saca_el_reclamo_de_la_campana(): void
+    {
+        $user = $this->usuarioConRolCalidad();
+        $observacion = $this->observacionExterna();
+        $user->notify(new ObservacionExternaRecibidaNotification($observacion));
+
+        $this->actingAs($user)
+            ->post(route('notificaciones.externas.vistas'))
+            ->assertRedirect();
 
         $this->get('/dashboard')
-            ->assertInertia(fn ($page) => $page->has('notificaciones.externas', 1));
+            ->assertInertia(fn ($page) => $page
+                ->has('notificaciones.externas', 0)
+                ->has('notificaciones.sinClasificar', 1)
+                ->where('notificaciones.sinClasificar.0.id', $observacion->id)
+            );
+    }
+
+    /**
+     * Clasificar es lo único que de verdad resuelve el pendiente: tiene que
+     * sacar la observación de la campana y del modal, sin tocar la
+     * notificación (que ya puede estar leída o no, da igual).
+     */
+    public function test_clasificar_la_observacion_la_saca_de_la_campana_y_del_modal(): void
+    {
+        $user = $this->usuarioConRolCalidad();
+        $observacion = $this->observacionExterna();
+        $user->notify(new ObservacionExternaRecibidaNotification($observacion));
+
+        $observacion->update(['estado' => 'clasificada']);
+
+        $this->actingAs($user)
+            ->get('/dashboard')
+            ->assertInertia(fn ($page) => $page
+                ->has('notificaciones.externas', 0)
+                ->has('notificaciones.sinClasificar', 0)
+            );
+    }
+
+    /**
+     * Una observación puede haber sido borrada sin que su aviso se haya
+     * marcado leído. Como "Sin clasificar" sale de una consulta viva contra
+     * `observations`, esto se cumple estructuralmente: no hay ningún filtro
+     * aparte que se pueda olvidar.
+     */
+    public function test_una_observacion_borrada_no_se_comparte(): void
+    {
+        $user = $this->usuarioConRolCalidad();
+        $observacion = $this->observacionExterna();
+        $user->notify(new ObservacionExternaRecibidaNotification($observacion));
+
+        $observacion->delete();
+
+        $this->actingAs($user)
+            ->get('/dashboard')
+            ->assertInertia(fn ($page) => $page
+                ->has('notificaciones.externas', 0)
+                ->has('notificaciones.sinClasificar', 0)
+            );
+    }
+
+    /**
+     * El bloque de alertas de vencimiento/escalamiento no puede repetir lo que
+     * ya muestra "Sin clasificar": son las mismas notificaciones si no se
+     * excluyen por tipo.
+     */
+    public function test_la_campana_no_duplica_el_reclamo_en_alertas(): void
+    {
+        $user = $this->usuarioConRolCalidad();
+        $externa = $this->observacionExterna();
+        // Ya clasificada: una `ObservacionVencidaNotification` real solo se manda
+        // sobre un caso con responsable asignado, que ya dejó `pendiente_clasificacion`.
+        $vencida = $this->observacionExterna('0002-26', 'clasificada');
+
+        $user->notify(new ObservacionExternaRecibidaNotification($externa));
+        $user->notify(new ObservacionVencidaNotification($vencida));
+
+        $this->actingAs($user)
+            ->get('/dashboard')
+            ->assertInertia(fn ($page) => $page
+                ->has('notificaciones.sinClasificar', 1)
+                ->has('notificaciones.alertas', 1)
+                ->where('notificaciones.alertas.0.data.numero', '0002-26')
+            );
+    }
+
+    /**
+     * "Marcar leídas" (el botón del bloque de alertas de vencimiento) y el
+     * cierre del modal son mecanismos independientes: vaciar uno no puede
+     * apagar de paso el otro.
+     */
+    public function test_marcar_leidas_no_afecta_el_aviso_de_reclamos_externos(): void
+    {
+        $user = $this->usuarioConRolCalidad();
+        $externa = $this->observacionExterna();
+        $vencida = $this->observacionExterna('0002-26', 'clasificada');
+
+        $user->notify(new ObservacionExternaRecibidaNotification($externa));
+        $user->notify(new ObservacionVencidaNotification($vencida));
+
+        $this->actingAs($user)
+            ->post(route('notificaciones.leidas'))
+            ->assertRedirect();
+
+        $this->get('/dashboard')
+            ->assertInertia(fn ($page) => $page
+                ->has('notificaciones.alertas', 0)
+                ->has('notificaciones.externas', 1)
+                ->has('notificaciones.sinClasificar', 1)
+            );
     }
 }

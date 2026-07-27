@@ -1,5 +1,22 @@
+<script lang="ts">
+import { ref } from 'vue'
+
+/**
+ * Cuántos Modal hay abiertos en toda la app ahora mismo.
+ *
+ * Lo consulta el aviso de reclamos externos nuevos en AppLayout.vue: como ese
+ * aviso puede aparecer en cualquier pantalla (llega por polling, no solo al
+ * entrar), se abstiene de abrirse si ya hay otro modal — si no, se apilaría
+ * encima del modal de clasificación de Observaciones/Index, que es justo
+ * donde Calidad trabaja.
+ */
+export const modalesAbiertos = ref(0)
+</script>
+
 <script setup lang="ts">
-withDefaults(defineProps<{
+import { onUnmounted, watch } from 'vue'
+
+const props = withDefaults(defineProps<{
     show: boolean
     title?: string
     size?: 'sm' | 'lg' | 'xl' | '2xl'
@@ -15,6 +32,16 @@ const sizeClasses: Record<string, string> = {
     xl: 'max-w-5xl',
     '2xl': 'max-w-[88rem]',
 }
+
+watch(() => props.show, abierto => {
+    modalesAbiertos.value += abierto ? 1 : -1
+})
+
+// Por si la página se abandona (navegación de Inertia) con el modal todavía
+// abierto: sin esto el contador queda trabado y el aviso no vuelve a abrirse.
+onUnmounted(() => {
+    if (props.show) modalesAbiertos.value -= 1
+})
 </script>
 
 <template>
