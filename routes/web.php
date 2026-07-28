@@ -90,11 +90,15 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/observaciones/{observacion}/pdf', [AdminObservacionController::class, 'pdf'])
             ->name('observaciones.pdf');
         // Subir y borrar archivos es gestionar el caso: lo autoriza la Policy
-        // (responsable asignado), no el permiso global observaciones.edit.
+        // (responsable asignado o del sector), no el permiso global observaciones.edit.
         Route::post('/observaciones/{observacion}/archivos', [AdminObservacionController::class, 'uploadArchivo'])
             ->middleware('can:update,observacion')->name('observaciones.archivos.store');
         Route::delete('/observaciones/{observacion}/archivos/{attachment}', [AdminObservacionController::class, 'destroyArchivo'])
             ->middleware('can:update,observacion')->name('observaciones.archivos.destroy')->scopeBindings();
+        // Comentario de bitácora (con adjuntos opcionales): misma autorización
+        // que lo de arriba. No hay ruta de edición/borrado — el historial es inmutable.
+        Route::post('/observaciones/{observacion}/bitacora', [AdminObservacionController::class, 'comentar'])
+            ->middleware('can:update,observacion')->name('observaciones.bitacora.store');
         // Va después de /observaciones/nuevo y /observaciones/crear en el archivo,
         // pero igual se restringe a numérico para que no se las coma.
         Route::get('/observaciones/{observacion}', [AdminObservacionController::class, 'show'])

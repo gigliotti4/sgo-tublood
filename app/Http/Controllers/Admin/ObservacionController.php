@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Cliente;
 use App\Models\Observacion;
 use App\Models\ObservationAttachment;
+use App\Models\ObservationHistory;
 use App\Models\ObservationProduct;
 use App\Models\Sector;
 use App\Models\User;
@@ -48,7 +49,10 @@ class ObservacionController extends Controller
 
         return inertia('Admin/Observaciones/Index', [
             'observaciones' => Observacion::query()
-                ->with(['responsable:id,name', 'sector:id,nombre', 'cliente:id,numero,razon_social,mail,telefono', 'productos', 'attachments:id,observation_id,original_name,size'])
+                ->with([
+                    'responsable:id,name', 'sector:id,nombre', 'cliente:id,numero,razon_social,mail,telefono', 'productos',
+                    ...$this->eagerLoadsDeGestion(),
+                ])
                 // Texto libre: un solo campo que barre número, título, descripción,
                 // cliente (vinculado o los datos tipeados en el portal) y productos.
                 ->when($filters['q'] ?? null, fn ($query, $q) => $query->where(function ($query) use ($q) {
@@ -106,7 +110,7 @@ class ObservacionController extends Controller
                 'sector:id,nombre,dias_gestion',
                 'cliente:id,numero,razon_social,mail,telefono',
                 'productos',
-                'attachments:id,observation_id,original_name,size',
+                ...$this->eagerLoadsDeGestion(),
             ]),
             'presentaciones' => ObservationProduct::PRESENTACIONES,
             'tipoLabels' => TaxonomiaIncidencias::etiquetasTipos(),
@@ -188,6 +192,52 @@ class ObservacionController extends Controller
     }
 
     /**
+     * Comentario manual en la bitácora, con adjuntos opcionales.
+     *
+     * Autoriza con la Policy y no con el permiso `observaciones.edit`: dejar
+     * constancia de algo es parte de gestionar el caso, igual que subir un
+     * adjunto suelto o cambiar el estado.
+     *
+     * La entrada de bitácora se crea aunque no haya archivos (una nota sola es
+     * válida) y los archivos, si los hay, se guardan atados a esa entrada — es
+     * lo que la distingue de `uploadArchivo()`, que sube documentación suelta
+     * sin dejar una entrada propia.
+     */
+    public function comentar(Request $request, Observacion $observacion): RedirectResponse
+    {
+        $this->authorize('update', $observacion);
+
+        $data = $request->validate([
+            'nota' => ['nullable', 'string', 'max:5000'],
+            'archivos' => ['array'],
+            'archivos.*' => ['file', 'mimes:jpg,jpeg,png,pdf,doc,docx,xls,xlsx', 'max:10240'],
+        ]);
+
+        if (blank($data['nota'] ?? null) && empty($request->file('archivos', []))) {
+            throw ValidationException::withMessages([
+                'nota' => 'Escribí algo o adjuntá un archivo.',
+            ]);
+        }
+
+        $entrada = $observacion->historial()->create([
+            'user_id' => $request->user()->id,
+            'accion' => ObservationHistory::ACCION_COMENTARIO,
+            'nota' => $data['nota'] ?? null,
+        ]);
+
+        foreach ($request->file('archivos', []) as $file) {
+            $observacion->guardarAdjunto($file, [
+                'observation_history_id' => $entrada->id,
+                'user_id' => $request->user()->id,
+            ], subcarpeta: 'bitacora');
+        }
+
+        // back() y no la pantalla de detalle: la bitácora se gestiona desde ahí
+        // y también desde el modal del listado, igual que los adjuntos sueltos.
+        return back()->with('success', 'Comentario agregado a la bitácora.');
+    }
+
+    /**
      * Descarga un adjunto de la observación.
      *
      * Los adjuntos se venían guardando desde el alta (portal y carga interna)
@@ -222,6 +272,24 @@ class ObservacionController extends Controller
             'prioridadSugerida' => config('incidencias.prioridad_sugerida'),
             'usuarios' => $this->usuariosAsignables(),
         ]);
+    }
+
+    /**
+     * Eager-loads compartidos por `index()` y `show()`, los dos lugares donde
+     * se gestiona un caso: bitácora (con su autor y sus adjuntos) y los
+     * adjuntos sueltos, que quedan aparte de los que cuelgan de una entrada de
+     * bitácora para no mostrar el mismo archivo dos veces.
+     *
+     * @return array<string, \Closure>
+     */
+    private function eagerLoadsDeGestion(): array
+    {
+        return [
+            'historial' => fn ($query) => $query->latest()
+                ->with(['user:id,name,apellido', 'adjuntos:id,observation_history_id,original_name,size']),
+            'attachments' => fn ($query) => $query->whereNull('observation_history_id')
+                ->select(['id', 'observation_id', 'original_name', 'size']),
+        ];
     }
 
     /**

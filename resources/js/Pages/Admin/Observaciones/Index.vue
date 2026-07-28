@@ -6,6 +6,7 @@ import { usePermissions } from '@/composables/usePermissions'
 import Badge from '@/Components/Badge.vue'
 import Button from '@/Components/Button.vue'
 import AdjuntosObservacion from '@/Components/AdjuntosObservacion.vue'
+import BitacoraObservacion from '@/Components/BitacoraObservacion.vue'
 import FormSection from '@/Components/FormSection.vue'
 import Icon from '@/Components/Icon.vue'
 import Input from '@/Components/Input.vue'
@@ -49,7 +50,13 @@ const props = defineProps<{
 
 const { isSuperAdmin, user } = usePermissions()
 
-const puedeEditar = (o: Observacion) => isSuperAdmin.value || o.responsable_id === user.value?.id
+// Refleja ObservacionPolicy::update(): responsable asignado, o cualquiera del
+// sector de la observación (para que el sector destino de una derivación
+// pueda tomarla apenas queda "sin asignar"). Dos sectores null no cuentan.
+const puedeEditar = (o: Observacion) =>
+    isSuperAdmin.value
+    || o.responsable_id === user.value?.id
+    || (o.sector_id !== null && o.sector_id === user.value?.sector_id)
 
 // ── Buscador ──────────────────────────────────────────────────────────────
 // Los filtros viven en la URL (el backend los valida y los devuelve como
@@ -495,6 +502,17 @@ const guardar = () => {
                                 compacto
                                 :observacion-id="observacionEnEdicion.id"
                                 :adjuntos="observacionEnEdicion.attachments ?? []"
+                                :puede-editar="puedeEditar(observacionEnEdicion)"
+                            />
+                        </div>
+
+                        <!-- Bitácora -->
+                        <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                            <p class="mb-2 text-theme-xs font-medium uppercase tracking-wide text-gray-400">Bitácora</p>
+                            <BitacoraObservacion
+                                compacto
+                                :observacion-id="observacionEnEdicion.id"
+                                :entradas="observacionEnEdicion.historial ?? []"
                                 :puede-editar="puedeEditar(observacionEnEdicion)"
                             />
                         </div>

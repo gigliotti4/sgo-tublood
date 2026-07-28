@@ -85,6 +85,12 @@ class Observacion extends Model
         return $this->hasMany(ObservationAttachment::class, 'observation_id');
     }
 
+    /** Bitácora del caso: comentarios y cambios registrados por ObservacionObserver. */
+    public function historial(): HasMany
+    {
+        return $this->hasMany(ObservationHistory::class, 'observation_id');
+    }
+
     public function productos(): HasMany
     {
         return $this->hasMany(ObservationProduct::class, 'observation_id');

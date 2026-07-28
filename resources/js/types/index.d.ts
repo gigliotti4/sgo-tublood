@@ -163,7 +163,10 @@ export interface Observacion {
     datos_especificos: Record<string, string | number | null> | null
     cliente: { id: number; numero: string; razon_social: string; mail: string | null; telefono: string | null } | null
     productos: ObservationProduct[]
+    /** Adjuntos sueltos (subidos con el botón de "Archivos adjuntos"), sin los de la bitácora. */
     attachments?: ObservationAttachment[]
+    /** Bitácora del caso: comentarios y cambios, más reciente primero. */
+    historial?: ObservationHistoryEntry[]
     created_at: string
 }
 
@@ -171,6 +174,26 @@ export interface ObservationAttachment {
     id: number
     original_name: string
     size: number
+    /** Presentes cuando el adjunto se subió desde un comentario de bitácora, no desde el botón suelto. */
+    observation_history_id?: number | null
+    user_id?: number | null
+}
+
+/**
+ * Entrada de la bitácora del caso: un cambio (estado, responsable, sector,
+ * clasificación) registrado por ObservacionObserver, o un comentario manual
+ * con sus adjuntos. Inmutable — no hay endpoint de edición ni de borrado.
+ */
+export interface ObservationHistoryEntry {
+    id: number
+    accion: 'comentario' | 'estado' | 'responsable' | 'sector' | 'clasificacion' | 'adjunto' | 'sistema'
+    nota: string | null
+    /** Forma según `accion`: `{de, a}` para estado/responsable/sector, `{prioridad: {de,a}, tipo_caso: {de,a}}` para clasificacion. */
+    cambios: Record<string, unknown> | null
+    created_at: string
+    /** Null en las entradas automáticas: no tienen usuario detrás. */
+    user: { id: number; name: string; apellido: string | null } | null
+    adjuntos: ObservationAttachment[]
 }
 
 export interface PaginatedData<T> {

@@ -26,6 +26,10 @@ class HandleInertiaRequests extends Middleware
                     'email' => $user->email,
                     'roles' => $user->getRoleNames(),
                     'permissions' => $user->getAllPermissions()->pluck('name'),
+                    // Para la autorización por sector de ObservacionPolicy en el
+                    // cliente (`puedeEditar` en Index.vue): tiene que reflejar la
+                    // misma regla que el backend.
+                    'sector_id' => $user->sector_id,
                 ] : null,
             ],
             'flash' => [

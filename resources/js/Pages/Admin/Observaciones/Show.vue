@@ -2,6 +2,7 @@
 import { Head, Link } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import AdjuntosObservacion from '@/Components/AdjuntosObservacion.vue'
+import BitacoraObservacion from '@/Components/BitacoraObservacion.vue'
 import Badge from '@/Components/Badge.vue'
 import Icon from '@/Components/Icon.vue'
 import type { Observacion } from '@/types'
@@ -165,6 +166,16 @@ const humanizar = (clave: string) =>
                     <AdjuntosObservacion
                         :observacion-id="observacion.id"
                         :adjuntos="observacion.attachments ?? []"
+                        :puede-editar="puedeEditar"
+                    />
+                </div>
+
+                <!-- Bitácora -->
+                <div class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
+                    <p class="mb-3 text-theme-xs font-medium uppercase tracking-wide text-gray-400">Bitácora</p>
+                    <BitacoraObservacion
+                        :observacion-id="observacion.id"
+                        :entradas="observacion.historial ?? []"
                         :puede-editar="puedeEditar"
                     />
                 </div>

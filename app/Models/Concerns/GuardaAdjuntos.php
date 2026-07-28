@@ -24,15 +24,26 @@ trait GuardaAdjuntos
     /** Carpeta del registro, relativa al disco `local`. Ej: `clientes/1234`. */
     abstract protected function carpetaDeAdjuntos(): string;
 
-    public function guardarAdjunto(UploadedFile $file): Model
+    /**
+     * @param  array<string, mixed>  $atributos  Columnas extra del modelo hijo
+     *                                           (ej. `observation_history_id`, `user_id` en los adjuntos de Observacion).
+     *                                           Cliente no las usa y sigue llamando sin este argumento.
+     * @param  string|null  $subcarpeta  Subcarpeta dentro de la carpeta del registro (ej. `bitacora`, para
+     *                                   separar del resto de los adjuntos sueltos de la observación).
+     */
+    public function guardarAdjunto(UploadedFile $file, array $atributos = [], ?string $subcarpeta = null): Model
     {
         $carpeta = $this->carpetaDeAdjuntos();
+        if ($subcarpeta !== null) {
+            $carpeta .= '/'.$subcarpeta;
+        }
 
         return $this->attachments()->create([
             'path' => $file->storeAs($carpeta, $this->nombreDisponible($carpeta, $file), 'local'),
             'original_name' => $file->getClientOriginalName(),
             'mime_type' => $file->getClientMimeType(),
             'size' => $file->getSize(),
+            ...$atributos,
         ]);
     }
 
