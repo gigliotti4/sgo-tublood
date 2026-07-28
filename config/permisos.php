@@ -24,6 +24,7 @@ return [
         'roles' => 'Roles y permisos',
         'clientes' => 'Clientes',
         'observaciones' => 'Observaciones',
+        'auditoria' => 'Auditoría',
     ],
 
     'etiquetas' => [
@@ -47,6 +48,8 @@ return [
         // (eso lo decide ObservacionPolicy según el responsable asignado), pero
         // sí habilita la carga manual.
         'observaciones.edit' => ['grupo' => 'observaciones', 'label' => 'Cargar y gestionar observaciones'],
+
+        'auditoria.view' => ['grupo' => 'auditoria', 'label' => 'Ver auditoría de observaciones'],
     ],
 
 ];

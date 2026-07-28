@@ -5,6 +5,7 @@ import Badge from '@/Components/Badge.vue'
 import Button from '@/Components/Button.vue'
 import Icon from '@/Components/Icon.vue'
 import Textarea from '@/Components/Textarea.vue'
+import { accionLabels, accionVariant, comoCambioSimple, esClasificacion, formatFechaHora, formatSize, nombreAutor } from '@/lib/bitacora'
 import type { ObservationHistoryEntry } from '@/types'
 
 /**
@@ -24,47 +25,6 @@ const props = defineProps<{
     puedeEditar: boolean
     compacto?: boolean
 }>()
-
-interface CambioSimple { de: string; a: string }
-interface CambioClasificacion { prioridad: CambioSimple; tipo_caso: CambioSimple }
-
-const esClasificacion = (entrada: ObservationHistoryEntry): entrada is ObservationHistoryEntry & { cambios: CambioClasificacion } =>
-    entrada.accion === 'clasificacion'
-
-const comoCambioSimple = (cambios: ObservationHistoryEntry['cambios']): CambioSimple | null =>
-    cambios && 'de' in cambios && 'a' in cambios ? (cambios as unknown as CambioSimple) : null
-
-const accionLabels: Record<string, string> = {
-    comentario: 'Comentario',
-    estado: 'Cambio de estado',
-    responsable: 'Cambio de responsable',
-    sector: 'Derivación de sector',
-    clasificacion: 'Clasificación',
-    adjunto: 'Archivo adjunto',
-    sistema: 'Sistema',
-}
-
-const accionVariant: Record<string, 'slate' | 'blue' | 'indigo' | 'purple' | 'emerald' | 'amber' | 'red'> = {
-    comentario: 'slate',
-    estado: 'amber',
-    responsable: 'indigo',
-    sector: 'purple',
-    clasificacion: 'blue',
-    adjunto: 'slate',
-    sistema: 'slate',
-}
-
-const nombreAutor = (entrada: ObservationHistoryEntry) =>
-    entrada.user ? [entrada.user.name, entrada.user.apellido].filter(Boolean).join(' ') : 'Sistema'
-
-const formatFechaHora = (fecha: string) =>
-    new Date(fecha).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-
-const formatSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
 
 // ── Comentario nuevo ─────────────────────────────────────────────────────
 

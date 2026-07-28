@@ -20,6 +20,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'permissions.view',
             'clientes.view', 'clientes.sync', 'clientes.edit',
             'observaciones.view', 'observaciones.edit',
+            'auditoria.view',
         ];
 
         foreach ($permissions as $permission) {
@@ -35,6 +36,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'roles.view',
             'clientes.view', 'clientes.sync', 'clientes.edit',
             'observaciones.view', 'observaciones.edit',
+            'auditoria.view',
         ]);
 
         $viewer = Role::firstOrCreate(['name' => 'viewer']);

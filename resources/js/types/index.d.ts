@@ -194,6 +194,8 @@ export interface ObservationHistoryEntry {
     /** Null en las entradas automáticas: no tienen usuario detrás. */
     user: { id: number; name: string; apellido: string | null } | null
     adjuntos: ObservationAttachment[]
+    /** Solo viene cargada en Admin/Auditoria/Index: ahí la entrada se ve fuera del contexto de un caso puntual. */
+    observacion?: { id: number; numero: string; titulo: string; sector: { id: number; nombre: string } | null }
 }
 
 export interface PaginatedData<T> {

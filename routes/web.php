@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\AuditoriaController;
 use App\Http\Controllers\Admin\ClienteController;
 use App\Http\Controllers\Admin\ObservacionController as AdminObservacionController;
 use App\Http\Controllers\Admin\RoleController;
@@ -129,5 +130,12 @@ Route::middleware(['auth'])->group(function () {
     });
     Route::middleware('can:roles.delete')->group(function () {
         Route::delete('/roles/{role}', [RoleController::class, 'destroy'])->name('roles.destroy');
+    });
+
+    // Auditoría: vista transversal de la bitácora, con permiso propio y no
+    // observaciones.view — ver quién hizo qué en todo el sistema es una
+    // capacidad más sensible que ver el listado de casos.
+    Route::middleware('can:auditoria.view')->group(function () {
+        Route::get('/auditoria', [AuditoriaController::class, 'index'])->name('auditoria.index');
     });
 });
