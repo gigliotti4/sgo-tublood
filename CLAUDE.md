@@ -156,7 +156,7 @@ Los **sectores** no tienen permisos propios: reusan `users.view`/`users.edit`.
 ## Entorno
 
 - **DB**: el `.env` de este entorno de desarrollo apunta a **MySQL** (`DB_CONNECTION=mysql`, DB `sgo-tublood`), no a SQLite pese a lo que sugeriría un setup default de Laravel — verificar `.env` antes de asumir. Los **tests** son la excepción: `phpunit.xml` fuerza `DB_CONNECTION=sqlite` / `DB_DATABASE=:memory:` sin importar el `.env`.
-- **Prod**: MySQL (configurar en `.env`).
+- **Prod**: MySQL (configurar en `.env`). Hosting compartido (Hostinger); deploy con `./deploy.sh` corrido a mano por SSH — no hay CI/CD. Hace `git pull --ff-only` de la rama actual (hoy se despliega directo desde `feature/codigo-producto-y-espanol`, **no** desde `main`, que quedó desactualizada), migra, reseedea `RolesAndPermissionsSeeder` (agregar un permiso nuevo en el código no alcanza: sin este paso queda invisible en producción hasta que alguien lo corra a mano) y regenera cachés de config/rutas/vistas. No compila assets — `public/build/` viene versionado en el repo porque el hosting no tiene Node.
 - **Queue**: driver database (sin Redis en dev)
 - **Mail**: **Resend** (`resend/resend-php`; el mailer y `services.resend.key` ya venían en el scaffold de Laravel). En **dev queda en `MAIL_MAILER=log`** a propósito — los mails se leen en `storage/logs/laravel.log` y no hay riesgo de mandarle una prueba a un cliente real. Para activarlo: `MAIL_MAILER=resend` + `RESEND_API_KEY`, y `MAIL_FROM_ADDRESS` **tiene que ser de un dominio verificado en Resend** o rechaza el envío. Los tests nunca mandan nada: `phpunit.xml` fuerza `MAIL_MAILER=array`.
 - **Alias Vite**: `@/` → `resources/js/`
