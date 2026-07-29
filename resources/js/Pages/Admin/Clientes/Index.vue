@@ -8,6 +8,8 @@ import Input from '@/Components/Input.vue'
 import Icon from '@/Components/Icon.vue'
 import Button from '@/Components/Button.vue'
 import Pagination from '@/Components/Pagination.vue'
+import TableCard from '@/Components/TableCard.vue'
+import DataRow from '@/Components/DataRow.vue'
 import type { Cliente, PaginatedData } from '@/types'
 
 const props = defineProps<{
@@ -98,7 +100,7 @@ const formatFechaVencimiento = (d: string | null) => {
 
             <!-- Tabla -->
             <div class="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
-                <div class="overflow-x-auto">
+                <div class="hidden overflow-x-auto md:block">
                     <table class="w-full">
                         <thead>
                             <tr class="border-b border-gray-100 dark:border-gray-800">
@@ -163,6 +165,42 @@ const formatFechaVencimiento = (d: string | null) => {
                         </tbody>
                     </table>
                 </div>
+
+                <!-- Cards: mismos datos que la tabla, en formato de lista para mobile -->
+                <div v-if="clientes.data.length" class="space-y-3 p-4 md:hidden">
+                    <TableCard v-for="cliente in clientes.data" :key="cliente.id">
+                        <template #header>
+                            <p class="truncate text-theme-sm font-medium text-gray-800 dark:text-white/90">{{ cliente.razon_social }}</p>
+                            <p v-if="cliente.nombre_fantasia" class="text-theme-xs text-gray-400">{{ cliente.nombre_fantasia }}</p>
+                            <p class="font-mono text-theme-xs text-gray-400">{{ cliente.numero }}</p>
+                        </template>
+                        <template v-if="hasPermission('clientes.edit')" #actions>
+                            <Link
+                                :href="route('clientes.edit', cliente.id)"
+                                class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-brand-500 dark:hover:bg-white/[0.05] dark:hover:text-brand-300"
+                                title="Editar"
+                            >
+                                <Icon name="pencil" class="h-4.5 w-4.5" />
+                                <span class="sr-only">Editar cliente {{ cliente.razon_social }}</span>
+                            </Link>
+                        </template>
+                        <template #body>
+                            <DataRow label="CUIT"><span class="font-mono">{{ cliente.cuit ?? '—' }}</span></DataRow>
+                            <DataRow label="IVA">{{ cliente.descripcion_iva ?? '—' }}</DataRow>
+                            <DataRow label="Localidad">{{ [cliente.localidad, cliente.descripcion_provincia].filter(Boolean).join(', ') || '—' }}</DataRow>
+                            <DataRow label="Teléfono">{{ cliente.telefono || '—' }}</DataRow>
+                            <DataRow label="Mail">
+                                <a v-if="cliente.mail" :href="`mailto:${cliente.mail}`" class="hover:text-brand-500 hover:underline dark:hover:text-brand-300">{{ cliente.mail }}</a>
+                                <span v-else>—</span>
+                            </DataRow>
+                            <DataRow label="Vencimiento">{{ formatFechaVencimiento(cliente.fecha_vencimiento) }}</DataRow>
+                        </template>
+                    </TableCard>
+                </div>
+                <p v-else class="p-4 text-center text-sm text-gray-400 md:hidden">
+                    <template v-if="search">No se encontraron clientes para "<span class="font-medium">{{ search }}</span>".</template>
+                    <template v-else>No hay clientes. Usá el botón <strong>Sincronizar</strong> para importarlos desde RP Sistemas.</template>
+                </p>
 
                 <!-- Footer: total + paginación -->
                 <div class="flex flex-col gap-3 border-t border-gray-100 px-4 py-3.5 text-theme-sm text-gray-500 dark:border-gray-800 dark:text-gray-400 sm:flex-row sm:items-center sm:justify-between">
