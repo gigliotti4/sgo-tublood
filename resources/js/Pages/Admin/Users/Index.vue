@@ -9,6 +9,8 @@ import Button from '@/Components/Button.vue'
 import Modal from '@/Components/Modal.vue'
 import Pagination from '@/Components/Pagination.vue'
 import Select from '@/Components/Select.vue'
+import TableCard from '@/Components/TableCard.vue'
+import DataRow from '@/Components/DataRow.vue'
 import type { PaginatedData } from '@/types'
 
 interface RoleOption { id: number; name: string }
@@ -110,7 +112,7 @@ const copiarCredenciales = () => navigator.clipboard.writeText(credencialesComoT
         </div>
 
         <div class="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
-            <div class="overflow-x-auto">
+            <div class="hidden overflow-x-auto md:block">
                 <table class="w-full">
                     <thead>
                         <tr class="border-b border-gray-100 dark:border-gray-800">
@@ -177,6 +179,52 @@ const copiarCredenciales = () => navigator.clipboard.writeText(credencialesComoT
                     </tbody>
                 </table>
             </div>
+
+            <!-- Cards: mismos datos que la tabla, en formato de lista para mobile -->
+            <div v-if="users.data.length" class="space-y-3 p-4 md:hidden">
+                <TableCard v-for="user in users.data" :key="user.id">
+                    <template #header>
+                        <p class="truncate text-theme-sm font-medium text-gray-800 dark:text-white/90">
+                            {{ nombreCompleto(user) }}
+                            <Badge v-if="user.es_gerente" variant="amber" :pill="false">gerente</Badge>
+                        </p>
+                        <p class="truncate text-theme-xs text-gray-400">{{ user.email }}</p>
+                    </template>
+                    <template #actions>
+                        <Link
+                            v-if="hasPermission('users.edit')"
+                            :href="route('users.edit', user.id)"
+                            class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-brand-500 dark:hover:bg-white/[0.05] dark:hover:text-brand-300"
+                            title="Editar"
+                        >
+                            <Icon name="pencil" class="h-4.5 w-4.5" />
+                            <span class="sr-only">Editar usuario {{ user.name }}</span>
+                        </Link>
+                        <button
+                            v-if="hasPermission('users.delete')"
+                            type="button"
+                            class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-error-50 hover:text-error-500 dark:hover:bg-error-500/15"
+                            title="Eliminar"
+                            @click="confirmDestroy(user)"
+                        >
+                            <Icon name="trash" class="h-4.5 w-4.5" />
+                            <span class="sr-only">Eliminar usuario {{ user.name }}</span>
+                        </button>
+                    </template>
+                    <template #body>
+                        <DataRow label="Sector">
+                            {{ user.sector?.nombre ?? '—' }}
+                            <span v-if="user.sector?.dias_gestion" class="text-theme-xs text-gray-400">· {{ user.sector.dias_gestion }} días</span>
+                        </DataRow>
+                        <DataRow label="Supervisor">{{ user.supervisor ? nombreCompleto(user.supervisor) : '—' }}</DataRow>
+                        <DataRow label="Gerente">{{ user.gerente ? nombreCompleto(user.gerente) : '—' }}</DataRow>
+                    </template>
+                    <template v-if="user.roles.length" #footer>
+                        <Badge v-for="role in user.roles" :key="role.name" variant="indigo" :pill="false">{{ role.name }}</Badge>
+                    </template>
+                </TableCard>
+            </div>
+            <p v-else class="p-4 text-center text-sm text-gray-400 md:hidden">No hay usuarios.</p>
         </div>
 
         <!-- Paginación -->
