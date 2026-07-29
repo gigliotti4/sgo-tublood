@@ -8,6 +8,7 @@ import Button from '@/Components/Button.vue'
 import Icon from '@/Components/Icon.vue'
 import Modal from '@/Components/Modal.vue'
 import Pagination from '@/Components/Pagination.vue'
+import TableCard from '@/Components/TableCard.vue'
 import type { PaginatedData, PermisoEtiquetado } from '@/types'
 
 interface RoleRow {
@@ -63,6 +64,7 @@ const destroy = () => {
         </div>
 
         <div class="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
+            <div class="hidden overflow-x-auto md:block">
             <table class="w-full">
                 <thead>
                     <tr class="border-b border-gray-100 dark:border-gray-800">
@@ -109,6 +111,44 @@ const destroy = () => {
                     </tr>
                 </tbody>
             </table>
+            </div>
+
+            <!-- Cards: mismos datos que la tabla, en formato de lista para mobile -->
+            <div v-if="roles.data.length" class="space-y-3 p-4 md:hidden">
+                <TableCard v-for="role in roles.data" :key="role.id">
+                    <template #header>
+                        <p class="text-theme-sm font-medium text-gray-800 dark:text-white/90">{{ role.name }}</p>
+                    </template>
+                    <template #actions>
+                        <Link
+                            v-if="hasPermission('roles.edit')"
+                            :href="route('roles.edit', role.id)"
+                            class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-brand-500 dark:hover:bg-white/[0.05] dark:hover:text-brand-300"
+                            title="Editar"
+                        >
+                            <Icon name="pencil" class="h-4.5 w-4.5" />
+                            <span class="sr-only">Editar rol {{ role.name }}</span>
+                        </Link>
+                        <button
+                            v-if="hasPermission('roles.delete') && role.name !== 'super-admin'"
+                            type="button"
+                            class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-error-50 hover:text-error-500 dark:hover:bg-error-500/15"
+                            title="Eliminar"
+                            @click="confirmDestroy(role)"
+                        >
+                            <Icon name="trash" class="h-4.5 w-4.5" />
+                            <span class="sr-only">Eliminar rol {{ role.name }}</span>
+                        </button>
+                    </template>
+                    <template #footer>
+                        <Badge v-for="perm in role.permissions" :key="perm.name" variant="slate" :pill="false" :title="perm.name">
+                            {{ etiquetaPermiso(perm.name) }}
+                        </Badge>
+                        <span v-if="role.permissions.length === 0" class="text-theme-sm text-gray-400">Sin permisos</span>
+                    </template>
+                </TableCard>
+            </div>
+            <p v-else class="p-4 text-center text-sm text-gray-400 md:hidden">No hay roles.</p>
         </div>
 
         <!-- Paginación -->
