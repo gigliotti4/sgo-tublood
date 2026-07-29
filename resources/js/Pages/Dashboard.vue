@@ -6,10 +6,8 @@ import { route } from 'ziggy-js'
 import VueApexCharts from 'vue3-apexcharts'
 import type { ApexOptions } from 'apexcharts'
 import Badge from '@/Components/Badge.vue'
-import { usePermissions } from '@/composables/usePermissions'
 import { useDarkMode } from '@/composables/useDarkMode'
 
-const { hasPermission } = usePermissions()
 const { isDark } = useDarkMode()
 
 interface EstadoCount {
@@ -177,19 +175,9 @@ const statCards = computed<StatCard[]>(() => [
 
     <AppLayout>
         <!-- Header -->
-        <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
-            <div>
-                <h1 class="text-xl font-semibold text-gray-800 dark:text-white/90">Panel de control</h1>
-                <p class="mt-0.5 text-theme-sm text-gray-500 dark:text-gray-400">Resumen del sistema</p>
-            </div>
-            <Link
-                v-if="hasPermission('observaciones.edit')"
-                :href="route('observaciones.nuevo')"
-                class="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white shadow-theme-xs transition hover:bg-brand-600"
-            >
-                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-                Nueva observación
-            </Link>
+        <div class="mb-6">
+            <h1 class="text-xl font-semibold text-gray-800 dark:text-white/90">Panel de control</h1>
+            <p class="mt-0.5 text-theme-sm text-gray-500 dark:text-gray-400">Resumen del sistema</p>
         </div>
 
         <!-- Stat cards -->
