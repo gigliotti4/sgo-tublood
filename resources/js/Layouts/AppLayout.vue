@@ -5,6 +5,7 @@ import { route } from 'ziggy-js'
 import { usePermissions } from '@/composables/usePermissions'
 import { useDarkMode } from '@/composables/useDarkMode'
 import Modal, { modalesAbiertos } from '@/Components/Modal.vue'
+import FabSpeedDial, { type FabAction } from '@/Components/FabSpeedDial.vue'
 import type { PageProps } from '@/types'
 
 const { user, hasPermission } = usePermissions()
@@ -15,6 +16,24 @@ const sidebarCollapsed = ref(false)
 const mobileSidebarOpen = ref(false)
 const notificacionesOpen = ref(false)
 const userMenuOpen = ref(false)
+const fabOpen = ref(false)
+
+// Mismos íconos que las tarjetas de Admin/Observaciones/Nuevo.vue, para que
+// el atajo del FAB se vea consistente con esa pantalla (que sigue existiendo).
+const fabActions: FabAction[] = [
+    {
+        key: 'no_conformidad',
+        label: 'No Conformidad',
+        href: '/no-conformidades/crear',
+        icon: 'M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.008v.008H12v-.008z',
+    },
+    {
+        key: 'interna',
+        label: 'Observación interna',
+        href: route('observaciones.create', { origen: 'interna' }),
+        icon: 'M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z',
+    },
+]
 
 const vencimientos = computed(() => page.props.notificaciones?.vencimientos ?? [])
 const alertas = computed(() => page.props.notificaciones?.alertas ?? [])
@@ -150,6 +169,7 @@ const handleEsc = (e: KeyboardEvent) => {
         mobileSidebarOpen.value = false
         userMenuOpen.value = false
         notificacionesOpen.value = false
+        fabOpen.value = false
     }
 }
 onMounted(() => window.addEventListener('keydown', handleEsc))
@@ -172,6 +192,7 @@ const icons: Record<string, string> = {
     sun: 'M12 3v1.5m0 15V21m9-9h-1.5M4.5 12H3m15.364 6.364l-1.06-1.06M6.696 6.696l-1.06-1.06m12.728 0l-1.06 1.06M6.696 17.304l-1.06 1.06M16.5 12a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z',
     moon: 'M21.752 15.002A9.72 9.72 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z',
     dots: 'M6.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM12.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM18.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0z',
+    plus: 'M12 4.5v15m7.5-7.5h-15',
 }
 </script>
 
@@ -513,18 +534,8 @@ const icons: Record<string, string> = {
             </main>
         </div>
 
-        <!-- FAB: nueva observación, visible en todas las secciones -->
-        <Link
-            v-if="hasPermission('observaciones.edit')"
-            :href="route('observaciones.nuevo')"
-            class="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-brand-500 text-white shadow-theme-lg transition hover:scale-105 hover:bg-brand-600"
-            title="Nueva observación"
-        >
-            <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-            </svg>
-            <span class="sr-only">Nueva observación</span>
-        </Link>
+        <!-- FAB: acceso rápido a los formularios de alta, visible en todas las secciones -->
+        <FabSpeedDial v-if="hasPermission('observaciones.edit')" v-model:open="fabOpen" :actions="fabActions" />
 
         <!-- Reclamos nuevos del portal, para el equipo de Garantía de Calidad -->
         <Modal
