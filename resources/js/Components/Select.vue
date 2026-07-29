@@ -24,7 +24,7 @@ const model = defineModel<string | number | null>()
             <select
                 v-model="model"
                 v-bind="$attrs"
-                class="h-11 w-full appearance-none rounded-lg border bg-white py-2.5 pl-4 pr-10 text-sm text-gray-800 shadow-theme-xs transition focus:outline-none focus:ring-3 disabled:bg-gray-100 disabled:text-gray-500 dark:bg-gray-900 dark:text-white/90 dark:disabled:bg-gray-800 dark:disabled:text-gray-500"
+                class="h-11 w-full appearance-none rounded-lg border bg-white py-2.5 pl-4 pr-10 text-[16px] text-gray-800 shadow-theme-xs transition focus:outline-none focus:ring-3 disabled:bg-gray-100 disabled:text-gray-500 dark:bg-gray-900 dark:text-white/90 dark:disabled:bg-gray-800 dark:disabled:text-gray-500 sm:text-sm"
                 :class="error
                     ? 'border-error-300 focus:border-error-300 focus:ring-error-500/10 dark:border-error-500/60'
                     : 'border-gray-300 focus:border-brand-300 focus:ring-brand-500/10 dark:border-gray-700 dark:focus:border-brand-800'"
