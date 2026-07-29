@@ -102,7 +102,7 @@ const plazoDelSector = computed(() => {
             </optgroup>
         </Select>
 
-        <label class="flex items-start gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 sm:pt-7">
+        <label class="flex items-start gap-2 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 sm:pt-7">
             <input type="checkbox" v-model="form.es_gerente" class="mt-0.5 h-4 w-4 rounded accent-brand-500 dark:accent-brand-400" />
             <span>
                 Es gerente
@@ -119,7 +119,7 @@ const plazoDelSector = computed(() => {
                 <label
                     v-for="role in roles"
                     :key="role.id"
-                    class="flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300"
+                    class="flex cursor-pointer items-center gap-2 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300"
                 >
                     <input type="checkbox" :value="role.name" v-model="form.roles" class="h-4 w-4 rounded accent-brand-500 dark:accent-brand-400" />
                     {{ role.name }}

@@ -40,7 +40,7 @@ const items = computed<OpcionRadio[]>(() =>
             <label
                 v-for="op in items"
                 :key="op.value"
-                class="flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-400"
+                class="flex cursor-pointer items-center gap-2 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-400"
             >
                 <input
                     v-model="model"

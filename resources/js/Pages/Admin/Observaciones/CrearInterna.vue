@@ -326,7 +326,7 @@ const submit = () => form.post(route('observaciones.store'), { forceFormData: tr
                                 <button
                                     v-if="form.productos.length > 1"
                                     type="button"
-                                    class="cursor-pointer text-theme-xs font-medium text-error-500 hover:text-error-600 dark:text-error-400 dark:hover:text-error-300"
+                                    class="inline-flex min-h-11 -mx-2 items-center px-2 cursor-pointer text-theme-xs font-medium text-error-500 hover:text-error-600 dark:text-error-400 dark:hover:text-error-300"
                                     @click="quitarProducto(index)"
                                 >
                                     Quitar
@@ -396,7 +396,7 @@ const submit = () => form.post(route('observaciones.store'), { forceFormData: tr
 
                         <button
                             type="button"
-                            class="cursor-pointer text-sm font-medium text-brand-500 hover:text-brand-600 dark:text-brand-300 dark:hover:text-brand-200"
+                            class="inline-flex min-h-11 -mx-2 items-center px-2 cursor-pointer text-sm font-medium text-brand-500 hover:text-brand-600 dark:text-brand-300 dark:hover:text-brand-200"
                             @click="agregarProducto"
                         >
                             + Agregar producto
@@ -436,7 +436,7 @@ const submit = () => form.post(route('observaciones.store'), { forceFormData: tr
                         <p class="mt-1 text-xs text-gray-400">JPG, PNG, PDF. Máx 3 MB</p>
                         <button
                             type="button"
-                            class="mt-3 cursor-pointer text-sm font-medium text-brand-500 hover:text-brand-600 dark:text-brand-300 dark:hover:text-brand-200"
+                            class="mt-3 inline-flex min-h-11 -mx-2 items-center px-2 cursor-pointer text-sm font-medium text-brand-500 hover:text-brand-600 dark:text-brand-300 dark:hover:text-brand-200"
                             @click="fileInput?.click()"
                         >
                             Seleccionar archivos
@@ -460,7 +460,7 @@ const submit = () => form.post(route('observaciones.store'), { forceFormData: tr
                             <span class="truncate text-gray-700 dark:text-gray-200">{{ file.name }}</span>
                             <button
                                 type="button"
-                                class="cursor-pointer text-gray-400 hover:text-error-500 dark:hover:text-error-400"
+                                class="cursor-pointer rounded-full p-2 -m-2 text-gray-400 hover:text-error-500 dark:hover:text-error-400"
                                 @click="removeFile(index)"
                             >
                                 ✕
@@ -472,14 +472,14 @@ const submit = () => form.post(route('observaciones.store'), { forceFormData: tr
                     </p>
                 </FormSection>
 
-                <div class="flex justify-end gap-3 border-t border-gray-100 pt-5 dark:border-gray-800">
+                <div class="flex flex-col-reverse gap-3 border-t border-gray-100 pt-5 dark:border-gray-800 sm:flex-row sm:justify-end">
                     <Link
                         :href="route('observaciones.nuevo')"
-                        class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-white/[0.05]"
+                        class="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-white/[0.05] sm:w-auto"
                     >
                         ← Volver
                     </Link>
-                    <Button type="submit" variant="primary" :disabled="form.processing">
+                    <Button type="submit" variant="primary" class="w-full justify-center sm:w-auto" :disabled="form.processing">
                         {{ form.processing ? 'Guardando...' : 'Guardar observación' }}
                     </Button>
                 </div>

@@ -99,7 +99,7 @@ const errorProducto = (index: number, campo: keyof ProductoForm) =>
 
 // El portal es siempre claro (sin dark:), por eso no reusa los componentes del panel.
 const inputClass = (error?: string) => [
-    'h-11 w-full rounded-lg border bg-white px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs transition placeholder:text-gray-400 focus:outline-none focus:ring-3',
+    'h-11 w-full rounded-lg border bg-white px-4 py-2.5 text-[16px] sm:text-sm text-gray-800 shadow-theme-xs transition placeholder:text-gray-400 focus:outline-none focus:ring-3',
     error
         ? 'border-error-300 focus:border-error-300 focus:ring-error-500/10'
         : 'border-gray-300 focus:border-brand-300 focus:ring-brand-500/10',
@@ -249,7 +249,7 @@ const submit = () => form.post(route('observaciones.public.store'), { forceFormD
                             id="descripcion"
                             v-model="form.descripcion"
                             rows="4"
-                            class="w-full rounded-lg border bg-white px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs transition placeholder:text-gray-400 focus:outline-none focus:ring-3"
+                            class="w-full rounded-lg border bg-white px-4 py-2.5 text-[16px] sm:text-sm text-gray-800 shadow-theme-xs transition placeholder:text-gray-400 focus:outline-none focus:ring-3"
                             :class="form.errors.descripcion
                                 ? 'border-error-300 focus:border-error-300 focus:ring-error-500/10'
                                 : 'border-gray-300 focus:border-brand-300 focus:ring-brand-500/10'"
@@ -324,7 +324,7 @@ const submit = () => form.post(route('observaciones.public.store'), { forceFormD
                                 <button
                                     v-if="form.productos.length > 1"
                                     type="button"
-                                    class="cursor-pointer text-theme-xs font-medium text-error-500 hover:text-error-600"
+                                    class="inline-flex min-h-11 -mx-2 items-center px-2 cursor-pointer text-theme-xs font-medium text-error-500 hover:text-error-600"
                                     @click="quitarProducto(index)"
                                 >
                                     Quitar
@@ -452,7 +452,7 @@ const submit = () => form.post(route('observaciones.public.store'), { forceFormD
 
                         <button
                             type="button"
-                            class="cursor-pointer text-sm font-medium text-brand-500 hover:text-brand-600"
+                            class="inline-flex min-h-11 -mx-2 items-center px-2 cursor-pointer text-sm font-medium text-brand-500 hover:text-brand-600"
                             @click="agregarProducto"
                         >
                             + Agregar producto
@@ -478,7 +478,7 @@ const submit = () => form.post(route('observaciones.public.store'), { forceFormD
                         <p class="mt-1 text-xs text-gray-400">JPG, PNG, PDF. Máx 3 MB</p>
                         <button
                             type="button"
-                            class="mt-3 cursor-pointer text-sm font-medium text-brand-500 hover:text-brand-600"
+                            class="mt-3 inline-flex min-h-11 -mx-2 items-center px-2 cursor-pointer text-sm font-medium text-brand-500 hover:text-brand-600"
                             @click="fileInput?.click()"
                         >
                             Seleccionar archivos
@@ -500,24 +500,24 @@ const submit = () => form.post(route('observaciones.public.store'), { forceFormD
                             class="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm"
                         >
                             <span class="truncate text-gray-700">{{ file.name }}</span>
-                            <button type="button" class="cursor-pointer text-gray-400 hover:text-error-500" @click="removeFile(index)">✕</button>
+                            <button type="button" class="cursor-pointer rounded-full p-2 -m-2 text-gray-400 hover:text-error-500" @click="removeFile(index)">✕</button>
                         </li>
                     </ul>
                     <p v-if="form.errors.attachments" class="text-xs text-error-500">{{ form.errors.attachments }}</p>
                 </section>
 
                 <!-- Acciones -->
-                <div class="flex justify-end gap-3 border-t border-gray-100 pt-5">
+                <div class="flex flex-col-reverse gap-3 border-t border-gray-100 pt-5 sm:flex-row sm:justify-end">
                     <Link
                         :href="route('login')"
-                        class="inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs transition hover:bg-gray-50"
+                        class="inline-flex w-full items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs transition hover:bg-gray-50 sm:w-auto"
                     >
                         ← Volver
                     </Link>
                     <button
                         type="submit"
                         :disabled="form.processing"
-                        class="cursor-pointer rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-medium text-white shadow-theme-xs transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
+                        class="w-full cursor-pointer rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-medium text-white shadow-theme-xs transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                     >
                         {{ form.processing ? 'Enviando...' : 'Enviar' }}
                     </button>

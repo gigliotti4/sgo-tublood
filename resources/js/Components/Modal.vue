@@ -54,7 +54,7 @@ onUnmounted(() => {
                     :class="sizeClasses[size]"
                 >
                     <button
-                        class="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-500 transition hover:bg-gray-200 hover:text-gray-700 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.08] dark:hover:text-gray-200"
+                        class="absolute right-4 top-4 flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-gray-500 transition hover:bg-gray-200 hover:text-gray-700 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:bg-white/[0.08] dark:hover:text-gray-200"
                         aria-label="Cerrar"
                         @click="emit('close')"
                     >

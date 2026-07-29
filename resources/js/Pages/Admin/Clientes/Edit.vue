@@ -68,7 +68,7 @@ const formatSize = (bytes: number) => {
                 <p class="mb-3 text-theme-xs font-medium uppercase tracking-wide text-gray-400">
                     Datos de RP Sistemas (solo lectura — se actualizan con la sincronización)
                 </p>
-                <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                <dl class="grid grid-cols-1 gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
                     <dt class="text-gray-400">N° cliente</dt>
                     <dd class="font-mono text-gray-800 dark:text-white/90">{{ cliente.numero }}</dd>
                     <dt class="text-gray-400">Razón social</dt>
@@ -123,7 +123,7 @@ const formatSize = (bytes: number) => {
                         </a>
                         <div class="ml-3 flex shrink-0 items-center gap-3">
                             <span class="text-theme-xs text-gray-400">{{ formatSize(archivo.size) }}</span>
-                            <button type="button" class="cursor-pointer text-gray-400 hover:text-error-500" @click="borrarArchivo(archivo.id)">✕</button>
+                            <button type="button" class="cursor-pointer rounded-full p-2 -m-2 text-gray-400 hover:text-error-500" @click="borrarArchivo(archivo.id)">✕</button>
                         </div>
                     </li>
                 </ul>
@@ -140,7 +140,7 @@ const formatSize = (bytes: number) => {
                     <p class="mt-1 text-xs text-gray-400">JPG, PNG, PDF, DOC, XLS. Máx 10 MB c/u</p>
                     <button
                         type="button"
-                        class="mt-3 cursor-pointer text-sm font-medium text-brand-500 hover:text-brand-600 dark:text-brand-300 dark:hover:text-brand-200"
+                        class="mt-3 inline-flex min-h-11 -mx-2 items-center px-2 cursor-pointer text-sm font-medium text-brand-500 hover:text-brand-600 dark:text-brand-300 dark:hover:text-brand-200"
                         @click="fileInput?.click()"
                     >
                         Seleccionar archivos
@@ -162,7 +162,7 @@ const formatSize = (bytes: number) => {
                         class="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm dark:bg-white/[0.05]"
                     >
                         <span class="truncate text-gray-700 dark:text-gray-200">{{ file.name }}</span>
-                        <button type="button" class="cursor-pointer text-gray-400 hover:text-error-500" @click="removeFile(index)">✕</button>
+                        <button type="button" class="cursor-pointer rounded-full p-2 -m-2 text-gray-400 hover:text-error-500" @click="removeFile(index)">✕</button>
                     </li>
                 </ul>
                 <p v-if="uploadForm.errors.archivos" class="text-xs text-error-500">{{ uploadForm.errors.archivos }}</p>
