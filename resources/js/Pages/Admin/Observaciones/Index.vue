@@ -14,6 +14,8 @@ import InputFecha from '@/Components/InputFecha.vue'
 import Modal from '@/Components/Modal.vue'
 import Select from '@/Components/Select.vue'
 import Pagination from '@/Components/Pagination.vue'
+import TableCard from '@/Components/TableCard.vue'
+import DataRow from '@/Components/DataRow.vue'
 import type { Observacion, PaginatedData } from '@/types'
 
 interface UsuarioOption {
@@ -311,7 +313,7 @@ const guardar = () => {
                     </div>
                 </div>
 
-                <div class="overflow-x-auto">
+                <div class="hidden overflow-x-auto md:block">
                     <table class="w-full">
                         <thead>
                             <tr class="border-b border-gray-100 dark:border-gray-800">
@@ -385,6 +387,54 @@ const guardar = () => {
                         </tbody>
                     </table>
                 </div>
+
+                <!-- Cards: mismos datos que la tabla, en formato de lista para mobile -->
+                <div v-if="observaciones.data.length" class="space-y-3 p-4 md:hidden">
+                    <TableCard v-for="o in observaciones.data" :key="o.id">
+                        <template #header>
+                            <p class="truncate text-theme-sm font-medium text-gray-800 dark:text-white/90">{{ o.titulo }}</p>
+                            <p class="font-mono text-theme-xs text-gray-400">{{ o.numero }}</p>
+                        </template>
+                        <template #actions>
+                            <Link
+                                :href="route('observaciones.show', o.id)"
+                                class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-brand-500 dark:hover:bg-white/[0.05] dark:hover:text-brand-300"
+                                title="Ver detalle"
+                            >
+                                <Icon name="eye" class="h-4.5 w-4.5" />
+                                <span class="sr-only">Ver detalle de {{ o.numero }}</span>
+                            </Link>
+                            <button
+                                v-if="puedeEditar(o)"
+                                type="button"
+                                class="cursor-pointer rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-brand-500 dark:hover:bg-white/[0.05] dark:hover:text-brand-300"
+                                title="Editar"
+                                @click="abrirEdicion(o)"
+                            >
+                                <Icon name="pencil" class="h-4.5 w-4.5" />
+                                <span class="sr-only">Editar {{ o.numero }}</span>
+                            </button>
+                        </template>
+                        <template #body>
+                            <DataRow label="Tipo">{{ tipoLabels[o.tipo] ?? o.tipo }}</DataRow>
+                            <DataRow label="Origen"><Badge variant="slate">{{ origenLabels[o.origen] ?? o.origen }}</Badge></DataRow>
+                            <DataRow label="Cliente">
+                                {{ o.contacto_nombre }}
+                                <Badge v-if="clienteNoEncontrado(o)" variant="amber">N° no encontrado</Badge>
+                            </DataRow>
+                            <DataRow label="Sector">{{ o.sector?.nombre ?? '—' }}</DataRow>
+                            <DataRow label="Responsable">{{ o.responsable?.name ?? '—' }}</DataRow>
+                            <DataRow label="Estado">
+                                <Badge :variant="estadoVariant[o.estado] ?? 'slate'">{{ estadoLabels[o.estado] ?? o.estado }}</Badge>
+                                <Badge v-if="estadoPlazo(o)" :variant="estadoPlazo(o)!.variant">{{ estadoPlazo(o)!.label }}</Badge>
+                            </DataRow>
+                            <DataRow label="Fecha">{{ formatFecha(o.created_at) }}</DataRow>
+                        </template>
+                    </TableCard>
+                </div>
+                <p v-else class="p-4 text-center text-sm text-gray-400 md:hidden">
+                    {{ hayFiltros ? 'Sin resultados para los filtros aplicados.' : 'No hay observaciones cargadas todavía.' }}
+                </p>
 
                 <div class="flex flex-col gap-3 border-t border-gray-100 px-5 py-3.5 text-theme-sm text-gray-500 dark:border-gray-800 dark:text-gray-400 sm:flex-row sm:items-center sm:justify-between">
                     <span>{{ observaciones.total }} observación{{ observaciones.total !== 1 ? 'es' : '' }} encontrada{{ observaciones.total !== 1 ? 's' : '' }}</span>
