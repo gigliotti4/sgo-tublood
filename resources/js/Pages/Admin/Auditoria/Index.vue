@@ -7,6 +7,8 @@ import Input from '@/Components/Input.vue'
 import InputFecha from '@/Components/InputFecha.vue'
 import Pagination from '@/Components/Pagination.vue'
 import Select from '@/Components/Select.vue'
+import TableCard from '@/Components/TableCard.vue'
+import DataRow from '@/Components/DataRow.vue'
 import { accionLabels, accionVariant, comoCambioSimple, esClasificacion, formatFechaHora, formatSize, nombreAutor } from '@/lib/bitacora'
 import type { ObservationHistoryEntry, PaginatedData } from '@/types'
 
@@ -126,7 +128,7 @@ const limpiarFiltros = () => {
                     </div>
                 </div>
 
-                <div class="overflow-x-auto">
+                <div class="hidden overflow-x-auto md:block">
                     <table class="w-full">
                         <thead>
                             <tr class="border-b border-gray-100 dark:border-gray-800">
@@ -192,6 +194,52 @@ const limpiarFiltros = () => {
                         </tbody>
                     </table>
                 </div>
+
+                <!-- Cards: mismos datos que la tabla, en formato de lista para mobile -->
+                <div v-if="entradas.data.length" class="space-y-3 p-4 md:hidden">
+                    <TableCard v-for="entrada in entradas.data" :key="entrada.id">
+                        <template #header>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <Badge :variant="accionVariant[entrada.accion] ?? 'slate'">{{ accionLabels[entrada.accion] ?? entrada.accion }}</Badge>
+                                <span class="text-theme-xs text-gray-400">{{ formatFechaHora(entrada.created_at) }}</span>
+                            </div>
+                        </template>
+                        <template #body>
+                            <DataRow label="Usuario">{{ nombreAutor(entrada) }}</DataRow>
+                            <DataRow label="Observación">
+                                <Link
+                                    v-if="entrada.observacion"
+                                    :href="route('observaciones.show', entrada.observacion.id)"
+                                    class="font-medium text-brand-500 hover:text-brand-600 dark:text-brand-300 dark:hover:text-brand-200"
+                                >
+                                    {{ entrada.observacion.numero }}
+                                </Link>
+                                <span v-else>—</span>
+                            </DataRow>
+                        </template>
+                        <template #footer>
+                            <div class="w-full text-theme-sm text-gray-600 dark:text-gray-300">
+                                <p v-if="comoCambioSimple(entrada.cambios)">
+                                    De <span class="font-medium text-gray-800 dark:text-white/90">{{ comoCambioSimple(entrada.cambios)!.de }}</span>
+                                    a <span class="font-medium text-gray-800 dark:text-white/90">{{ comoCambioSimple(entrada.cambios)!.a }}</span>
+                                </p>
+                                <div v-else-if="esClasificacion(entrada)" class="space-y-0.5">
+                                    <p>Prioridad: {{ entrada.cambios.prioridad.de }} → {{ entrada.cambios.prioridad.a }}</p>
+                                    <p>Tipo de caso: {{ entrada.cambios.tipo_caso.de }} → {{ entrada.cambios.tipo_caso.a }}</p>
+                                </div>
+                                <p v-if="entrada.nota" class="whitespace-pre-line">{{ entrada.nota }}</p>
+                                <ul v-if="entrada.adjuntos.length" class="mt-1 space-y-0.5">
+                                    <li v-for="a in entrada.adjuntos" :key="a.id" class="text-theme-xs text-gray-400">
+                                        📎 {{ a.original_name }} ({{ formatSize(a.size) }})
+                                    </li>
+                                </ul>
+                            </div>
+                        </template>
+                    </TableCard>
+                </div>
+                <p v-else class="p-4 text-center text-sm text-gray-400 md:hidden">
+                    {{ hayFiltros ? 'Sin resultados para los filtros aplicados.' : 'Todavía no hay actividad registrada.' }}
+                </p>
 
                 <div v-if="entradas.data.length > 0" class="flex items-center justify-between border-t border-gray-100 px-5 py-4 dark:border-gray-800">
                     <p class="text-theme-xs text-gray-500 dark:text-gray-400">{{ entradas.total }} entradas encontradas</p>
