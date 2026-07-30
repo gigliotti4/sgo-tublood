@@ -14,6 +14,8 @@ const props = defineProps<{
     prioridades: Record<string, string>
     /** Viene de ObservacionPolicy: solo el responsable asignado (o super-admin). */
     puedeEditar: boolean
+    /** Más amplio que `puedeEditar`: incluye a los usuarios a notificar. */
+    puedeComentar: boolean
 }>()
 
 const estadoLabels: Record<string, string> = {
@@ -176,7 +178,7 @@ const humanizar = (clave: string) =>
                     <BitacoraObservacion
                         :observacion-id="observacion.id"
                         :entradas="observacion.historial ?? []"
-                        :puede-editar="puedeEditar"
+                        :puede-editar="puedeComentar"
                     />
                 </div>
             </div>
@@ -211,6 +213,12 @@ const humanizar = (clave: string) =>
                                 <span v-if="!observacion.vence_at" class="block text-theme-xs text-gray-400">
                                     El plazo arranca al asignar un responsable con sector.
                                 </span>
+                            </dd>
+                        </div>
+                        <div v-if="observacion.notificados?.length">
+                            <dt class="text-theme-xs text-gray-400">A notificar</dt>
+                            <dd class="mt-0.5 text-gray-800 dark:text-white/90">
+                                {{ observacion.notificados.map(u => [u.name, u.apellido].filter(Boolean).join(' ')).join(', ') }}
                             </dd>
                         </div>
                     </dl>

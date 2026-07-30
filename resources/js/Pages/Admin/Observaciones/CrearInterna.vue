@@ -9,6 +9,7 @@ import Input from '@/Components/Input.vue'
 import InputFecha from '@/Components/InputFecha.vue'
 import RadioGroup from '@/Components/RadioGroup.vue'
 import Select from '@/Components/Select.vue'
+import SelectorUsuarios from '@/Components/SelectorUsuarios.vue'
 import Textarea from '@/Components/Textarea.vue'
 
 interface SectorOption { id: number; nombre: string; slug: string }
@@ -67,6 +68,7 @@ const form = useForm({
     contacto_nombre: '',
     contacto_email: '',
     responsable_id: null as number | null,
+    notificados: [] as number[],
     datos_especificos: {} as Record<string, string | number | null>,
     institucion: '',
     provincia: '',
@@ -417,6 +419,16 @@ const submit = () => form.post(route('observaciones.store'), { forceFormData: tr
                     <p v-if="gentePorSector" class="-mt-2 text-xs text-gray-500 dark:text-gray-400 sm:col-span-2">
                         {{ gentePorSector }}
                     </p>
+
+                    <SelectorUsuarios
+                        v-model="form.notificados"
+                        full
+                        label="Usuarios a notificar"
+                        hint="Reciben el aviso y pueden comentar en la bitácora, pero no reasignan ni reclasifican."
+                        :usuarios="usuarios"
+                        :excluir-id="form.responsable_id"
+                        :error="form.errors.notificados"
+                    />
                 </FormSection>
 
                 <FormSection title="Adjuntos" :columns="1">

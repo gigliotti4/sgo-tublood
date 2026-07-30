@@ -16,6 +16,7 @@ import Select from '@/Components/Select.vue'
 import Pagination from '@/Components/Pagination.vue'
 import TableCard from '@/Components/TableCard.vue'
 import DataRow from '@/Components/DataRow.vue'
+import SelectorUsuarios from '@/Components/SelectorUsuarios.vue'
 import type { Observacion, PaginatedData } from '@/types'
 
 interface UsuarioOption {
@@ -174,6 +175,7 @@ const form = useForm({
     estado: '',
     prioridad: null as string | null,
     tipo_caso: null as string | null,
+    notificados: [] as number[],
 })
 
 const abrirEdicion = (o: Observacion) => {
@@ -184,6 +186,7 @@ const abrirEdicion = (o: Observacion) => {
     form.estado = o.estado
     form.prioridad = o.prioridad
     form.tipo_caso = o.tipo_caso
+    form.notificados = (o.notificados ?? []).map(u => u.id)
 }
 
 const cerrarEdicion = () => { idEnEdicion.value = null }
@@ -624,6 +627,15 @@ const guardar = () => {
                                     {{ nombreCompleto(usuario) }}
                                 </option>
                             </Select>
+
+                            <SelectorUsuarios
+                                v-model="form.notificados"
+                                label="Usuarios a notificar"
+                                hint="Reciben el aviso y pueden comentar en la bitácora, pero no reasignan ni reclasifican."
+                                :usuarios="usuarios"
+                                :excluir-id="form.responsable_id"
+                                :error="form.errors.notificados"
+                            />
                         </FormSection>
 
                         <div class="flex gap-3 pt-2">

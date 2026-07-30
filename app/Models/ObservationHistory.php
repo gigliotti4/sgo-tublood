@@ -30,6 +30,8 @@ class ObservationHistory extends Model
 
     public const ACCION_ADJUNTO = 'adjunto';
 
+    public const ACCION_NOTIFICADOS = 'notificados';
+
     public const ACCION_SISTEMA = 'sistema';
 
     public const ACCIONES = [
@@ -39,6 +41,7 @@ class ObservationHistory extends Model
         self::ACCION_SECTOR,
         self::ACCION_CLASIFICACION,
         self::ACCION_ADJUNTO,
+        self::ACCION_NOTIFICADOS,
         self::ACCION_SISTEMA,
     ];
 

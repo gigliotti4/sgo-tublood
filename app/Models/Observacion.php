@@ -7,6 +7,7 @@ use App\Observers\ObservacionObserver;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[ObservedBy(ObservacionObserver::class)]
@@ -94,6 +95,16 @@ class Observacion extends Model
     public function productos(): HasMany
     {
         return $this->hasMany(ObservationProduct::class, 'observation_id');
+    }
+
+    /**
+     * Usuarios a notificar, además del responsable: reciben el aviso al ser
+     * sumados y pueden comentar en la bitácora, pero no gestionar el caso.
+     */
+    public function notificados(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'observation_watchers', 'observation_id', 'user_id')
+            ->withTimestamps();
     }
 
     public function cliente(): BelongsTo

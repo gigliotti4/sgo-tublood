@@ -26,4 +26,18 @@ class ObservacionPolicy
 
         return $observacion->sector_id !== null && $user->sector_id === $observacion->sector_id;
     }
+
+    /**
+     * Dejar un comentario (con adjuntos) en la bitácora del caso.
+     *
+     * Más amplio que `update`: además de quien lo gestiona, pueden comentar los
+     * usuarios sumados como "a notificar". Se les pide opinión o datos sobre el
+     * caso, así que tienen que poder responder por el mismo canal donde queda
+     * registrado — pero no reasignar, reclasificar ni cambiar el estado.
+     */
+    public function comentar(User $user, Observacion $observacion): bool
+    {
+        return $this->update($user, $observacion)
+            || $observacion->notificados()->whereKey($user->id)->exists();
+    }
 }

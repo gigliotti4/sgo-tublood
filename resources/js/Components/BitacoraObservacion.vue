@@ -5,7 +5,7 @@ import Badge from '@/Components/Badge.vue'
 import Button from '@/Components/Button.vue'
 import Icon from '@/Components/Icon.vue'
 import Textarea from '@/Components/Textarea.vue'
-import { accionLabels, accionVariant, comoCambioSimple, esClasificacion, formatFechaHora, formatSize, nombreAutor } from '@/lib/bitacora'
+import { accionLabels, accionVariant, comoCambioSimple, esClasificacion, esNotificados, formatFechaHora, formatSize, nombreAutor } from '@/lib/bitacora'
 import type { ObservationHistoryEntry } from '@/types'
 
 /**
@@ -100,6 +100,16 @@ const enviar = () => {
                     <div>
                         Tipo de caso: de <span class="font-medium text-gray-800 dark:text-white/90">{{ entrada.cambios.tipo_caso.de }}</span>
                         a <span class="font-medium text-gray-800 dark:text-white/90">{{ entrada.cambios.tipo_caso.a }}</span>
+                    </div>
+                </dl>
+
+                <!-- Usuarios a notificar: quiénes entraron y quiénes salieron -->
+                <dl v-else-if="esNotificados(entrada)" class="mt-2 space-y-1 text-theme-sm text-gray-600 dark:text-gray-300">
+                    <div v-if="entrada.cambios.sumados.length">
+                        Se sumó a <span class="font-medium text-gray-800 dark:text-white/90">{{ entrada.cambios.sumados.join(', ') }}</span>
+                    </div>
+                    <div v-if="entrada.cambios.sacados.length">
+                        Se sacó a <span class="font-medium text-gray-800 dark:text-white/90">{{ entrada.cambios.sacados.join(', ') }}</span>
                     </div>
                 </dl>
 
