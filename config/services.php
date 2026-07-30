@@ -36,9 +36,15 @@ return [
     ],
 
     'rpsistemas' => [
-        'base_url'  => env('RPSISTEMAS_API_BASE_URL', 'https://api.comprobantesonline.com.ar/v2'),
-        'token'     => env('RPSISTEMAS_API_TOKEN'),
+        'base_url' => env('RPSISTEMAS_API_BASE_URL', 'https://api.comprobantesonline.com.ar/v2'),
+        'token' => env('RPSISTEMAS_API_TOKEN'),
         'page_size' => (int) env('RPSISTEMAS_API_PAGE_SIZE', 100),
+
+        // articulos.php exige una lista de precios para valorizar los artículos,
+        // aunque no guardemos precios. Las de Tublood son MANTE, PACO, CAT-A,
+        // CAT-B y CAT-C (se consultan en listas_precios.php). Cuál se use no
+        // cambia los datos que sí guardamos: código, descripción y stock.
+        'lista_precios' => env('RPSISTEMAS_LISTA_PRECIOS', 'CAT-A'),
     ],
 
 ];
