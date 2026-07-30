@@ -1,6 +1,6 @@
 <?php
 
-use App\Http\Controllers\Admin\AuditoriaController;
+use App\Http\Controllers\Admin\BitacoraController;
 use App\Http\Controllers\Admin\ClienteController;
 use App\Http\Controllers\Admin\ObservacionController as AdminObservacionController;
 use App\Http\Controllers\Admin\RoleController;
@@ -96,10 +96,12 @@ Route::middleware(['auth'])->group(function () {
             ->middleware('can:update,observacion')->name('observaciones.archivos.store');
         Route::delete('/observaciones/{observacion}/archivos/{attachment}', [AdminObservacionController::class, 'destroyArchivo'])
             ->middleware('can:update,observacion')->name('observaciones.archivos.destroy')->scopeBindings();
-        // Comentario de bitácora (con adjuntos opcionales): misma autorización
-        // que lo de arriba. No hay ruta de edición/borrado — el historial es inmutable.
+        // Comentario de bitácora (con adjuntos opcionales). Autorización más
+        // amplia que la de arriba: también comentan los usuarios sumados como
+        // "a notificar" (ObservacionPolicy::comentar). No hay ruta de
+        // edición/borrado — el historial es inmutable.
         Route::post('/observaciones/{observacion}/bitacora', [AdminObservacionController::class, 'comentar'])
-            ->middleware('can:update,observacion')->name('observaciones.bitacora.store');
+            ->middleware('can:comentar,observacion')->name('observaciones.bitacora.store');
         // Va después de /observaciones/nuevo y /observaciones/crear en el archivo,
         // pero igual se restringe a numérico para que no se las coma.
         Route::get('/observaciones/{observacion}', [AdminObservacionController::class, 'show'])
@@ -132,10 +134,11 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('/roles/{role}', [RoleController::class, 'destroy'])->name('roles.destroy');
     });
 
-    // Auditoría: vista transversal de la bitácora, con permiso propio y no
-    // observaciones.view — ver quién hizo qué en todo el sistema es una
+    // Bitácora: vista transversal del historial de todas las observaciones
+    // (la de un caso puntual vive embebida en Observaciones). Permiso propio y
+    // no observaciones.view — ver quién hizo qué en todo el sistema es una
     // capacidad más sensible que ver el listado de casos.
-    Route::middleware('can:auditoria.view')->group(function () {
-        Route::get('/auditoria', [AuditoriaController::class, 'index'])->name('auditoria.index');
+    Route::middleware('can:bitacora.view')->group(function () {
+        Route::get('/bitacora', [BitacoraController::class, 'index'])->name('bitacora.index');
     });
 });

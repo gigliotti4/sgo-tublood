@@ -145,7 +145,7 @@ const menuSections: MenuSection[] = [
             { label: 'Usuarios',   route: 'users.index', permission: 'users.view', icon: 'users' },
             { label: 'Sectores',   route: 'sectores.index', permission: 'users.view', icon: 'squares' },
             { label: 'Roles',      route: 'roles.index',  permission: 'roles.view',  icon: 'shield' },
-            { label: 'Auditoría',  route: 'auditoria.index', permission: 'auditoria.view', icon: 'search' },
+            { label: 'Bitácora',   route: 'bitacora.index', permission: 'bitacora.view', icon: 'search' },
         ]
     }
 ]
@@ -450,28 +450,39 @@ const icons: Record<string, string> = {
                                 </ul>
                             </template>
 
-                            <div class="border-b border-gray-100 px-5 py-3.5 dark:border-gray-800">
-                                <p class="text-sm font-semibold text-gray-800 dark:text-white/90">Clientes por vencer</p>
-                            </div>
-                            <ul v-if="vencimientos.length > 0" class="divide-y divide-gray-100 dark:divide-gray-800">
-                                <li v-for="c in vencimientos" :key="c.id">
-                                    <Link
-                                        :href="route('clientes.index', { search: c.numero })"
-                                        class="block px-5 py-3 transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
-                                        @click="notificacionesOpen = false"
-                                    >
-                                        <p class="truncate text-sm font-medium text-gray-800 dark:text-white/90">{{ c.razon_social }}</p>
-                                        <p
-                                            class="mt-0.5 text-theme-xs"
-                                            :class="diasParaVencer(c.fecha_vencimiento) < 0 ? 'text-error-500' : 'text-warning-600 dark:text-warning-400'"
+                            <!-- Solo para quien sigue los vencimientos: sin el permiso no se muestra ni la cabecera. -->
+                            <template v-if="hasPermission('clientes.vencimientos')">
+                                <div class="border-b border-gray-100 px-5 py-3.5 dark:border-gray-800">
+                                    <p class="text-sm font-semibold text-gray-800 dark:text-white/90">Clientes por vencer</p>
+                                </div>
+                                <ul v-if="vencimientos.length > 0" class="divide-y divide-gray-100 dark:divide-gray-800">
+                                    <li v-for="c in vencimientos" :key="c.id">
+                                        <Link
+                                            :href="route('clientes.index', { search: c.numero })"
+                                            class="block px-5 py-3 transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
+                                            @click="notificacionesOpen = false"
                                         >
-                                            {{ labelVencimiento(c.fecha_vencimiento) }}
-                                        </p>
-                                    </Link>
-                                </li>
-                            </ul>
-                            <p v-else class="px-5 py-6 text-center text-sm text-gray-400">
-                                No hay clientes por vencer.
+                                            <p class="truncate text-sm font-medium text-gray-800 dark:text-white/90">{{ c.razon_social }}</p>
+                                            <p
+                                                class="mt-0.5 text-theme-xs"
+                                                :class="diasParaVencer(c.fecha_vencimiento) < 0 ? 'text-error-500' : 'text-warning-600 dark:text-warning-400'"
+                                            >
+                                                {{ labelVencimiento(c.fecha_vencimiento) }}
+                                            </p>
+                                        </Link>
+                                    </li>
+                                </ul>
+                                <p v-else class="px-5 py-6 text-center text-sm text-gray-400">
+                                    No hay clientes por vencer.
+                                </p>
+                            </template>
+
+                            <!-- Sin ninguna de las tres secciones la campana quedaría vacía. -->
+                            <p
+                                v-if="!hasPermission('clientes.vencimientos') && sinClasificar.length === 0 && alertas.length === 0"
+                                class="px-5 py-6 text-center text-sm text-gray-400"
+                            >
+                                No tenés notificaciones.
                             </p>
                         </div>
                     </Transition>

@@ -41,7 +41,7 @@ echo "==> Migraciones"
 "$PHP" artisan migrate --force
 
 # Los permisos nuevos se crean acá, no en una migración — sin este paso, un
-# permiso agregado en el código (ej. auditoria.view) queda invisible en
+# permiso agregado en el código (ej. bitacora.view) queda invisible en
 # producción hasta que alguien lo corra a mano. Es seguro en cada deploy:
 # el seeder es idempotente y los roles de este proyecto no se tocan a mano
 # desde la pantalla de Roles, solo desde este archivo.

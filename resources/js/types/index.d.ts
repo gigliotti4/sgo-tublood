@@ -111,6 +111,8 @@ export interface Cliente {
     descripcion_iva: string | null
     telefono: string | null
     mail: string | null
+    /** Mail cargado por el propio cliente desde el portal. La sync con RP no lo pisa. */
+    mail_nuevo: string | null
     contacto: string | null
     domicilio: string | null
     localidad: string | null
@@ -167,6 +169,8 @@ export interface Observacion {
     attachments?: ObservationAttachment[]
     /** Bitácora del caso: comentarios y cambios, más reciente primero. */
     historial?: ObservationHistoryEntry[]
+    /** Usuarios a notificar: reciben el aviso y pueden comentar, pero no gestionar el caso. */
+    notificados?: { id: number; name: string; apellido: string | null }[]
     created_at: string
 }
 
@@ -186,7 +190,7 @@ export interface ObservationAttachment {
  */
 export interface ObservationHistoryEntry {
     id: number
-    accion: 'comentario' | 'estado' | 'responsable' | 'sector' | 'clasificacion' | 'adjunto' | 'sistema'
+    accion: 'comentario' | 'estado' | 'responsable' | 'sector' | 'clasificacion' | 'adjunto' | 'notificados' | 'sistema'
     nota: string | null
     /** Forma según `accion`: `{de, a}` para estado/responsable/sector, `{prioridad: {de,a}, tipo_caso: {de,a}}` para clasificacion. */
     cambios: Record<string, unknown> | null
@@ -194,7 +198,7 @@ export interface ObservationHistoryEntry {
     /** Null en las entradas automáticas: no tienen usuario detrás. */
     user: { id: number; name: string; apellido: string | null } | null
     adjuntos: ObservationAttachment[]
-    /** Solo viene cargada en Admin/Auditoria/Index: ahí la entrada se ve fuera del contexto de un caso puntual. */
+    /** Solo viene cargada en Admin/Bitacora/Index: ahí la entrada se ve fuera del contexto de un caso puntual. */
     observacion?: { id: number; numero: string; titulo: string; sector: { id: number; nombre: string } | null }
 }
 

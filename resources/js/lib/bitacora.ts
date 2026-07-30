@@ -6,16 +6,21 @@ import type { ObservationHistoryEntry } from '@/types'
  * única fuente de verdad para interpretarla.
  *
  * Compartido por BitacoraObservacion.vue (el timeline de un caso puntual) y
- * Admin/Auditoria/Index.vue (el listado transversal): duplicarlo garantizaba
+ * Admin/Bitacora/Index.vue (el listado transversal): duplicarlo garantizaba
  * que se desincronizaran apenas cambiara una de las dos formas de `cambios`.
  */
 
 export interface CambioSimple { de: string; a: string }
 export interface CambioClasificacion { prioridad: CambioSimple; tipo_caso: CambioSimple }
+export interface CambioNotificados { sumados: string[]; sacados: string[] }
 
 export const esClasificacion = (
     entrada: ObservationHistoryEntry,
 ): entrada is ObservationHistoryEntry & { cambios: CambioClasificacion } => entrada.accion === 'clasificacion'
+
+export const esNotificados = (
+    entrada: ObservationHistoryEntry,
+): entrada is ObservationHistoryEntry & { cambios: CambioNotificados } => entrada.accion === 'notificados'
 
 export const comoCambioSimple = (cambios: ObservationHistoryEntry['cambios']): CambioSimple | null =>
     cambios && 'de' in cambios && 'a' in cambios ? (cambios as unknown as CambioSimple) : null
@@ -27,6 +32,7 @@ export const accionLabels: Record<string, string> = {
     sector: 'Derivación de sector',
     clasificacion: 'Clasificación',
     adjunto: 'Archivo adjunto',
+    notificados: 'Usuarios a notificar',
     sistema: 'Sistema',
 }
 
@@ -37,6 +43,7 @@ export const accionVariant: Record<string, 'slate' | 'blue' | 'indigo' | 'purple
     sector: 'purple',
     clasificacion: 'blue',
     adjunto: 'slate',
+    notificados: 'emerald',
     sistema: 'slate',
 }
 
