@@ -24,7 +24,7 @@ return [
         'roles' => 'Roles y permisos',
         'clientes' => 'Clientes',
         'observaciones' => 'Observaciones',
-        'auditoria' => 'Auditoría',
+        'bitacora' => 'Bitácora',
     ],
 
     'etiquetas' => [
@@ -42,6 +42,7 @@ return [
         'clientes.view' => ['grupo' => 'clientes', 'label' => 'Ver clientes'],
         'clientes.sync' => ['grupo' => 'clientes', 'label' => 'Sincronizar con RP Sistemas'],
         'clientes.edit' => ['grupo' => 'clientes', 'label' => 'Editar clientes'],
+        'clientes.vencimientos' => ['grupo' => 'clientes', 'label' => 'Ver avisos de clientes por vencer'],
 
         'observaciones.view' => ['grupo' => 'observaciones', 'label' => 'Ver observaciones'],
         // Ojo: este permiso ya no gatea la edición de una observación puntual
@@ -49,7 +50,7 @@ return [
         // sí habilita la carga manual.
         'observaciones.edit' => ['grupo' => 'observaciones', 'label' => 'Cargar y gestionar observaciones'],
 
-        'auditoria.view' => ['grupo' => 'auditoria', 'label' => 'Ver auditoría de observaciones'],
+        'bitacora.view' => ['grupo' => 'bitacora', 'label' => 'Ver la bitácora de todas las observaciones'],
     ],
 
 ];

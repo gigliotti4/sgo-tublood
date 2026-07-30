@@ -18,9 +18,9 @@ class RolesAndPermissionsSeeder extends Seeder
             'users.view', 'users.create', 'users.edit', 'users.delete',
             'roles.view', 'roles.create', 'roles.edit', 'roles.delete',
             'permissions.view',
-            'clientes.view', 'clientes.sync', 'clientes.edit',
+            'clientes.view', 'clientes.sync', 'clientes.edit', 'clientes.vencimientos',
             'observaciones.view', 'observaciones.edit',
-            'auditoria.view',
+            'bitacora.view',
         ];
 
         foreach ($permissions as $permission) {
@@ -36,7 +36,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'roles.view',
             'clientes.view', 'clientes.sync', 'clientes.edit',
             'observaciones.view', 'observaciones.edit',
-            'auditoria.view',
+            'bitacora.view',
         ]);
 
         $viewer = Role::firstOrCreate(['name' => 'viewer']);
@@ -50,6 +50,20 @@ class RolesAndPermissionsSeeder extends Seeder
 
         $garantiaCalidad = Role::firstOrCreate(['name' => 'garantia_calidad']);
         $garantiaCalidad->syncPermissions(['observaciones.view', 'observaciones.edit']);
+
+        // Reparto de los reclamos del portal dentro de Garantía de Calidad: cada
+        // rol atiende un tipo, según `incidencias.roles_por_tipo`. Definen a
+        // quién le llega el mail del alta y a quién le aparece el reclamo en la
+        // campana y en el modal de reclamos nuevos.
+        $calidadProducto = Role::firstOrCreate(['name' => 'calidad_producto']);
+        $calidadProducto->syncPermissions(['observaciones.view', 'observaciones.edit']);
+
+        // Calidad de Servicio además es quien sigue los vencimientos de clientes.
+        $calidadServicio = Role::firstOrCreate(['name' => 'calidad_servicio']);
+        $calidadServicio->syncPermissions([
+            'observaciones.view', 'observaciones.edit',
+            'clientes.view', 'clientes.vencimientos',
+        ]);
 
         Role::firstOrCreate(['name' => 'cliente_externo']);
 
