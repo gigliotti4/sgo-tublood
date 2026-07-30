@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { Head, Link, router, useForm } from '@inertiajs/vue3'
+import Input from '@/Components/Input.vue'
 import InputFecha from '@/Components/InputFecha.vue'
 import Button from '@/Components/Button.vue'
 import type { Cliente } from '@/types'
@@ -10,6 +11,7 @@ const props = defineProps<{ cliente: Cliente }>()
 
 const form = useForm({
     fecha_vencimiento: props.cliente.fecha_vencimiento?.slice(0, 10) ?? '',
+    mail_nuevo: props.cliente.mail_nuevo ?? '',
 })
 
 const submit = () => form.put(route('clientes.update', props.cliente.id))
@@ -98,6 +100,13 @@ const formatSize = (bytes: number) => {
                         v-model="form.fecha_vencimiento"
                         label="Fecha de vencimiento"
                         :error="form.errors.fecha_vencimiento"
+                    />
+                    <Input
+                        v-model="form.mail_nuevo"
+                        type="email"
+                        label="Mail de contacto"
+                        hint="Se completa solo cuando el cliente carga un reclamo por el portal. La sincronización con RP Sistemas no lo pisa."
+                        :error="form.errors.mail_nuevo"
                     />
                     <div class="flex gap-3 pt-2">
                         <Button type="submit" variant="primary" :disabled="form.processing">Guardar cambios</Button>

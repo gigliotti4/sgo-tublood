@@ -19,6 +19,7 @@ class Cliente extends Model
         'descripcion_iva',
         'telefono',
         'mail',
+        'mail_nuevo',
         'contacto',
         'domicilio',
         'localidad',

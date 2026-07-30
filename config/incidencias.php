@@ -30,23 +30,46 @@ return [
     // y disparan el aviso final al gerente del responsable.
     'estados_finales' => ['cerrada'],
 
+    // Quién atiende cada tipo de reclamo que entra por el portal público.
+    //
+    // Define a quién le llega el mail del alta y a quién le aparece el reclamo
+    // en la campana ("Sin clasificar") y en el modal de reclamos nuevos. Los
+    // dos tipos externos pertenecen al sector Garantía de Calidad, así que el
+    // sector solo no alcanza para repartirlos: hace falta este mapeo por rol.
+    //
+    // Agregar un tipo externo nuevo es sumar una línea acá, sin tocar código.
+    'roles_por_tipo' => [
+        'falla_producto' => 'calidad_producto',
+        'disconformidad_servicio' => 'calidad_servicio',
+    ],
+
+    // De dónde salió el caso. Se guardan como texto legible (la columna
+    // `observations.tipo_caso` es un string libre; la lista se valida acá).
     'tipos_caso' => [
-        'Producto defectuoso',
-        'Riesgo sanitario',
-        'Consulta técnica',
-        'Documentación',
-        'Demora logística',
-        'Error de uso',
-        'Otro',
+        'Auditoría Externa',
+        'Auditoría Interna',
+        'Condiciones ambientales (T°, Humedad, Limp y Desinf)',
+        'Desarrollo habitual de actividades',
+        'Desvío en Sistemas Informáticos',
+        'Devolución',
+        'Encuesta de Satisfacción',
+        'Equipos Internos',
+        'Evaluación de Eficacia de la Capacitación',
+        'Evaluaciones de Desempeño',
+        'Inspecciones',
+        'Monitoreo de Servicios',
+        'Queja/Reclamo de clientes o partes interesadas',
+        'Verificación de cumplimiento legal',
+        'Verificación de productos comprados (Devolución a proveedores)',
     ],
 
     // Prioridad sugerida por tipo de caso (el usuario puede cambiarla).
-    'prioridad_sugerida' => [
-        'Riesgo sanitario' => 'critica',
-        'Producto defectuoso' => 'alta',
-        'Demora logística' => 'media',
-        'Documentación' => 'baja',
-    ],
+    //
+    // Vacío a propósito: el mapeo anterior era para los tipos de caso viejos.
+    // Sugerir mal una prioridad en un sistema de dispositivos médicos es peor
+    // que no sugerir nada, así que queda pendiente de definir con Calidad.
+    // Mientras esté vacío, el campo Prioridad simplemente no se autocompleta.
+    'prioridad_sugerida' => [],
 
     // Clave = slug del sector en la tabla `sectors`.
     'sectores' => [

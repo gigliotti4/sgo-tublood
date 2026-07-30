@@ -36,8 +36,10 @@ class ClienteSyncService
 
             $lote = array_map(fn ($c) => $this->mapear($c, $syncedAt), $datos);
 
-            // No incluir 'fecha_vencimiento' aquí: es un campo propio (no gestionado
-            // por el ERP) que el admin edita a mano y la sync nunca debe pisar.
+            // No incluir 'fecha_vencimiento' ni 'mail_nuevo' aquí: son campos
+            // propios (no gestionados por el ERP) que se editan a mano o los
+            // carga el propio cliente desde el portal, y la sync nunca debe
+            // pisar. Ojo que 'mail' sí está: ese es el del ERP y se sobrescribe.
             Cliente::upsert(
                 $lote,
                 ['numero'],

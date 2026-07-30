@@ -10,12 +10,14 @@ use App\Models\ObservationHistory;
 use App\Models\ObservationProduct;
 use App\Models\Sector;
 use App\Models\User;
+use App\Notifications\ObservacionSeguimientoNotification;
 use App\Support\TaxonomiaIncidencias;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -116,6 +118,8 @@ class ObservacionController extends Controller
             'tipoLabels' => TaxonomiaIncidencias::etiquetasTipos(),
             'prioridades' => config('incidencias.prioridades'),
             'puedeEditar' => $request->user()?->can('update', $observacion) ?? false,
+            // Más amplio que puedeEditar: incluye a los usuarios a notificar.
+            'puedeComentar' => $request->user()?->can('comentar', $observacion) ?? false,
         ]);
     }
 
@@ -205,7 +209,9 @@ class ObservacionController extends Controller
      */
     public function comentar(Request $request, Observacion $observacion): RedirectResponse
     {
-        $this->authorize('update', $observacion);
+        // `comentar` y no `update`: también comentan los usuarios sumados como
+        // "a notificar", que no pueden gestionar el caso.
+        $this->authorize('comentar', $observacion);
 
         $data = $request->validate([
             'nota' => ['nullable', 'string', 'max:5000'],
@@ -269,7 +275,9 @@ class ObservacionController extends Controller
             'presentaciones' => ObservationProduct::PRESENTACIONES,
             'prioridades' => config('incidencias.prioridades'),
             'tiposCaso' => config('incidencias.tipos_caso'),
-            'prioridadSugerida' => config('incidencias.prioridad_sugerida'),
+            // Cast a objeto para que llegue como {} y no como [] cuando está
+            // vacío: el front lo tipa como Record<string, string>.
+            'prioridadSugerida' => (object) config('incidencias.prioridad_sugerida'),
             'usuarios' => $this->usuariosAsignables(),
         ]);
     }
@@ -289,7 +297,55 @@ class ObservacionController extends Controller
                 ->with(['user:id,name,apellido', 'adjuntos:id,observation_history_id,original_name,size']),
             'attachments' => fn ($query) => $query->whereNull('observation_history_id')
                 ->select(['id', 'observation_id', 'original_name', 'size']),
+            // Columnas restringidas: esto va a props de Inertia y User tiene password.
+            'notificados' => fn ($query) => $query->select(['users.id', 'name', 'apellido']),
         ];
+    }
+
+    /**
+     * Sincroniza los usuarios a notificar y avisa **solo a los que se sumaron
+     * en este guardado** — los que ya estaban no reciben otro mail cada vez que
+     * alguien toca el caso.
+     *
+     * Deja también la entrada en la bitácora: `sync()` sobre una relación no
+     * dispara el evento `updated` del modelo, así que ObservacionObserver no se
+     * entera solo de este cambio.
+     *
+     * @param  array<int>  $ids
+     */
+    private function sincronizarNotificados(Observacion $observacion, array $ids): void
+    {
+        $previos = $observacion->notificados()->pluck('users.id')->all();
+
+        $observacion->notificados()->sync($ids);
+
+        $sumados = array_values(array_diff($ids, $previos));
+        $sacados = array_values(array_diff($previos, $ids));
+
+        if ($sumados === [] && $sacados === []) {
+            return;
+        }
+
+        $nombres = fn (array $ids) => $ids === []
+            ? []
+            : User::whereKey($ids)->orderBy('name')->get()->map->nombreCompleto->all();
+
+        ObservationHistory::create([
+            'observation_id' => $observacion->id,
+            'user_id' => auth()->id(),
+            'accion' => ObservationHistory::ACCION_NOTIFICADOS,
+            'cambios' => [
+                'sumados' => $nombres($sumados),
+                'sacados' => $nombres($sacados),
+            ],
+        ]);
+
+        if ($sumados !== []) {
+            Notification::send(
+                User::whereKey($sumados)->get(),
+                new ObservacionSeguimientoNotification($observacion)
+            );
+        }
     }
 
     /**
@@ -326,6 +382,8 @@ class ObservacionController extends Controller
             'contacto_numero_cliente' => ['nullable', 'string', 'max:255'],
             'contacto_nombre' => ['nullable', 'string', 'max:255'],
             'contacto_email' => ['nullable', 'email', 'max:255'],
+            'notificados' => ['array'],
+            'notificados.*' => ['integer', 'exists:users,id'],
             'attachments' => ['array'],
             'attachments.*' => ['file', 'mimes:jpg,jpeg,png,pdf', 'max:3072'],
         ]);
@@ -378,6 +436,7 @@ class ObservacionController extends Controller
             ]);
 
             $this->guardarAdjuntos($observacion, $request);
+            $this->sincronizarNotificados($observacion, $base['notificados'] ?? []);
         });
 
         return redirect()->route('observaciones.index')
@@ -445,6 +504,7 @@ class ObservacionController extends Controller
             }
 
             $this->guardarAdjuntos($observacion, $request);
+            $this->sincronizarNotificados($observacion, $base['notificados'] ?? []);
         });
 
         return redirect()->route('observaciones.index')
@@ -474,7 +534,12 @@ class ObservacionController extends Controller
             'estado' => ['required', 'in:'.implode(',', array_keys(Observacion::ESTADOS))],
             'prioridad' => ['nullable', Rule::in(array_keys(config('incidencias.prioridades')))],
             'tipo_caso' => ['nullable', Rule::in(config('incidencias.tipos_caso'))],
+            'notificados' => ['array'],
+            'notificados.*' => ['integer', 'exists:users,id'],
         ]);
+
+        $notificados = $data['notificados'] ?? null;
+        unset($data['notificados']);
 
         // Clasificar: si se completó prioridad + tipo de caso y seguía pendiente,
         // pasa automáticamente a "clasificada" (flujo de Garantía de Calidad).
@@ -483,6 +548,10 @@ class ObservacionController extends Controller
         }
 
         $observacion->update($data);
+
+        if ($notificados !== null) {
+            $this->sincronizarNotificados($observacion, $notificados);
+        }
 
         return redirect()->route('observaciones.index')
             ->with('success', 'Observación actualizada correctamente.');

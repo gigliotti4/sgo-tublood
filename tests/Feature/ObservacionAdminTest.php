@@ -211,7 +211,7 @@ class ObservacionAdminTest extends TestCase
                 'titulo' => 'Factura con importe mal',
                 'descripcion' => 'El importe no coincide.',
                 'prioridad' => 'alta',
-                'tipo_caso' => 'Documentación',
+                'tipo_caso' => 'Verificación de cumplimiento legal',
                 'datos_especificos' => [
                     'tipo_comprobante' => 'Factura',
                     'numero_comprobante' => 'FA-0001',
@@ -240,7 +240,7 @@ class ObservacionAdminTest extends TestCase
                 'titulo' => 'Título',
                 'descripcion' => 'Detalle.',
                 'prioridad' => 'alta',
-                'tipo_caso' => 'Otro',
+                'tipo_caso' => 'Desarrollo habitual de actividades',
             ])
             ->assertSessionHasErrors('tipo');
     }
@@ -258,7 +258,7 @@ class ObservacionAdminTest extends TestCase
                 'titulo' => 'Título',
                 'descripcion' => 'Detalle.',
                 'prioridad' => 'alta',
-                'tipo_caso' => 'Otro',
+                'tipo_caso' => 'Desarrollo habitual de actividades',
                 'datos_especificos' => ['numero_comprobante' => 'FA-1'], // falta tipo_comprobante (required)
             ])
             ->assertSessionHasErrors('datos_especificos.tipo_comprobante');
@@ -277,7 +277,7 @@ class ObservacionAdminTest extends TestCase
                 'titulo' => 'Producto con falla',
                 'descripcion' => 'El producto llegó dañado.',
                 'prioridad' => 'alta',
-                'tipo_caso' => 'Producto defectuoso',
+                'tipo_caso' => 'Devolución',
                 'institucion' => 'Clínica Test',
                 'provincia' => 'Córdoba',
                 'productos' => [[
@@ -322,7 +322,7 @@ class ObservacionAdminTest extends TestCase
                 'titulo' => 'Producto con falla',
                 'descripcion' => 'El producto llegó dañado.',
                 'prioridad' => 'alta',
-                'tipo_caso' => 'Producto defectuoso',
+                'tipo_caso' => 'Devolución',
                 'institucion' => 'Clínica Test',
                 'provincia' => 'Córdoba',
                 'productos' => [[
@@ -357,7 +357,7 @@ class ObservacionAdminTest extends TestCase
                 'titulo' => 'Demora en la entrega',
                 'descripcion' => 'Se demoró el envío.',
                 'prioridad' => 'media',
-                'tipo_caso' => 'Demora logística',
+                'tipo_caso' => 'Monitoreo de Servicios',
             ])
             ->assertRedirect(route('observaciones.index'));
 
@@ -380,7 +380,7 @@ class ObservacionAdminTest extends TestCase
                 'titulo' => 'Demora en la entrega',
                 'descripcion' => 'Se demoró el envío.',
                 'prioridad' => 'media',
-                'tipo_caso' => 'Demora logística',
+                'tipo_caso' => 'Monitoreo de Servicios',
                 'productos' => [[
                     'producto' => '',
                     'codigo' => '',
@@ -411,7 +411,7 @@ class ObservacionAdminTest extends TestCase
                 'titulo' => 'Título',
                 'descripcion' => 'Detalle.',
                 'prioridad' => 'alta',
-                'tipo_caso' => 'Otro',
+                'tipo_caso' => 'Desarrollo habitual de actividades',
             ])
             ->assertSessionHasErrors('tipo');
     }
@@ -429,7 +429,7 @@ class ObservacionAdminTest extends TestCase
                 'titulo' => 'Título',
                 'descripcion' => 'Detalle.',
                 'prioridad' => 'alta',
-                'tipo_caso' => 'Producto defectuoso',
+                'tipo_caso' => 'Devolución',
                 'institucion' => 'Clínica Test',
                 'provincia' => 'Córdoba',
             ])
@@ -485,14 +485,14 @@ class ObservacionAdminTest extends TestCase
             ->put("/observaciones/{$observacion->id}", [
                 'estado' => 'pendiente_clasificacion',
                 'prioridad' => 'alta',
-                'tipo_caso' => 'Documentación',
+                'tipo_caso' => 'Verificación de cumplimiento legal',
             ])
             ->assertRedirect(route('observaciones.index'));
 
         $observacion->refresh();
         $this->assertSame('clasificada', $observacion->estado);
         $this->assertSame('alta', $observacion->prioridad);
-        $this->assertSame('Documentación', $observacion->tipo_caso);
+        $this->assertSame('Verificación de cumplimiento legal', $observacion->tipo_caso);
     }
 
     public function test_update_no_clasifica_si_falta_tipo_caso(): void
@@ -563,7 +563,7 @@ class ObservacionAdminTest extends TestCase
                 'titulo' => 'Reclamo cargado a mano',
                 'descripcion' => 'Cliente disconforme con la entrega.',
                 'prioridad' => 'alta',
-                'tipo_caso' => 'Producto defectuoso',
+                'tipo_caso' => 'Devolución',
                 'contacto_numero_cliente' => '456',
                 'contacto_nombre' => 'Cliente Vinculable SA',
                 'contacto_email' => 'contacto@vinculable.com',

@@ -90,6 +90,13 @@ class ObservacionController extends Controller
                 $clienteId = Cliente::where('numero', trim($data['contacto_numero_cliente']))->value('id');
             }
 
+            // El mail que carga el propio cliente vale más que el que trae el
+            // ERP (que suele estar viejo o vacío). Va a `mail_nuevo` y no a
+            // `mail` porque la sincronización pisa `mail` cada 5 minutos.
+            if ($clienteId) {
+                Cliente::whereKey($clienteId)->update(['mail_nuevo' => $data['contacto_email']]);
+            }
+
             // El cliente elige el tipo, no el sector: el sector sale de la
             // taxonomía, que ya declara los dos tipos del portal bajo Garantía
             // de Calidad. Si faltara el registro en `sectors`, queda en null y
@@ -125,14 +132,17 @@ class ObservacionController extends Controller
 
     /**
      * Avisos del alta externa, fuera de la transacción: acuse de recibo al
-     * cliente y aviso al equipo que lo va a clasificar.
+     * cliente y aviso a quien lo va a clasificar.
      *
-     * Los destinatarios internos son la **unión** de los usuarios del sector de
-     * la observación (Garantía de Calidad, siempre en el alta externa) y los que
-     * tengan el rol `garantia_calidad`. Se avisa a los dos grupos y no al sector
-     * con el rol de fallback porque este mismo aviso alimenta el modal de
-     * "reclamos nuevos" del panel, que es para todo el equipo de Calidad: quien
-     * tiene el rol pero está cargado en otro sector también lo tiene que ver.
+     * El destinatario interno sale del **tipo** de reclamo, no del sector: los
+     * dos tipos del portal cuelgan de Garantía de Calidad, así que el sector no
+     * alcanza para repartirlos entre las personas del equipo. El mapeo tipo→rol
+     * vive en `incidencias.roles_por_tipo`.
+     *
+     * Si nadie tiene todavía ese rol cargado, cae al criterio viejo (gente del
+     * sector de la observación ∪ gente con el rol `garantia_calidad`). El
+     * fallback no es opcional: el portal es público y un reclamo no puede
+     * quedar sin que se entere nadie porque falte configurar un rol.
      *
      * Todo va envuelto en un try/catch a propósito: para cuando esto corre el
      * reclamo ya está guardado, así que un problema al avisar no puede
@@ -145,23 +155,53 @@ class ObservacionController extends Controller
             Notification::route('mail', $observacion->contacto_email)
                 ->notify(new ObservacionRecibidaClienteNotification($observacion));
 
-            $calidad = User::query()
-                ->where(fn ($q) => $q
-                    ->when(
-                        $observacion->sector_id,
-                        fn ($q, $sectorId) => $q->orWhere('sector_id', $sectorId)
-                    )
-                    // Con `User::role(...)` no alcanza: ese scope tira RoleDoesNotExist
-                    // si el rol no está creado, y eso sería un 500 en un endpoint público.
-                    ->orWhereHas('roles', fn ($q) => $q->where('name', Sector::GARANTIA_CALIDAD)))
-                ->get();
+            $destinatarios = $this->destinatariosDelTipo($observacion->tipo);
 
-            if ($calidad->isNotEmpty()) {
-                Notification::send($calidad, new ObservacionExternaRecibidaNotification($observacion));
+            if ($destinatarios->isEmpty()) {
+                $destinatarios = $this->destinatariosDeCalidad($observacion);
+            }
+
+            if ($destinatarios->isNotEmpty()) {
+                Notification::send($destinatarios, new ObservacionExternaRecibidaNotification($observacion));
             }
         } catch (Throwable $e) {
             Log::error("No se pudieron enviar los avisos de la observación {$observacion->numero}: {$e->getMessage()}");
         }
+    }
+
+    /** Usuarios con el rol que atiende ese tipo de reclamo. */
+    private function destinatariosDelTipo(?string $tipo)
+    {
+        $rol = TaxonomiaIncidencias::rolDeTipo($tipo);
+
+        if ($rol === null) {
+            return collect();
+        }
+
+        return $this->porRol($rol)->get();
+    }
+
+    /** Fallback: todo el equipo de Calidad, por sector o por rol. */
+    private function destinatariosDeCalidad(Observacion $observacion)
+    {
+        return User::query()
+            ->where(fn ($q) => $q
+                ->when(
+                    $observacion->sector_id,
+                    fn ($q, $sectorId) => $q->orWhere('sector_id', $sectorId)
+                )
+                ->orWhereHas('roles', fn ($q) => $q->where('name', Sector::GARANTIA_CALIDAD)))
+            ->get();
+    }
+
+    /**
+     * Filtra por rol con `whereHas` y no con el scope `User::role(...)` de
+     * Spatie: ese scope tira RoleDoesNotExist si el rol no está creado, y eso
+     * sería un 500 en un endpoint público.
+     */
+    private function porRol(string $rol)
+    {
+        return User::query()->whereHas('roles', fn ($q) => $q->where('name', $rol));
     }
 
     public function confirmacion(Request $request)

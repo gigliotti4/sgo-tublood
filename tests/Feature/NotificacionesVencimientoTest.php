@@ -31,7 +31,7 @@ class NotificacionesVencimientoTest extends TestCase
         Cliente::create(['numero' => '3', 'razon_social' => 'Lejano', 'fecha_vencimiento' => now()->addDays(45)]);
         Cliente::create(['numero' => '4', 'razon_social' => 'Sin vencimiento']);
 
-        $user = $this->userWith('clientes.view');
+        $user = $this->userWith('clientes.vencimientos');
 
         $this->actingAs($user)->get('/dashboard')
             ->assertInertia(fn ($page) => $page
@@ -41,7 +41,7 @@ class NotificacionesVencimientoTest extends TestCase
             );
     }
 
-    public function test_vacio_para_usuarios_sin_permiso_clientes_view(): void
+    public function test_vacio_para_usuarios_sin_permiso_de_vencimientos(): void
     {
         Cliente::create(['numero' => '1', 'razon_social' => 'Vencido', 'fecha_vencimiento' => now()->subDays(5)]);
 

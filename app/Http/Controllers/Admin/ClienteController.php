@@ -65,6 +65,7 @@ class ClienteController extends Controller
 
         $data = $request->validate([
             'fecha_vencimiento' => ['nullable', 'date'],
+            'mail_nuevo' => ['nullable', 'email', 'max:255'],
         ]);
 
         $cliente->update($data);

@@ -102,9 +102,17 @@ class AlertasObservacionTest extends TestCase
         $this->assertNull($observacion->responsable_asignado_at);
     }
 
+    /**
+     * La fecha va fija (un lunes) en todos los tests que combinan el plazo en
+     * días hábiles con `travel()` en días corridos: corriendo un jueves, dos
+     * días hábiles caen el lunes siguiente y avanzar 3 días corridos llega al
+     * domingo, así que la observación todavía no estaba vencida y el test
+     * fallaba solo según el día en que se corriera.
+     */
     public function test_al_vencer_avisa_al_responsable_y_a_su_supervisor(): void
     {
         Notification::fake();
+        $this->travelTo('2026-07-20 09:00:00');
 
         $responsable = $this->responsable(2);
         $observacion = $this->observacion(['responsable_id' => $responsable->id]);
@@ -122,6 +130,7 @@ class AlertasObservacionTest extends TestCase
     public function test_correr_el_comando_dos_veces_no_duplica_el_aviso(): void
     {
         Notification::fake();
+        $this->travelTo('2026-07-20 09:00:00');
 
         $responsable = $this->responsable(2);
         $this->observacion(['responsable_id' => $responsable->id]);
@@ -136,6 +145,7 @@ class AlertasObservacionTest extends TestCase
     public function test_pasado_otro_plazo_sin_gestion_escala_al_gerente(): void
     {
         Notification::fake();
+        $this->travelTo('2026-07-20 09:00:00');
 
         $responsable = $this->responsable(2);
         $observacion = $this->observacion(['responsable_id' => $responsable->id]);

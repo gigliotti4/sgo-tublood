@@ -50,6 +50,29 @@ class TaxonomiaIncidencias
         return null;
     }
 
+    /**
+     * Rol que atiende ese tipo de reclamo, o null si el tipo no tiene uno
+     * asignado en `incidencias.roles_por_tipo`.
+     *
+     * Reparte los reclamos del portal entre las personas de Garantía de Calidad:
+     * el sector no alcanza para eso porque los dos tipos externos cuelgan del
+     * mismo sector.
+     */
+    public static function rolDeTipo(?string $tipoKey): ?string
+    {
+        if ($tipoKey === null) {
+            return null;
+        }
+
+        return config("incidencias.roles_por_tipo.{$tipoKey}");
+    }
+
+    /** Todos los roles que atienden algún tipo de reclamo externo. */
+    public static function rolesPorTipo(): array
+    {
+        return config('incidencias.roles_por_tipo', []);
+    }
+
     /** Def del tipo de incidencia para un sector, o null si no existe. */
     public static function tipo(string $sectorSlug, string $tipoKey): ?array
     {

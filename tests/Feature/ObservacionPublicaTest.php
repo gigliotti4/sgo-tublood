@@ -302,4 +302,91 @@ class ObservacionPublicaTest extends TestCase
         $this->assertNull($observacion->cliente_id);
         $this->assertSame('123', $observacion->contacto_numero_cliente);
     }
+
+    // ── Ruteo por tipo ───────────────────────────────────────────────────────
+
+    private function conRol(string $rol): User
+    {
+        Role::firstOrCreate(['name' => $rol, 'guard_name' => 'web']);
+        $user = User::factory()->create();
+        $user->assignRole($rol);
+
+        return $user;
+    }
+
+    public function test_una_falla_de_producto_le_llega_a_calidad_de_producto(): void
+    {
+        Notification::fake();
+
+        $producto = $this->conRol('calidad_producto');
+        $servicio = $this->conRol('calidad_servicio');
+
+        $this->post('/cargar-observacion', $this->datosFallaProducto());
+
+        Notification::assertSentTo($producto, ObservacionExternaRecibidaNotification::class);
+        Notification::assertNotSentTo($servicio, ObservacionExternaRecibidaNotification::class);
+    }
+
+    public function test_una_disconformidad_le_llega_a_calidad_de_servicio(): void
+    {
+        Notification::fake();
+
+        $producto = $this->conRol('calidad_producto');
+        $servicio = $this->conRol('calidad_servicio');
+
+        $this->post('/cargar-observacion', [
+            'tipo' => 'disconformidad_servicio',
+            'contacto_nombre' => 'Cliente de Prueba SA',
+            'contacto_email' => 'cliente@example.com',
+            'titulo' => 'Demora en la entrega',
+            'descripcion' => 'El pedido llegó tarde.',
+        ]);
+
+        Notification::assertSentTo($servicio, ObservacionExternaRecibidaNotification::class);
+        Notification::assertNotSentTo($producto, ObservacionExternaRecibidaNotification::class);
+    }
+
+    /**
+     * El portal es público: si todavía nadie tiene cargado el rol nuevo, el
+     * aviso tiene que caer al criterio viejo en vez de no llegarle a nadie.
+     */
+    public function test_sin_nadie_con_el_rol_del_tipo_cae_al_equipo_de_calidad(): void
+    {
+        Notification::fake();
+
+        $sector = Sector::create(['nombre' => 'Garantía de Calidad', 'slug' => 'garantia_calidad']);
+        $delSector = User::factory()->create(['sector_id' => $sector->id]);
+
+        $this->post('/cargar-observacion', $this->datosFallaProducto());
+
+        Notification::assertSentTo($delSector, ObservacionExternaRecibidaNotification::class);
+    }
+
+    // ── mail_nuevo ───────────────────────────────────────────────────────────
+
+    public function test_guarda_el_mail_del_cliente_como_mail_nuevo(): void
+    {
+        $cliente = Cliente::create([
+            'numero' => '123',
+            'razon_social' => 'Cliente de Prueba SA',
+            'mail' => 'viejo-del-erp@example.com',
+        ]);
+
+        $this->post('/cargar-observacion', $this->datosFallaProducto());
+
+        $cliente->refresh();
+
+        // El del ERP no se toca: lo pisaría la próxima sincronización igual.
+        $this->assertSame('viejo-del-erp@example.com', $cliente->mail);
+        $this->assertSame('cliente@example.com', $cliente->mail_nuevo);
+    }
+
+    public function test_sin_cliente_matcheado_no_guarda_mail_nuevo_en_nadie(): void
+    {
+        $otro = Cliente::create(['numero' => '999', 'razon_social' => 'Otro SA']);
+
+        $this->post('/cargar-observacion', $this->datosFallaProducto());
+
+        $this->assertNull($otro->refresh()->mail_nuevo);
+    }
 }

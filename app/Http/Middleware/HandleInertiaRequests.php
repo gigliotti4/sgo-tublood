@@ -37,7 +37,10 @@ class HandleInertiaRequests extends Middleware
                 'error' => session('error'),
             ],
             'notificaciones' => [
-                'vencimientos' => $user?->can('clientes.view')
+                // Permiso propio y no `clientes.view`: seguir los vencimientos
+                // es tarea de una persona puntual, no de cualquiera que pueda
+                // mirar la lista de clientes.
+                'vencimientos' => $user?->can('clientes.vencimientos')
                     ? Cliente::query()
                         ->whereNotNull('fecha_vencimiento')
                         ->where('fecha_vencimiento', '<=', now()->addDays(30))
@@ -56,7 +59,7 @@ class HandleInertiaRequests extends Middleware
                         ->get(['id', 'data', 'created_at'])
                     : [],
                 // Reclamos pendientes de clasificación, para la sección propia de
-                // la campana del equipo de Garantía de Calidad.
+                // la campana. Recortados al tipo que atiende cada uno.
                 'sinClasificar' => $sinClasificar,
                 // Subconjunto de los de arriba que dispara el modal una sola vez.
                 'externas' => $this->externasNuevas($user, $sinClasificar),
@@ -75,14 +78,27 @@ class HandleInertiaRequests extends Middleware
      * Se filtra por estado y no por origen a propósito: hoy solo las externas
      * nacen en `pendiente_clasificacion` (la carga interna nace `clasificada`),
      * pero si alguien devuelve un caso a ese estado, también tiene que aparecer.
+     *
+     * Además se recorta por tipo: Calidad de Producto ve las fallas de producto
+     * y Calidad de Servicio las disconformidades. Quien es de Garantía de
+     * Calidad "a secas" los ve todos — `tiposDeReclamoQueAtiende()` devuelve
+     * null para ese caso.
      */
     private function sinClasificar(?User $user): iterable
     {
-        if (! $user?->esDeCalidad()) {
+        if ($user === null) {
+            return [];
+        }
+
+        $tipos = $user->tiposDeReclamoQueAtiende();
+
+        // Array vacío = no atiende ningún tipo y tampoco es de Calidad.
+        if ($tipos !== null && $tipos === []) {
             return [];
         }
 
         return Observacion::where('estado', 'pendiente_clasificacion')
+            ->when($tipos !== null, fn ($q) => $q->whereIn('tipo', $tipos))
             ->latest()
             ->limit(20)
             ->get(['id', 'numero', 'titulo', 'origen', 'contacto_nombre', 'created_at']);
@@ -93,14 +109,15 @@ class HandleInertiaRequests extends Middleware
      * subconjunto que abre el modal (una sola vez, hasta que lo cierre).
      *
      * Se calcula como subconjunto de $sinClasificar y no con una consulta
-     * aparte: así el popup nunca puede ofrecer algo que ya se clasificó o que ya
-     * no existe, sin necesidad de un filtro extra para eso.
+     * aparte: así el popup nunca puede ofrecer algo que ya se clasificó, que ya
+     * no existe, o que le toca a otra persona del equipo — el recorte por tipo
+     * ya viene hecho de arriba, sin repetir el criterio acá.
      */
     private function externasNuevas(?User $user, iterable $sinClasificar): iterable
     {
         $sinClasificar = collect($sinClasificar);
 
-        if (! $user?->esDeCalidad() || $sinClasificar->isEmpty()) {
+        if ($user === null || $sinClasificar->isEmpty()) {
             return [];
         }
 

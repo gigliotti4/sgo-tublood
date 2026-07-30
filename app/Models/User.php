@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\TaxonomiaIncidencias;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -38,6 +39,33 @@ class User extends Authenticatable
     {
         return $this->hasRole(Sector::GARANTIA_CALIDAD)
             || $this->sector?->slug === Sector::GARANTIA_CALIDAD;
+    }
+
+    /**
+     * Tipos de reclamo externo que le tocan a esta persona, según los roles de
+     * `incidencias.roles_por_tipo`. Es lo que recorta su campana y el modal de
+     * reclamos nuevos: Calidad de Producto ve las fallas de producto y Calidad
+     * de Servicio las disconformidades.
+     *
+     * Devuelve `null` cuando no hay que recortar nada — quien es de Garantía de
+     * Calidad "a secas" (rol o sector) sigue viendo todos los tipos, para no
+     * perder la vista global mientras se termina de repartir el equipo.
+     */
+    public function tiposDeReclamoQueAtiende(): ?array
+    {
+        if ($this->esDeCalidad()) {
+            return null;
+        }
+
+        $tipos = [];
+
+        foreach (TaxonomiaIncidencias::rolesPorTipo() as $tipo => $rol) {
+            if ($this->hasRole($rol)) {
+                $tipos[] = $tipo;
+            }
+        }
+
+        return $tipos;
     }
 
     /** A quién se escala si este usuario no gestiona a tiempo. */
