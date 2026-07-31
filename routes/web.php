@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\ObservacionController as AdminObservacionControll
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\SectorController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\ArticuloController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\NotificacionController;
@@ -18,6 +19,13 @@ Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthenticatedSessionController::class, 'create'])->name('login');
     Route::post('/login', [AuthenticatedSessionController::class, 'store']);
 });
+
+// Búsqueda de artículos del selector de productos. Pública porque el portal de
+// carga no tiene login; devuelve solo código y descripción, con rate limit.
+// La usan tanto el portal como la carga interna del panel.
+Route::get('/articulos/buscar', [ArticuloController::class, 'buscar'])
+    ->middleware('throttle:60,1')
+    ->name('articulos.buscar');
 
 Route::controller(ObservacionController::class)->group(function () {
     Route::get('/cargar-observacion', 'create')->name('observaciones.public.create');

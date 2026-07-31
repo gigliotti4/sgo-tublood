@@ -9,6 +9,7 @@ import Input from '@/Components/Input.vue'
 import InputFecha from '@/Components/InputFecha.vue'
 import RadioGroup from '@/Components/RadioGroup.vue'
 import Select from '@/Components/Select.vue'
+import SelectorArticulo from '@/Components/SelectorArticulo.vue'
 import SelectorUsuarios from '@/Components/SelectorUsuarios.vue'
 import Textarea from '@/Components/Textarea.vue'
 
@@ -336,11 +337,13 @@ const submit = () => form.post(route('observaciones.store'), { forceFormData: tr
                             </div>
 
                             <div class="grid sm:grid-cols-2 gap-4">
-                                <Input
+                                <SelectorArticulo
                                     v-model="producto.codigo"
                                     required
                                     label="Código de producto"
+                                    hint="Buscá por código o nombre. Si no está en el catálogo, escribilo igual."
                                     :error="errorProducto(index, 'codigo')"
+                                    @seleccionar="a => producto.producto = a.descripcion"
                                 />
                                 <Input
                                     v-model="producto.producto"

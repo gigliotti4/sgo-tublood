@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3'
 import { computed, ref, watch } from 'vue'
+import SelectorArticulo from '@/Components/SelectorArticulo.vue'
 import type { PageProps } from '@/types'
 
 const page = usePage<PageProps>()
@@ -332,18 +333,16 @@ const submit = () => form.post(route('observaciones.public.store'), { forceFormD
                             </div>
 
                             <div class="grid gap-5 sm:grid-cols-2">
-                                <div>
-                                    <label :for="`producto-${index}-codigo`" class="mb-1.5 block text-sm font-medium text-gray-700">
-                                        Código de producto <span class="text-error-500">*</span>
-                                    </label>
-                                    <input
-                                        :id="`producto-${index}-codigo`"
-                                        v-model="producto.codigo"
-                                        type="text"
-                                        :class="inputClass(errorProducto(index, 'codigo'))"
-                                    />
-                                    <p v-if="errorProducto(index, 'codigo')" class="mt-1.5 text-xs text-error-500">{{ errorProducto(index, 'codigo') }}</p>
-                                </div>
+                                <SelectorArticulo
+                                    v-model="producto.codigo"
+                                    portal
+                                    required
+                                    label="Código de producto"
+                                    hint="Buscá por código o nombre. Si no lo encontrás, escribilo igual."
+                                    :id="`producto-${index}-codigo`"
+                                    :error="errorProducto(index, 'codigo')"
+                                    @seleccionar="a => producto.producto = a.descripcion"
+                                />
 
                                 <div>
                                     <label :for="`producto-${index}-producto`" class="mb-1.5 block text-sm font-medium text-gray-700">
