@@ -23,7 +23,6 @@ const estadoLabels: Record<string, string> = {
     clasificada: 'Clasificada',
     en_proceso: 'En proceso',
     derivada: 'Derivada',
-    resuelta: 'Resuelta',
     cerrada: 'Cerrada',
     cancelada: 'Cancelada',
 }
@@ -33,8 +32,7 @@ const estadoVariant: Record<string, 'amber' | 'blue' | 'indigo' | 'purple' | 'em
     clasificada: 'blue',
     en_proceso: 'indigo',
     derivada: 'purple',
-    resuelta: 'emerald',
-    cerrada: 'slate',
+    cerrada: 'emerald',
     cancelada: 'red',
 }
 

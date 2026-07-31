@@ -157,8 +157,14 @@ Los sectores son **gestionables por el administrador** desde la pantalla de conf
 ### Enums / catálogos clave
 
 **Estados de una observación:**
-`pendiente_clasificacion` → `clasificada` → `en_proceso` → `derivada` → `resuelta` → `cerrada`
+`pendiente_clasificacion` → `clasificada` → `en_proceso` → `derivada` → `cerrada`
 (también: `cancelada`)
+
+> Existía un estado `resuelta` previo a `cerrada`. Se unificaron en `cerrada` el
+> 31/7/2026: decían lo mismo, y solo `cerrada` cortaba el reloj de alertas, así
+> que marcar un caso como resuelto lo dejaba vencido y sin aviso final.
+> `cancelada` sigue separada a propósito — un caso anulado no es trabajo
+> terminado y no cuenta en las estadísticas de cierre.
 
 **Prioridades** (asignadas por Calidad):
 `critica` | `alta` | `media` | `baja`
@@ -323,7 +329,9 @@ Los administradores pueden ajustar todos estos valores desde la pantalla de conf
 
 ## 11. Encuesta de satisfacción
 
-- Se envía **solo** en observaciones externas al pasar a estado `cerrada` o `resuelta`.
+- Se envía **solo** en observaciones externas al pasar a estado `cerrada` (el
+  documento original decía "`cerrada` o `resuelta`"; ver la nota sobre la
+  unificación de estados en la sección 6).
 - **Token único** por observación, válido por 30 días.
 - URL pública sin login: `https://sgo.tublood.com/encuesta/:token`
 - Si el cliente abre el link después de haber respondido → mensaje "Ya respondió esta encuesta, gracias."

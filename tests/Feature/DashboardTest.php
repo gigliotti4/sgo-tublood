@@ -37,7 +37,7 @@ class DashboardTest extends TestCase
             'numero' => '0002-26',
             'anio' => 2026,
             'tipo' => 'falla_producto',
-            'estado' => 'resuelta',
+            'estado' => 'cerrada',
             'contacto_nombre' => 'Cliente Test 2',
             'contacto_email' => 'cliente2@example.com',
             'titulo' => 'Título de prueba 2',
@@ -51,7 +51,7 @@ class DashboardTest extends TestCase
                 ->component('Dashboard')
                 ->where('stats.total', 2)
                 ->where('stats.abiertas', 1)
-                ->where('stats.resueltas', 1)
+                ->where('stats.cerradas', 1)
                 ->where('stats.asignadasAMi', 1)
                 ->where('kpis.tecnovigilancia', 1)
                 ->where('kpis.critica', 1)

@@ -9,8 +9,6 @@ class DashboardController extends Controller
 {
     private const ESTADOS_ABIERTOS = Observacion::ESTADOS_ABIERTOS;
 
-    private const ESTADOS_RESUELTOS = ['resuelta', 'cerrada'];
-
     public function index()
     {
         $asignadasAMi = Observacion::query()
@@ -23,7 +21,9 @@ class DashboardController extends Controller
             'stats' => [
                 'total' => Observacion::count(),
                 'abiertas' => Observacion::whereIn('estado', self::ESTADOS_ABIERTOS)->count(),
-                'resueltas' => Observacion::whereIn('estado', self::ESTADOS_RESUELTOS)->count(),
+                // Las canceladas no cuentan como trabajo terminado (por eso tampoco
+                // están en el gráfico por estado, más abajo).
+                'cerradas' => Observacion::where('estado', 'cerrada')->count(),
                 'asignadasAMi' => Observacion::where('responsable_id', auth()->id())->count(),
                 // TODO: requiere tabla non_conformities (pendiente).
                 'nc' => 0,

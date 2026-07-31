@@ -185,11 +185,11 @@ class ObservacionAdminTest extends TestCase
         $this->actingAs($superAdmin)
             ->put("/observaciones/{$observacion->id}", [
                 'responsable_id' => $responsable->id,
-                'estado' => 'resuelta',
+                'estado' => 'cerrada',
             ])
             ->assertRedirect(route('observaciones.index'));
 
-        $this->assertSame('resuelta', $observacion->fresh()->estado);
+        $this->assertSame('cerrada', $observacion->fresh()->estado);
     }
 
     public function test_create_requiere_permiso_observaciones_edit(): void

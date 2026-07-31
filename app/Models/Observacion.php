@@ -20,7 +20,6 @@ class Observacion extends Model
         'clasificada' => 'Clasificada',
         'en_proceso' => 'En proceso',
         'derivada' => 'Derivada',
-        'resuelta' => 'Resuelta',
         'cerrada' => 'Cerrada',
         'cancelada' => 'Cancelada',
     ];
@@ -33,7 +32,7 @@ class Observacion extends Model
     /**
      * Estados en los que la observación sigue en gestión. Es la definición de
      * "abierta" que comparten el Dashboard y el filtro Abierta/Cerrada del
-     * listado (cerrada = cualquier otro estado: resuelta, cerrada, cancelada).
+     * listado (cerrada = cualquier otro estado: cerrada o cancelada).
      */
     public const ESTADOS_ABIERTOS = ['pendiente_clasificacion', 'clasificada', 'en_proceso', 'derivada'];
 

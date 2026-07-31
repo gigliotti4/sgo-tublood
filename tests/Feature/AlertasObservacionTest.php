@@ -190,14 +190,19 @@ class AlertasObservacionTest extends TestCase
         Notification::assertSentTo($responsable->gerente, ObservacionFinalizadaNotification::class);
     }
 
-    public function test_pasar_a_resuelta_todavia_no_es_el_aviso_final(): void
+    /**
+     * El aviso final sale de `config('incidencias.estados_finales')`, no de
+     * cualquier cambio de estado: avanzar el caso sin terminarlo no le avisa
+     * a nadie.
+     */
+    public function test_pasar_a_un_estado_no_final_todavia_no_es_el_aviso_final(): void
     {
         Notification::fake();
 
         $responsable = $this->responsable();
         $observacion = $this->observacion(['responsable_id' => $responsable->id]);
 
-        $observacion->update(['estado' => 'resuelta']);
+        $observacion->update(['estado' => 'en_proceso']);
 
         Notification::assertNothingSentTo($responsable->gerente);
     }

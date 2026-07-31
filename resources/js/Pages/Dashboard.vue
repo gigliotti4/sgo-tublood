@@ -29,7 +29,7 @@ const props = defineProps<{
     stats: {
         total: number
         abiertas: number
-        resueltas: number
+        cerradas: number
         asignadasAMi: number
         nc: number
         ncAbiertas: number
@@ -52,8 +52,7 @@ const estadoVariant: Record<string, 'amber' | 'blue' | 'indigo' | 'purple' | 'em
     clasificada: 'blue',
     en_proceso: 'indigo',
     derivada: 'purple',
-    resuelta: 'emerald',
-    cerrada: 'slate',
+    cerrada: 'emerald',
     cancelada: 'red',
 }
 
@@ -62,8 +61,7 @@ const estadoColor: Record<string, string> = {
     clasificada: '#3b82f6',
     en_proceso: '#6373c4',
     derivada: '#8b5cf6',
-    resuelta: '#12b76a',
-    cerrada: '#98a2b3',
+    cerrada: '#12b76a',
     cancelada: '#f04438',
 }
 
@@ -164,7 +162,7 @@ interface StatCard {
 const statCards = computed<StatCard[]>(() => [
     { label: 'Observaciones', value: props.stats.total, icon: 'document', iconClass: 'text-brand-500 dark:text-brand-300', iconBg: 'bg-brand-50 dark:bg-brand-500/[0.12]' },
     { label: 'Abiertas', value: props.stats.abiertas, icon: 'inbox', iconClass: 'text-warning-600 dark:text-warning-400', iconBg: 'bg-warning-50 dark:bg-warning-500/15' },
-    { label: 'Resueltas', value: props.stats.resueltas, icon: 'check', iconClass: 'text-success-600 dark:text-success-400', iconBg: 'bg-success-50 dark:bg-success-500/15' },
+    { label: 'Cerradas', value: props.stats.cerradas, icon: 'check', iconClass: 'text-success-600 dark:text-success-400', iconBg: 'bg-success-50 dark:bg-success-500/15' },
     { label: 'Asignadas a mí', value: props.stats.asignadasAMi, icon: 'user', iconClass: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-50 dark:bg-blue-500/15' },
     { label: 'No Conformidades', value: props.stats.nc, icon: 'flag', iconClass: 'text-purple-600 dark:text-purple-400', iconBg: 'bg-purple-50 dark:bg-purple-500/15', sub: `${props.stats.ncAbiertas} abiertas` },
 ])
