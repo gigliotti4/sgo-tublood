@@ -160,6 +160,36 @@ class ArticuloSyncTest extends TestCase
         $this->sincronizar();
     }
 
+    /**
+     * El contrato central de los cuatro campos propios: el sync trae datos
+     * nuevos del ERP pero no los toca. Mismo test que
+     * ClienteSyncTest::test_sync_actualiza_datos_del_erp_pero_preserva_fecha_vencimiento.
+     */
+    public function test_sync_actualiza_datos_del_erp_pero_preserva_los_campos_propios(): void
+    {
+        Articulo::create([
+            'codigo' => 'RE-1631',
+            'descripcion' => 'Descripción vieja',
+            'fecha_vencimiento' => '2030-10-06',
+            'pm' => '236-80',
+            'legajo' => '133',
+            'observaciones' => 'Cargado a mano por Calidad',
+        ]);
+
+        Http::fake(['*articulos.php' => Http::response($this->respuesta([
+            $this->articulo(['descripcion_articulo' => 'Descripción nueva del ERP']),
+        ]))]);
+
+        $this->sincronizar();
+
+        $a = Articulo::first();
+        $this->assertSame('Descripción nueva del ERP', $a->descripcion);
+        $this->assertSame('2030-10-06', $a->fecha_vencimiento->toDateString());
+        $this->assertSame('236-80', $a->pm);
+        $this->assertSame('133', $a->legajo);
+        $this->assertSame('Cargado a mano por Calidad', $a->observaciones);
+    }
+
     /** El buscador del selector tiene que encontrar por código y por descripción. */
     public function test_el_buscador_encuentra_por_codigo_y_descripcion(): void
     {

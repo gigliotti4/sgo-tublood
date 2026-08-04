@@ -50,6 +50,31 @@ export interface ObservacionSinClasificar {
     estado?: string
 }
 
+/** Artículo del catálogo de RP Sistemas. Los primeros campos son del ERP (solo lectura); los últimos cuatro son propios del panel. */
+export interface Articulo {
+    id: number
+    codigo: string
+    descripcion: string
+    descripcion_adicional: string | null
+    codigo_barras: string | null
+    unidad_medida: string | null
+    codigo_agrupacion_1: string | null
+    descripcion_agrupacion_1: string | null
+    codigo_agrupacion_2: string | null
+    descripcion_agrupacion_2: string | null
+    codigo_agrupacion_3: string | null
+    descripcion_agrupacion_3: string | null
+    stock: string | null
+    stock_disponible: string | null
+    codigo_proveedor: string | null
+    modificado_en: string | null
+    synced_at: string | null
+    fecha_vencimiento: string | null
+    pm: string | null
+    legajo: string | null
+    observaciones: string | null
+}
+
 export interface ClienteVencimiento {
     id: number
     numero: string

@@ -21,6 +21,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'clientes.view', 'clientes.sync', 'clientes.edit', 'clientes.vencimientos',
             'observaciones.view', 'observaciones.edit',
             'bitacora.view',
+            'articulos.view', 'articulos.edit', 'articulos.sync', 'articulos.import',
         ];
 
         foreach ($permissions as $permission) {
@@ -37,13 +38,17 @@ class RolesAndPermissionsSeeder extends Seeder
             'clientes.view', 'clientes.sync', 'clientes.edit',
             'observaciones.view', 'observaciones.edit',
             'bitacora.view',
+            'articulos.view', 'articulos.edit', 'articulos.sync', 'articulos.import',
         ]);
 
         $viewer = Role::firstOrCreate(['name' => 'viewer']);
-        $viewer->syncPermissions(['users.view', 'roles.view', 'clientes.view', 'observaciones.view']);
+        $viewer->syncPermissions(['users.view', 'roles.view', 'clientes.view', 'observaciones.view', 'articulos.view']);
 
         $usuarioInterno = Role::firstOrCreate(['name' => 'usuario_interno']);
-        $usuarioInterno->syncPermissions(['clientes.view', 'clientes.sync', 'clientes.edit', 'observaciones.view', 'observaciones.edit']);
+        $usuarioInterno->syncPermissions([
+            'clientes.view', 'clientes.sync', 'clientes.edit', 'observaciones.view', 'observaciones.edit',
+            'articulos.view', 'articulos.edit', 'articulos.sync', 'articulos.import',
+        ]);
 
         $soloLectura = Role::firstOrCreate(['name' => 'solo_lectura']);
         $soloLectura->syncPermissions(['clientes.view', 'observaciones.view']);

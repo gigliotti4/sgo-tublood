@@ -39,6 +39,11 @@ class ArticuloSyncService
             foreach (array_chunk($datos, 500) as $bloque) {
                 $lote = array_map(fn ($a) => $this->mapear($a, $syncedAt), $bloque);
 
+                // No incluir 'fecha_vencimiento', 'pm', 'legajo' ni
+                // 'observaciones' acá: son campos propios (no gestionados por
+                // el ERP) que se cargan a mano o por Excel desde el panel, y la
+                // sync nunca debe pisarlos. Mismo contrato que
+                // ClienteSyncService con 'fecha_vencimiento' / 'mail_nuevo'.
                 Articulo::upsert(
                     $lote,
                     ['codigo'],

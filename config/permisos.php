@@ -25,6 +25,7 @@ return [
         'clientes' => 'Clientes',
         'observaciones' => 'Observaciones',
         'bitacora' => 'Bitácora',
+        'articulos' => 'Artículos',
     ],
 
     'etiquetas' => [
@@ -51,6 +52,11 @@ return [
         'observaciones.edit' => ['grupo' => 'observaciones', 'label' => 'Cargar y gestionar observaciones'],
 
         'bitacora.view' => ['grupo' => 'bitacora', 'label' => 'Ver la bitácora de todas las observaciones'],
+
+        'articulos.view' => ['grupo' => 'articulos', 'label' => 'Ver artículos'],
+        'articulos.edit' => ['grupo' => 'articulos', 'label' => 'Editar datos propios de artículos'],
+        'articulos.sync' => ['grupo' => 'articulos', 'label' => 'Sincronizar con RP Sistemas'],
+        'articulos.import' => ['grupo' => 'articulos', 'label' => 'Importar Excel de artículos'],
     ],
 
 ];

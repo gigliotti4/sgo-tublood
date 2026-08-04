@@ -8,8 +8,11 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * Artículo del catálogo de RP Sistemas.
  *
- * Es un espejo de solo lectura: lo llena `ArticuloSyncService` y no se edita
- * desde el panel. Sin precios — ver la migración.
+ * Los datos del ERP (código, descripción, stock, agrupaciones...) son de solo
+ * lectura: los llena `ArticuloSyncService` y se pisan en cada sincronización.
+ * `fecha_vencimiento`, `pm`, `legajo` y `observaciones` son la excepción: son
+ * propios del panel, se cargan a mano o por Excel, y el `upsert()` del sync
+ * **no los toca a propósito** — ver el comentario en `ArticuloSyncService`.
  */
 class Articulo extends Model
 {
@@ -32,6 +35,10 @@ class Articulo extends Model
         'codigo_proveedor',
         'modificado_en',
         'synced_at',
+        'fecha_vencimiento',
+        'pm',
+        'legajo',
+        'observaciones',
     ];
 
     protected $casts = [
@@ -39,10 +46,11 @@ class Articulo extends Model
         'stock_disponible' => 'decimal:4',
         'modificado_en' => 'datetime',
         'synced_at' => 'datetime',
+        'fecha_vencimiento' => 'date',
     ];
 
     /**
-     * Búsqueda del selector: por código, descripción o código de barras.
+     * Búsqueda: por código, descripción, código de barras, PM o legajo.
      *
      * Los que empiezan con el término van primero — quien tipea "AGU" busca
      * "AGUJA...", no un artículo que la menciona a mitad de la descripción.
@@ -59,7 +67,9 @@ class Articulo extends Model
             ->where(fn ($q) => $q
                 ->where('codigo', 'like', "%{$termino}%")
                 ->orWhere('descripcion', 'like', "%{$termino}%")
-                ->orWhere('codigo_barras', 'like', "%{$termino}%"))
+                ->orWhere('codigo_barras', 'like', "%{$termino}%")
+                ->orWhere('pm', 'like', "%{$termino}%")
+                ->orWhere('legajo', 'like', "%{$termino}%"))
             ->orderByRaw('CASE WHEN codigo LIKE ? THEN 0 WHEN descripcion LIKE ? THEN 1 ELSE 2 END', ["{$termino}%", "{$termino}%"])
             ->orderBy('descripcion');
     }

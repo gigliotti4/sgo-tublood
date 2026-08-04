@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\ArticuloController as AdminArticuloController;
 use App\Http\Controllers\Admin\BitacoraController;
 use App\Http\Controllers\Admin\ClienteController;
 use App\Http\Controllers\Admin\ObservacionController as AdminObservacionController;
@@ -87,6 +88,23 @@ Route::middleware(['auth'])->group(function () {
             ->name('clientes.archivos.store');
         Route::delete('/clientes/{cliente}/archivos/{attachment}', [ClienteController::class, 'destroyArchivo'])
             ->name('clientes.archivos.destroy')->scopeBindings();
+    });
+
+    // Artículos (panel admin). El buscador público de arriba (/articulos/buscar)
+    // se registra antes de este grupo, así que siempre matchea primero y no
+    // choca con /articulos/{articulo}.
+    Route::middleware('can:articulos.view')->group(function () {
+        Route::get('/articulos', [AdminArticuloController::class, 'index'])->name('articulos.index');
+    });
+    Route::middleware('can:articulos.sync')->group(function () {
+        Route::post('/articulos/sync', [AdminArticuloController::class, 'sync'])->name('articulos.sync');
+    });
+    Route::middleware('can:articulos.import')->group(function () {
+        Route::post('/articulos/import', [AdminArticuloController::class, 'import'])->name('articulos.import');
+    });
+    Route::middleware('can:articulos.edit')->group(function () {
+        Route::get('/articulos/{articulo}/edit', [AdminArticuloController::class, 'edit'])->name('articulos.edit');
+        Route::put('/articulos/{articulo}', [AdminArticuloController::class, 'update'])->name('articulos.update');
     });
 
     // Observaciones
