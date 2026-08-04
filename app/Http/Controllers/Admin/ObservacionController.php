@@ -42,8 +42,10 @@ class ObservacionController extends Controller
             'origen' => ['nullable', Rule::in(array_keys(Observacion::ORIGENES))],
             'prioridad' => ['nullable', Rule::in(array_keys(config('incidencias.prioridades')))],
             'tipo_caso' => ['nullable', Rule::in(config('incidencias.tipos_caso'))],
-            'responsable_id' => ['nullable', 'integer', 'exists:users,id'],
-            'creado_por' => ['nullable', 'integer', 'exists:users,id'],
+            'responsable_id' => ['nullable', 'array'],
+            'responsable_id.*' => ['integer', 'exists:users,id'],
+            'creado_por' => ['nullable', 'array'],
+            'creado_por.*' => ['integer', 'exists:users,id'],
             'apertura' => ['nullable', 'in:abierta,cerrada'],
             'desde' => ['nullable', 'date'],
             'hasta' => ['nullable', 'date', 'after_or_equal:desde'],
@@ -73,8 +75,8 @@ class ObservacionController extends Controller
                 ->when($filters['origen'] ?? null, fn ($query, $v) => $query->where('origen', $v))
                 ->when($filters['prioridad'] ?? null, fn ($query, $v) => $query->where('prioridad', $v))
                 ->when($filters['tipo_caso'] ?? null, fn ($query, $v) => $query->where('tipo_caso', $v))
-                ->when($filters['responsable_id'] ?? null, fn ($query, $v) => $query->where('responsable_id', $v))
-                ->when($filters['creado_por'] ?? null, fn ($query, $v) => $query->where('created_by', $v))
+                ->when($filters['responsable_id'] ?? null, fn ($query, $v) => $query->whereIn('responsable_id', $v))
+                ->when($filters['creado_por'] ?? null, fn ($query, $v) => $query->whereIn('created_by', $v))
                 ->when($filters['apertura'] ?? null, fn ($query, $v) => $v === 'abierta'
                     ? $query->whereIn('estado', Observacion::ESTADOS_ABIERTOS)
                     : $query->whereNotIn('estado', Observacion::ESTADOS_ABIERTOS))

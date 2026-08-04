@@ -654,8 +654,10 @@ class ObservacionAdminTest extends TestCase
 
         $user = $this->userWith('observaciones.view');
 
+        // El filtro va en notación de array: es un select múltiple ("cualquiera
+        // de estos responsables"), no un único valor.
         $this->actingAs($user)
-            ->get("/observaciones?origen=interna&responsable_id={$responsable->id}&desde=".now()->toDateString())
+            ->get("/observaciones?origen=interna&responsable_id[]={$responsable->id}&desde=".now()->toDateString())
             ->assertInertia(fn ($page) => $page
                 ->has('observaciones.data', 1)
                 ->where('observaciones.data.0.titulo', 'La buscada')
@@ -667,6 +669,29 @@ class ObservacionAdminTest extends TestCase
             ->assertInertia(fn ($page) => $page->has('observaciones.data', 0));
     }
 
+    /** Elegir varios responsables es una unión: aparece lo de cualquiera de ellos. */
+    public function test_buscador_filtra_por_varios_responsables_a_la_vez(): void
+    {
+        $responsableA = User::factory()->create();
+        $responsableB = User::factory()->create();
+        $this->observacion(['titulo' => 'De A', 'responsable_id' => $responsableA->id]);
+        $this->observacion(['titulo' => 'De B', 'responsable_id' => $responsableB->id]);
+        $this->observacion(['titulo' => 'De otro', 'responsable_id' => User::factory()->create()->id]);
+
+        $user = $this->userWith('observaciones.view');
+
+        $titulos = [];
+
+        $this->actingAs($user)
+            ->get("/observaciones?responsable_id[]={$responsableA->id}&responsable_id[]={$responsableB->id}")
+            ->assertInertia(function ($page) use (&$titulos) {
+                $page->has('observaciones.data', 2);
+                $titulos = collect($page->toArray()['props']['observaciones']['data'])->pluck('titulo')->all();
+            });
+
+        $this->assertEqualsCanonicalizing(['De A', 'De B'], $titulos);
+    }
+
     public function test_buscador_filtra_por_creador(): void
     {
         $creador = User::factory()->create();
@@ -675,10 +700,26 @@ class ObservacionAdminTest extends TestCase
 
         $user = $this->userWith('observaciones.view');
 
-        $this->actingAs($user)->get("/observaciones?creado_por={$creador->id}")
+        $this->actingAs($user)->get("/observaciones?creado_por[]={$creador->id}")
             ->assertInertia(fn ($page) => $page
                 ->has('observaciones.data', 1)
                 ->where('observaciones.data.0.titulo', 'Cargada por él')
             );
+    }
+
+    /** Mismo criterio de unión que responsable_id. */
+    public function test_buscador_filtra_por_varios_creadores_a_la_vez(): void
+    {
+        $creadorA = User::factory()->create();
+        $creadorB = User::factory()->create();
+        $this->observacion(['titulo' => 'De A', 'created_by' => $creadorA->id]);
+        $this->observacion(['titulo' => 'De B', 'created_by' => $creadorB->id]);
+        $this->observacion(['titulo' => 'Del portal']);
+
+        $user = $this->userWith('observaciones.view');
+
+        $this->actingAs($user)
+            ->get("/observaciones?creado_por[]={$creadorA->id}&creado_por[]={$creadorB->id}")
+            ->assertInertia(fn ($page) => $page->has('observaciones.data', 2));
     }
 }

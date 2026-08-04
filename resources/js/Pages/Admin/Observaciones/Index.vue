@@ -17,6 +17,7 @@ import Pagination from '@/Components/Pagination.vue'
 import TableCard from '@/Components/TableCard.vue'
 import DataRow from '@/Components/DataRow.vue'
 import SelectorUsuarios from '@/Components/SelectorUsuarios.vue'
+import SelectorMultiple from '@/Components/SelectorMultiple.vue'
 import type { Observacion, PaginatedData } from '@/types'
 
 interface UsuarioOption {
@@ -33,8 +34,8 @@ interface Filtros {
     origen?: string
     prioridad?: string
     tipo_caso?: string
-    responsable_id?: string | number
-    creado_por?: string | number
+    responsable_id?: number[]
+    creado_por?: number[]
     apertura?: string
     desde?: string
     hasta?: string
@@ -71,14 +72,18 @@ const filtros = reactive({
     origen: props.filters.origen ?? '',
     prioridad: props.filters.prioridad ?? '',
     tipo_caso: props.filters.tipo_caso ?? '',
-    responsable_id: String(props.filters.responsable_id ?? ''),
-    creado_por: String(props.filters.creado_por ?? ''),
+    // Array y no string: Responsable/Creador son selects múltiples (unión —
+    // "el responsable es cualquiera de estos"), no un solo valor.
+    responsable_id: Array.isArray(props.filters.responsable_id) ? props.filters.responsable_id : [] as number[],
+    creado_por: Array.isArray(props.filters.creado_por) ? props.filters.creado_por : [] as number[],
     apertura: props.filters.apertura ?? '',
     desde: props.filters.desde ?? '',
     hasta: props.filters.hasta ?? '',
 })
 
-const hayFiltros = computed(() => Object.values(filtros).some(v => v !== ''))
+const vacio = (v: unknown) => Array.isArray(v) ? v.length === 0 : v === ''
+
+const hayFiltros = computed(() => Object.values(filtros).some(v => !vacio(v)))
 
 // Una fecha a medio tipear (dd/mm parcial) no dispara el request: no tiene
 // sentido filtrar por un parcial y el backend la rechazaría (regla `date`).
@@ -86,7 +91,7 @@ const fechaParcial = (v: string) => v !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(v)
 
 const aplicarFiltros = () => {
     if (fechaParcial(filtros.desde) || fechaParcial(filtros.hasta)) return
-    const params = Object.fromEntries(Object.entries(filtros).filter(([, v]) => v !== ''))
+    const params = Object.fromEntries(Object.entries(filtros).filter(([, v]) => !vacio(v)))
     router.get(route('observaciones.index'), params, {
         preserveState: true,
         preserveScroll: true,
@@ -105,7 +110,7 @@ watch(filtros, () => {
 const limpiarFiltros = () => {
     Object.assign(filtros, {
         q: '', origen: '', prioridad: '', tipo_caso: '',
-        responsable_id: '', creado_por: '', apertura: '', desde: '', hasta: '',
+        responsable_id: [], creado_por: [], apertura: '', desde: '', hasta: '',
     })
 }
 
@@ -232,8 +237,8 @@ const guardar = () => {
             <div class="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
                 <!-- Buscador -->
                 <div class="border-b border-gray-100 p-5 dark:border-gray-800">
-                    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                        <div class="sm:col-span-2">
+                    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-12">
+                        <div class="sm:col-span-2 xl:col-span-4">
                             <Input v-model="filtros.q" label="Buscar" placeholder="N°, título, cliente, producto, código, lote…">
                                 <template #icon>
                                     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -243,41 +248,60 @@ const guardar = () => {
                             </Input>
                         </div>
 
-                        <Select v-model="filtros.apertura" label="Estado">
-                            <option value="">Todas</option>
-                            <option value="abierta">Abiertas</option>
-                            <option value="cerrada">Cerradas</option>
-                        </Select>
+                        <div class="xl:col-span-2">
+                            <Select v-model="filtros.apertura" label="Estado">
+                                <option value="">Todas</option>
+                                <option value="abierta">Abiertas</option>
+                                <option value="cerrada">Cerradas</option>
+                            </Select>
+                        </div>
 
-                        <Select v-model="filtros.origen" label="Origen">
-                            <option value="">Todos</option>
-                            <option v-for="(label, key) in origenLabels" :key="key" :value="key">{{ label }}</option>
-                        </Select>
+                        <div class="xl:col-span-2">
+                            <Select v-model="filtros.origen" label="Origen">
+                                <option value="">Todos</option>
+                                <option v-for="(label, key) in origenLabels" :key="key" :value="key">{{ label }}</option>
+                            </Select>
+                        </div>
 
-                        <Select v-model="filtros.prioridad" label="Prioridad">
-                            <option value="">Todas</option>
-                            <option v-for="(label, key) in prioridades" :key="key" :value="key">{{ label }}</option>
-                        </Select>
+                        <div class="xl:col-span-2">
+                            <Select v-model="filtros.prioridad" label="Prioridad">
+                                <option value="">Todas</option>
+                                <option v-for="(label, key) in prioridades" :key="key" :value="key">{{ label }}</option>
+                            </Select>
+                        </div>
 
-                        <Select v-model="filtros.tipo_caso" label="Tipo de caso">
-                            <option value="">Todos</option>
-                            <option v-for="tc in tiposCaso" :key="tc" :value="tc">{{ tc }}</option>
-                        </Select>
+                        <div class="xl:col-span-2">
+                            <Select v-model="filtros.tipo_caso" label="Tipo de caso">
+                                <option value="">Todos</option>
+                                <option v-for="tc in tiposCaso" :key="tc" :value="tc">{{ tc }}</option>
+                            </Select>
+                        </div>
 
-                        <Select v-model="filtros.responsable_id" label="Responsable">
-                            <option value="">Todos</option>
-                            <option v-for="u in usuarios" :key="u.id" :value="String(u.id)">{{ nombreCompleto(u) }}</option>
-                        </Select>
+                        <div class="xl:col-span-3">
+                            <SelectorMultiple
+                                v-model="filtros.responsable_id"
+                                label="Responsable"
+                                :opciones="usuarios.map(u => ({ id: u.id, label: nombreCompleto(u) }))"
+                            />
+                        </div>
 
-                        <Select v-model="filtros.creado_por" label="Creador">
-                            <option value="">Todos</option>
-                            <option v-for="u in usuarios" :key="u.id" :value="String(u.id)">{{ nombreCompleto(u) }}</option>
-                        </Select>
+                        <div class="xl:col-span-3">
+                            <SelectorMultiple
+                                v-model="filtros.creado_por"
+                                label="Creador"
+                                :opciones="usuarios.map(u => ({ id: u.id, label: nombreCompleto(u) }))"
+                            />
+                        </div>
 
-                        <InputFecha v-model="filtros.desde" label="Creada desde" />
-                        <InputFecha v-model="filtros.hasta" label="Creada hasta" />
+                        <div class="xl:col-span-2">
+                            <InputFecha v-model="filtros.desde" label="Creada desde" />
+                        </div>
 
-                        <div v-if="hayFiltros" class="flex items-end sm:col-span-2">
+                        <div class="xl:col-span-2">
+                            <InputFecha v-model="filtros.hasta" label="Creada hasta" />
+                        </div>
+
+                        <div v-if="hayFiltros" class="flex items-end sm:col-span-2 xl:col-span-2">
                             <button
                                 class="cursor-pointer text-theme-sm font-medium text-gray-500 underline-offset-2 hover:text-gray-700 hover:underline dark:text-gray-400 dark:hover:text-gray-200"
                                 @click="limpiarFiltros"
