@@ -109,25 +109,10 @@ const camposDelTipo = computed<CampoDef[]>(() => {
 const nombreCompleto = (u: UsuarioOption) => [u.name, u.apellido].filter(Boolean).join(' ')
 
 /**
- * El sector elegido en Clasificación recorta la lista de responsables a ese
- * mismo sector. Se deja pasar igual al responsable ya elegido, para no
- * hacerlo desaparecer del select.
+ * El sector elegido en Clasificación **no** recorta la lista de responsables:
+ * se puede asignar a cualquiera, aunque sea de otro sector. El plazo lo sigue
+ * definiendo el sector del responsable (ver abajo).
  */
-const usuariosFiltrados = computed(() => {
-    if (!form.sector_id) return props.usuarios
-
-    return props.usuarios.filter(u => u.sector_id === form.sector_id || u.id === form.responsable_id)
-})
-
-const gentePorSector = computed(() => {
-    if (!form.sector_id) return null
-
-    const total = props.usuarios.filter(u => u.sector_id === form.sector_id).length
-
-    return total === 0
-        ? 'Este sector no tiene usuarios cargados.'
-        : `${total} ${total === 1 ? 'persona' : 'personas'} en este sector.`
-})
 
 /** El plazo de gestión sale del sector del responsable: sin sector no hay alerta. */
 const plazoDelResponsable = computed(() => {
@@ -146,15 +131,12 @@ const quitarProducto = (index: number) => form.productos.splice(index, 1)
 const errorProducto = (index: number, campo: keyof ProductoForm) =>
     (form.errors as Record<string, string>)[`productos.${index}.${campo}`]
 
-// Al cambiar de sector: reseteá el tipo y los datos específicos, y soltá el
-// responsable si era de otro sector (el mismo sector filtra ambas cosas).
+// Al cambiar de sector: reseteá el tipo y los datos específicos, que salen de la
+// taxonomía de ese sector. El responsable NO se toca: puede ser de cualquier sector.
 watch(() => form.sector_id, () => {
     form.tipo = ''
     form.datos_especificos = {}
     form.productos = []
-
-    const elegido = props.usuarios.find(u => u.id === form.responsable_id)
-    if (elegido && elegido.sector_id !== form.sector_id) form.responsable_id = null
 })
 
 // Al cambiar de tipo: reconstruí las claves de datos específicos, o inicializá el
@@ -417,11 +399,8 @@ const submit = () => form.post(route('observaciones.store'), { forceFormData: tr
                         :error="form.errors.responsable_id"
                     >
                         <option :value="null">— Sin asignar —</option>
-                        <option v-for="u in usuariosFiltrados" :key="u.id" :value="u.id">{{ nombreCompleto(u) }}</option>
+                        <option v-for="u in usuarios" :key="u.id" :value="u.id">{{ nombreCompleto(u) }}</option>
                     </Select>
-                    <p v-if="gentePorSector" class="-mt-2 text-xs text-gray-500 dark:text-gray-400 sm:col-span-2">
-                        {{ gentePorSector }}
-                    </p>
 
                     <SelectorUsuarios
                         v-model="form.notificados"

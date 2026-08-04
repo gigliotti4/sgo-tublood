@@ -192,37 +192,11 @@ const cerrarEdicion = () => { idEnEdicion.value = null }
 const nombreCompleto = (u: UsuarioOption) => [u.name, u.apellido].filter(Boolean).join(' ')
 
 /**
- * Elegir sector recorta la lista de responsables a ese sector. Se deja pasar
- * igual al responsable ya asignado aunque sea de otro: la observación puede
- * venir con una combinación cargada antes, y no hay que hacerlo desaparecer.
+ * El sector de la observación **no** recorta la lista de responsables: se puede
+ * asignar a cualquiera, porque un caso derivado a un sector lo puede terminar
+ * gestionando alguien de otro. La Policy lo contempla — `update` habilita al
+ * responsable por `responsable_id`, sin mirar el sector.
  */
-const usuariosFiltrados = computed(() => {
-    if (!form.sector_id) return props.usuarios
-
-    return props.usuarios.filter(u => u.sector_id === form.sector_id || u.id === form.responsable_id)
-})
-
-/**
- * Al cambiar de sector se suelta el responsable si era de otro. Va en @change y
- * no en un watch a propósito: abrir el modal setea form.sector_id y un watch
- * borraría el responsable que ya tenía la observación.
- */
-const alCambiarSector = () => {
-    if (!form.sector_id) return
-
-    const elegido = props.usuarios.find(u => u.id === form.responsable_id)
-    if (elegido && elegido.sector_id !== form.sector_id) form.responsable_id = null
-}
-
-const gentePorSector = computed(() => {
-    if (!form.sector_id) return null
-
-    const total = props.usuarios.filter(u => u.sector_id === form.sector_id).length
-
-    return total === 0
-        ? 'Este sector no tiene usuarios cargados.'
-        : `${total} ${total === 1 ? 'persona' : 'personas'} en este sector.`
-})
 
 /**
  * Asignar responsable arranca el reloj de gestión, y el plazo sale del sector de
@@ -604,9 +578,7 @@ const guardar = () => {
                             <Select
                                 v-model="form.sector_id"
                                 label="Sector"
-                                :hint="gentePorSector ?? undefined"
                                 :error="form.errors.sector_id"
-                                @change="alCambiarSector"
                             >
                                 <option :value="null">— Sin asignar —</option>
                                 <option v-for="sector in sectores" :key="sector.id" :value="sector.id">
@@ -621,7 +593,7 @@ const guardar = () => {
                                 :error="form.errors.responsable_id"
                             >
                                 <option :value="null">— Sin asignar —</option>
-                                <option v-for="usuario in usuariosFiltrados" :key="usuario.id" :value="usuario.id">
+                                <option v-for="usuario in usuarios" :key="usuario.id" :value="usuario.id">
                                     {{ nombreCompleto(usuario) }}
                                 </option>
                             </Select>

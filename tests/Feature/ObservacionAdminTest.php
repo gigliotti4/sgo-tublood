@@ -71,8 +71,10 @@ class ObservacionAdminTest extends TestCase
         $user = $this->userWith('observaciones.view', 'observaciones.edit');
         $user->update(['sector_id' => $sector->id]);
 
-        // De este eager-load salen dos cosas del formulario: el aviso de a los
-        // cuántos días hábiles vence, y el filtro de responsables por sector.
+        // De este eager-load sale el aviso de a los cuántos días hábiles vence:
+        // el plazo es el del sector del responsable, y como se puede asignar a
+        // cualquiera (la lista no se filtra por sector) es la única señal de qué
+        // plazo va a aplicar.
         foreach (['/observaciones', '/observaciones/crear'] as $url) {
             $this->actingAs($user)->get($url)
                 ->assertStatus(200)
