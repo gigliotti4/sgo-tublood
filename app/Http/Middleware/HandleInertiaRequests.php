@@ -11,6 +11,21 @@ use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
 {
+    /**
+     * IDs de observación que este usuario ya vio en el modal de avisos — los
+     * escribe NotificacionController::marcarExternasVistas() al cerrarlo.
+     *
+     * Es un **conjunto de IDs y no un booleano** a propósito: con un booleano,
+     * cerrar el modal una vez apagaba los avisos por el resto de la sesión, así
+     * que un caso asignado mientras la persona trabajaba no aparecía hasta el
+     * próximo login. Guardando qué se vio, lo ya visto no vuelve a molestar pero
+     * lo que entra después sí aparece solo (lo levanta el `usePoll` del layout).
+     *
+     * Vive en la sesión y no en la base para que al re-loguear todo lo abierto
+     * se muestre una vez más: `session()->invalidate()` del logout la limpia.
+     */
+    public const AVISOS_VISTOS = 'avisos_vistos';
+
     protected $rootView = 'app';
 
     public function share(Request $request): array
@@ -63,6 +78,12 @@ class HandleInertiaRequests extends Middleware
                 'sinClasificar' => $sinClasificar,
                 // Subconjunto de los de arriba que dispara el modal una sola vez.
                 'externas' => $this->externasNuevas($user, $sinClasificar),
+                // Los otros dos bloques del mismo modal: lo que este usuario
+                // tiene en gestión y lo que sigue sin gestionar. Son
+                // independientes de `externas` — una persona puede ver los
+                // tres, algunos, o ninguno.
+                'asignadas' => $this->asignadasAbiertas($user),
+                'seguimiento' => $this->enSeguimiento($user),
             ],
         ]);
     }
@@ -127,5 +148,54 @@ class HandleInertiaRequests extends Middleware
             ->pluck('data.observacion_id');
 
         return $sinClasificar->whereIn('id', $idsAvisados)->values();
+    }
+
+    /**
+     * Los casos que este usuario tiene en gestión, para recordárselos al entrar.
+     *
+     * A diferencia de `externasNuevas()`, acá no hay notificación de por medio:
+     * es una consulta viva contra `observations`, así que el recordatorio se
+     * apaga solo en cuanto el caso llega a un estado terminal (`cerrada` o
+     * `cancelada`, o sea cualquiera fuera de ESTADOS_ABIERTOS) — sin depender de
+     * que nadie marque nada.
+     *
+     * Los que ya vio se descuentan uno por uno (ver AVISOS_VISTOS) en vez de
+     * apagar el bloque entero: así un caso que le asignan **mientras trabaja**
+     * aparece solo en la siguiente pasada del polling, sin re-loguearse.
+     */
+    private function asignadasAbiertas(?User $user): iterable
+    {
+        if ($user === null) {
+            return [];
+        }
+
+        return Observacion::aCargoDe($user)
+            ->whereNotIn('id', session(self::AVISOS_VISTOS, []))
+            ->latest()
+            ->limit(20)
+            ->get(['id', 'numero', 'titulo', 'estado', 'origen', 'contacto_nombre', 'created_at']);
+    }
+
+    /**
+     * Los casos abiertos que este usuario sigue sin gestionar: lo sumaron como
+     * "a notificar" para que opine, así que puede comentar en la bitácora pero
+     * no reasignar ni reclasificar (ver ObservacionPolicy::comentar()).
+     *
+     * Hasta ahora solo se enteraban por el mail de
+     * ObservacionSeguimientoNotification, que sale **una sola vez** al sumarlos;
+     * este bloque se los recuerda mientras el caso siga abierto. Igual que
+     * `asignadasAbiertas()`, descuenta lo ya visto en vez de apagarse entero.
+     */
+    private function enSeguimiento(?User $user): iterable
+    {
+        if ($user === null) {
+            return [];
+        }
+
+        return Observacion::seguidasPor($user)
+            ->whereNotIn('id', session(self::AVISOS_VISTOS, []))
+            ->latest()
+            ->limit(20)
+            ->get(['id', 'numero', 'titulo', 'estado', 'origen', 'contacto_nombre', 'created_at']);
     }
 }

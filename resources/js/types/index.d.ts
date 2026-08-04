@@ -46,6 +46,8 @@ export interface ObservacionSinClasificar {
     origen: 'interna' | 'externa'
     contacto_nombre: string | null
     created_at: string
+    /** Solo viaja en `asignadas`: los sin clasificar están todos en el mismo estado. */
+    estado?: string
 }
 
 export interface ClienteVencimiento {
@@ -71,6 +73,10 @@ export interface PageProps extends Record<string, unknown> {
         sinClasificar: ObservacionSinClasificar[]
         /** Subconjunto de `sinClasificar` que este usuario todavía no vio: dispara el modal una sola vez. */
         externas: ObservacionSinClasificar[]
+        /** Casos abiertos donde este usuario es el responsable. Bloque del modal, una vez por sesión. */
+        asignadas: ObservacionSinClasificar[]
+        /** Casos abiertos donde lo sumaron como "a notificar". Excluye los que ya están en `asignadas`. */
+        seguimiento: ObservacionSinClasificar[]
     }
 }
 

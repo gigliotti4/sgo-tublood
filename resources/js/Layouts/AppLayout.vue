@@ -6,7 +6,7 @@ import { usePermissions } from '@/composables/usePermissions'
 import { useDarkMode } from '@/composables/useDarkMode'
 import Modal, { modalesAbiertos } from '@/Components/Modal.vue'
 import FabSpeedDial, { type FabAction } from '@/Components/FabSpeedDial.vue'
-import type { PageProps } from '@/types'
+import type { ObservacionSinClasificar, PageProps } from '@/types'
 
 const { user, hasPermission } = usePermissions()
 const { isDark, toggleTheme } = useDarkMode()
@@ -48,11 +48,24 @@ const marcarLeidas = () => router.post(route('notificaciones.leidas'), {}, { pre
 
 const origenLabels: Record<string, string> = { interna: 'Interna', externa: 'Externa' }
 
+const estadoLabels: Record<string, string> = {
+    pendiente_clasificacion: 'Pendiente de clasificación',
+    clasificada: 'Clasificada',
+    en_proceso: 'En proceso',
+    derivada: 'Derivada',
+}
+
 /**
- * Aviso (una sola vez) de reclamos nuevos del portal para el equipo de
- * Garantía de Calidad. Es el subconjunto de `sinClasificar` que este usuario
- * todavía no vio — cerrar el modal solo calla el popup, el reclamo se sigue
- * viendo en la campana hasta que alguien lo clasifique de verdad.
+ * Modal de avisos al entrar al panel. Tiene dos bloques independientes, y se
+ * abre si cualquiera de los dos tiene algo:
+ *
+ * - `externasNuevas`: reclamos nuevos del portal para el equipo de Garantía de
+ *   Calidad. Es el subconjunto de `sinClasificar` que este usuario todavía no
+ *   vio; cerrar el modal solo calla el popup, el reclamo se sigue viendo en la
+ *   campana hasta que alguien lo clasifique de verdad.
+ * - `asignadas`: los casos abiertos donde esta persona es la responsable.
+ *   Reaparece en cada login mientras el caso siga abierto (el backend lo apaga
+ *   con una marca de sesión), y se calla solo al llegar a `cerrada`/`cancelada`.
  *
  * Se refresca con polling (no solo al entrar), así que puede aparecer en
  * cualquier pantalla mientras la persona ya está trabajando — por eso se
@@ -61,37 +74,83 @@ const origenLabels: Record<string, string> = { interna: 'Interna', externa: 'Ext
  * cerrado: una vez abierto no se vuelve a tocar hasta que el usuario lo cierra.
  */
 const externasNuevas = computed(() => page.props.notificaciones?.externas ?? [])
-const mostrarExternas = ref(false)
-const cerrandoExternas = ref(false)
+const asignadas = computed(() => page.props.notificaciones?.asignadas ?? [])
+const seguimiento = computed(() => page.props.notificaciones?.seguimiento ?? [])
+const mostrarAvisos = ref(false)
+const cerrandoAvisos = ref(false)
 
 const esPantallaDeFormulario = computed(() => /Crear|Create|Edit|Nuevo/.test(page.component))
 
+/**
+ * Los bloques con contenido, en el orden en que se muestran. Se arma como lista
+ * y no como tres bloques de markup repetidos porque los tres se dibujan igual:
+ * lo único que cambia es el encabezado y qué se pone de subtítulo en cada ítem.
+ */
+const bloquesAvisos = computed(() => [
+    {
+        key: 'externas',
+        titulo: 'Reclamos nuevos del portal',
+        bajada: 'Cargados por clientes desde el portal. Tocá uno para abrirlo.',
+        items: externasNuevas.value,
+        subtitulo: (o: ObservacionSinClasificar) => o.contacto_nombre
+            ? `Cargado por ${o.contacto_nombre}`
+            : (origenLabels[o.origen] ?? o.origen),
+    },
+    {
+        key: 'asignadas',
+        titulo: 'A tu cargo',
+        bajada: 'Siguen abiertas y sos el responsable. Tocá una para abrirla.',
+        items: asignadas.value,
+        subtitulo: (o: ObservacionSinClasificar) => estadoLabels[o.estado ?? ''] ?? o.estado ?? '',
+    },
+    {
+        key: 'seguimiento',
+        titulo: 'En seguimiento',
+        bajada: 'Te sumaron para que sigas el caso. Podés comentar en la bitácora, pero no gestionarlo.',
+        items: seguimiento.value,
+        subtitulo: (o: ObservacionSinClasificar) => estadoLabels[o.estado ?? ''] ?? o.estado ?? '',
+    },
+].filter(bloque => bloque.items.length > 0))
+
+const tituloAvisos = computed(() => {
+    // Con más de un bloque, enumerar las combinaciones no aporta nada.
+    if (bloquesAvisos.value.length !== 1) return 'Tenés novedades'
+
+    const { key, items } = bloquesAvisos.value[0]
+    const n = items.length
+
+    if (key === 'externas') return n === 1 ? 'Entró un reclamo nuevo' : `Entraron ${n} reclamos nuevos`
+    if (key === 'asignadas') return n === 1 ? 'Tenés una observación en gestión' : `Tenés ${n} observaciones en gestión`
+
+    return n === 1 ? 'Tenés una observación en seguimiento' : `Tenés ${n} observaciones en seguimiento`
+})
+
 watch(
-    [externasNuevas, () => page.component, modalesAbiertos],
+    [bloquesAvisos, () => page.component, modalesAbiertos],
     () => {
-        if (mostrarExternas.value || cerrandoExternas.value) return
-        if (externasNuevas.value.length === 0) return
+        if (mostrarAvisos.value || cerrandoAvisos.value) return
+        if (bloquesAvisos.value.length === 0) return
         if (esPantallaDeFormulario.value) return
         if (modalesAbiertos.value > 0) return
 
-        mostrarExternas.value = true
+        mostrarAvisos.value = true
     },
     { immediate: true },
 )
 
 usePoll(60000, { only: ['notificaciones'] })
 
-const cerrarExternas = (observacionId?: number) => {
-    mostrarExternas.value = false
+const cerrarAvisos = (observacionId?: number) => {
+    mostrarAvisos.value = false
     // Bloquea la reapertura mientras page.props todavía tiene la lista vieja
     // (la respuesta del post es lo que la actualiza): sin esto, el watch de
     // arriba reabriría el modal en el instante entre el clic y esa respuesta.
-    cerrandoExternas.value = true
+    cerrandoAvisos.value = true
 
     router.post(
         route('notificaciones.externas.vistas'),
         observacionId ? { observacion_id: observacionId } : {},
-        { preserveScroll: true, onFinish: () => { cerrandoExternas.value = false } },
+        { preserveScroll: true, onFinish: () => { cerrandoAvisos.value = false } },
     )
 }
 
@@ -548,52 +607,54 @@ const icons: Record<string, string> = {
         <!-- FAB: acceso rápido a los formularios de alta, visible en todas las secciones -->
         <FabSpeedDial v-if="hasPermission('observaciones.edit')" v-model:open="fabOpen" :actions="fabActions" />
 
-        <!-- Reclamos nuevos del portal, para el equipo de Garantía de Calidad -->
-        <Modal
-            :show="mostrarExternas"
-            size="lg"
-            :title="externasNuevas.length === 1 ? 'Entró un reclamo nuevo' : `Entraron ${externasNuevas.length} reclamos nuevos`"
-            @close="cerrarExternas()"
-        >
-            <p class="-mt-2 mb-4 text-theme-sm text-gray-500 dark:text-gray-400">
-                Cargados por clientes desde el portal. Tocá uno para abrirlo.
-            </p>
+        <!-- Avisos al entrar: reclamos del portal, casos propios y casos que se siguen -->
+        <Modal :show="mostrarAvisos" size="lg" :title="tituloAvisos" @close="cerrarAvisos()">
+            <template v-for="(bloque, i) in bloquesAvisos" :key="bloque.key">
+                <p
+                    class="mb-1 text-theme-xs font-medium uppercase tracking-wide text-gray-400"
+                    :class="i > 0 ? 'mt-6 border-t border-gray-100 pt-5 dark:border-gray-800' : '-mt-2'"
+                >
+                    {{ bloque.titulo }}
+                </p>
+                <p class="mb-3 text-theme-sm text-gray-500 dark:text-gray-400">
+                    {{ bloque.bajada }}
+                </p>
 
-            <ul class="divide-y divide-gray-100 dark:divide-gray-800">
-                <li v-for="e in externasNuevas" :key="e.id">
-                    <button
-                        type="button"
-                        class="flex w-full cursor-pointer items-start justify-between gap-4 px-1 py-3.5 text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
-                        @click="cerrarExternas(e.id)"
-                    >
-                        <div class="min-w-0">
-                            <p class="truncate text-sm font-medium text-gray-800 dark:text-white/90">
-                                {{ e.numero }} — {{ e.titulo }}
-                            </p>
-                            <p class="mt-0.5 text-theme-xs text-gray-500 dark:text-gray-400">
-                                <template v-if="e.contacto_nombre">Cargado por {{ e.contacto_nombre }}</template>
-                                <template v-else>{{ origenLabels[e.origen] ?? e.origen }}</template>
-                            </p>
-                        </div>
-                        <span class="shrink-0 pt-0.5 text-theme-xs text-gray-400">
-                            {{ fechaCorta(e.created_at) }}
-                        </span>
-                    </button>
-                </li>
-            </ul>
+                <ul class="divide-y divide-gray-100 dark:divide-gray-800">
+                    <li v-for="o in bloque.items" :key="o.id">
+                        <button
+                            type="button"
+                            class="flex w-full cursor-pointer items-start justify-between gap-4 px-1 py-3.5 text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
+                            @click="cerrarAvisos(o.id)"
+                        >
+                            <div class="min-w-0">
+                                <p class="truncate text-sm font-medium text-gray-800 dark:text-white/90">
+                                    {{ o.numero }} — {{ o.titulo }}
+                                </p>
+                                <p class="mt-0.5 text-theme-xs text-gray-500 dark:text-gray-400">
+                                    {{ bloque.subtitulo(o) }}
+                                </p>
+                            </div>
+                            <span class="shrink-0 pt-0.5 text-theme-xs text-gray-400">
+                                {{ fechaCorta(o.created_at) }}
+                            </span>
+                        </button>
+                    </li>
+                </ul>
+            </template>
 
             <div class="mt-5 flex justify-end gap-3 border-t border-gray-100 pt-4 dark:border-gray-800">
                 <button
                     type="button"
                     class="cursor-pointer rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-white/[0.05]"
-                    @click="cerrarExternas()"
+                    @click="cerrarAvisos()"
                 >
                     Después los veo
                 </button>
                 <Link
                     :href="route('observaciones.index')"
                     class="cursor-pointer rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white shadow-theme-xs transition hover:bg-brand-600"
-                    @click="cerrarExternas()"
+                    @click="cerrarAvisos()"
                 >
                     Ver todos
                 </Link>

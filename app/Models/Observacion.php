@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\GuardaAdjuntos;
 use App\Observers\ObservacionObserver;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -78,6 +79,35 @@ class Observacion extends Model
     public function estaFinalizada(): bool
     {
         return in_array($this->estado, config('incidencias.estados_finales', []), true);
+    }
+
+    /**
+     * Casos abiertos que esta persona gestiona.
+     *
+     * Vive acá y no en el middleware porque lo consultan dos lugares: el modal
+     * de avisos (para mostrarlos) y NotificacionController (para saber cuáles
+     * marcar como vistos al cerrarlo).
+     */
+    public function scopeACargoDe(Builder $query, User $user): Builder
+    {
+        return $query->whereIn('estado', self::ESTADOS_ABIERTOS)
+            ->where('responsable_id', $user->id);
+    }
+
+    /**
+     * Casos abiertos que esta persona sigue sin gestionar: está en la lista de
+     * notificados y no es la responsable.
+     *
+     * El `orWhereNull` no es defensivo, hace falta: en SQL `responsable_id != X`
+     * da NULL (falsy) cuando la columna es NULL, así que sin esa rama se caerían
+     * del listado justo los casos sin responsable asignado — que son los que más
+     * necesitan que alguien los mire.
+     */
+    public function scopeSeguidasPor(Builder $query, User $user): Builder
+    {
+        return $query->whereIn('estado', self::ESTADOS_ABIERTOS)
+            ->whereHas('notificados', fn ($q) => $q->whereKey($user->id))
+            ->where(fn ($q) => $q->whereNull('responsable_id')->orWhere('responsable_id', '!=', $user->id));
     }
 
     public function attachments(): HasMany
