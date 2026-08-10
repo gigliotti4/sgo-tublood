@@ -96,9 +96,9 @@ export interface PageProps extends Record<string, unknown> {
         alertas: AlertaNotificacion[]
         /** Todos los reclamos sin clasificar, para la sección "Sin clasificar" de la campana. */
         sinClasificar: ObservacionSinClasificar[]
-        /** Subconjunto de `sinClasificar` que este usuario todavía no vio: dispara el modal una sola vez. */
+        /** Subconjunto de `sinClasificar` de los que a este usuario le avisaron. Insiste en el modal (descarte del lado del cliente, ver AppLayout.vue) hasta que se clasifique el caso. */
         externas: ObservacionSinClasificar[]
-        /** Casos abiertos donde este usuario es el responsable. Bloque del modal, una vez por sesión. */
+        /** Casos abiertos donde este usuario es el responsable. Bloque del modal, insiste mientras el caso siga abierto. */
         asignadas: ObservacionSinClasificar[]
         /** Casos abiertos donde lo sumaron como "a notificar". Excluye los que ya están en `asignadas`. */
         seguimiento: ObservacionSinClasificar[]

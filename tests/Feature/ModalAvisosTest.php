@@ -14,10 +14,13 @@ use Tests\TestCase;
  * abiertos que cada persona tiene **a su cargo** (`asignadas`) y los que sigue
  * sin gestionar por estar en la lista de notificados (`seguimiento`).
  *
- * Se diferencian del bloque de reclamos externos en dos cosas: no hay ninguna
- * notificación de por medio (por eso se apagan solos cuando el caso termina) y
- * la marca de "ya lo vi" vive en la **sesión**, para que el recordatorio vuelva
- * en el próximo login mientras el caso siga abierto.
+ * A diferencia del bloque de reclamos externos, acá no hay ninguna notificación
+ * de por medio: se apagan solos cuando el caso llega a un estado terminal. El
+ * servidor no tiene ningún "ya lo vi" para estos bloques — son consultas vivas
+ * puras — así que insisten en cada entrada al panel (login, F5, pestaña nueva)
+ * mientras el caso siga abierto; lo que evita que el modal se reabra al
+ * navegar entre pantallas es estado del cliente (`avisosVistos` en
+ * `AppLayout.vue`), fuera del alcance de estos tests.
  *
  * El bloque de reclamos externos tiene su propia suite en AvisoExternasNuevasTest.
  */
@@ -101,10 +104,13 @@ class ModalAvisosTest extends TestCase
     }
 
     /**
-     * Cerrar el modal lo calla por el resto de la sesión, pero no toca la
-     * observación: sigue abierta y va a volver a avisar en el próximo login.
+     * No hay ningún "ya lo vi" del lado del servidor para este bloque: cada
+     * entrada al panel (login, F5, pestaña nueva) vuelve a traer el mismo caso
+     * mientras siga abierto. Lo que evita que se repita al navegar entre
+     * pantallas es estado del cliente (`avisosVistos` en AppLayout.vue), fuera
+     * del alcance de este test — acá solo importa que el servidor no se calle.
      */
-    public function test_cerrar_el_modal_lo_calla_en_la_misma_sesion(): void
+    public function test_una_asignacion_abierta_insiste_en_cada_entrada_al_panel(): void
     {
         $user = User::factory()->create();
         $observacion = $this->observacion(['responsable_id' => $user->id]);
@@ -113,13 +119,11 @@ class ModalAvisosTest extends TestCase
             ->get('/dashboard')
             ->assertInertia(fn ($page) => $page->has('notificaciones.asignadas', 1));
 
-        $this->actingAs($user)->post(route('notificaciones.externas.vistas'));
-
         $this->actingAs($user)
             ->get('/dashboard')
-            ->assertInertia(fn ($page) => $page->has('notificaciones.asignadas', 0));
+            ->assertInertia(fn ($page) => $page->has('notificaciones.asignadas', 1));
 
-        // La observación no se tocó: el aviso se calló, el caso sigue abierto.
+        // La observación no se tocó: sigue abierta.
         $this->assertSame('en_proceso', $observacion->fresh()->estado);
     }
 
@@ -185,7 +189,7 @@ class ModalAvisosTest extends TestCase
             ->assertInertia(fn ($page) => $page->has('notificaciones.seguimiento', 0));
     }
 
-    public function test_cerrar_el_modal_tambien_calla_el_seguimiento(): void
+    public function test_un_seguimiento_abierto_insiste_en_cada_entrada_al_panel(): void
     {
         $user = User::factory()->create();
         $this->observacion()->notificados()->attach($user->id);
@@ -194,58 +198,46 @@ class ModalAvisosTest extends TestCase
             ->get('/dashboard')
             ->assertInertia(fn ($page) => $page->has('notificaciones.seguimiento', 1));
 
-        $this->actingAs($user)->post(route('notificaciones.externas.vistas'));
-
         $this->actingAs($user)
             ->get('/dashboard')
-            ->assertInertia(fn ($page) => $page->has('notificaciones.seguimiento', 0));
+            ->assertInertia(fn ($page) => $page->has('notificaciones.seguimiento', 1));
     }
 
     /**
-     * El caso que motivó todo esto: alguien con el panel abierto que ya cerró el
-     * modal y **después** recibe una asignación tiene que enterarse igual, sin
-     * re-loguearse. Es lo que no pasaba cuando la marca de sesión era un
-     * booleano ("ya abrí el modal") en vez del conjunto de IDs vistos.
+     * El caso que motivó todo esto: alguien con el panel abierto que recibe una
+     * asignación nueva tiene que enterarse de las dos, sin que la vieja se
+     * pierda — no hay ningún descarte del lado del servidor.
      */
-    public function test_una_asignacion_posterior_al_cierre_aparece_en_la_misma_sesion(): void
+    public function test_una_asignacion_posterior_se_suma_a_la_ya_asignada(): void
     {
         $user = User::factory()->create();
         $vieja = $this->observacion(['responsable_id' => $user->id]);
 
         $this->actingAs($user)->get('/dashboard');
-        $this->actingAs($user)->post(route('notificaciones.externas.vistas'));
 
         // Le asignan otra mientras sigue laburando, sin cerrar sesión.
         $nueva = $this->observacion(['responsable_id' => $user->id]);
 
         $this->actingAs($user)
             ->get('/dashboard')
-            ->assertInertia(fn ($page) => $page
-                ->has('notificaciones.asignadas', 1)
-                ->where('notificaciones.asignadas.0.id', $nueva->id)
-            );
+            ->assertInertia(fn ($page) => $page->has('notificaciones.asignadas', 2));
 
-        // Y la que ya había visto sigue callada: esa es la mitad que no hay que romper.
         $this->assertNotSame($vieja->id, $nueva->id);
     }
 
-    public function test_un_seguimiento_posterior_al_cierre_tambien_aparece(): void
+    public function test_un_seguimiento_posterior_se_suma_al_ya_existente(): void
     {
         $user = User::factory()->create();
         $this->observacion()->notificados()->attach($user->id);
 
         $this->actingAs($user)->get('/dashboard');
-        $this->actingAs($user)->post(route('notificaciones.externas.vistas'));
 
         $nueva = $this->observacion();
         $nueva->notificados()->attach($user->id);
 
         $this->actingAs($user)
             ->get('/dashboard')
-            ->assertInertia(fn ($page) => $page
-                ->has('notificaciones.seguimiento', 1)
-                ->where('notificaciones.seguimiento.0.id', $nueva->id)
-            );
+            ->assertInertia(fn ($page) => $page->has('notificaciones.seguimiento', 2));
     }
 
     /**

@@ -11,21 +11,6 @@ use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
 {
-    /**
-     * IDs de observación que este usuario ya vio en el modal de avisos — los
-     * escribe NotificacionController::marcarExternasVistas() al cerrarlo.
-     *
-     * Es un **conjunto de IDs y no un booleano** a propósito: con un booleano,
-     * cerrar el modal una vez apagaba los avisos por el resto de la sesión, así
-     * que un caso asignado mientras la persona trabajaba no aparecía hasta el
-     * próximo login. Guardando qué se vio, lo ya visto no vuelve a molestar pero
-     * lo que entra después sí aparece solo (lo levanta el `usePoll` del layout).
-     *
-     * Vive en la sesión y no en la base para que al re-loguear todo lo abierto
-     * se muestre una vez más: `session()->invalidate()` del logout la limpia.
-     */
-    public const AVISOS_VISTOS = 'avisos_vistos';
-
     protected $rootView = 'app';
 
     public function share(Request $request): array
@@ -76,8 +61,10 @@ class HandleInertiaRequests extends Middleware
                 // Reclamos pendientes de clasificación, para la sección propia de
                 // la campana. Recortados al tipo que atiende cada uno.
                 'sinClasificar' => $sinClasificar,
-                // Subconjunto de los de arriba que dispara el modal una sola vez.
-                'externas' => $this->externasNuevas($user, $sinClasificar),
+                // Subconjunto de los de arriba de los que a este usuario le
+                // avisaron. Insiste en el modal (el descarte es del lado del
+                // cliente, ver AppLayout.vue) hasta que se clasifique el caso.
+                'externas' => $this->externasPendientes($user, $sinClasificar),
                 // Los otros dos bloques del mismo modal: lo que este usuario
                 // tiene en gestión y lo que sigue sin gestionar. Son
                 // independientes de `externas` — una persona puede ver los
@@ -126,15 +113,20 @@ class HandleInertiaRequests extends Middleware
     }
 
     /**
-     * De los reclamos sin clasificar, los que este usuario todavía no vio: el
-     * subconjunto que abre el modal (una sola vez, hasta que lo cierre).
+     * De los reclamos sin clasificar, los que a este usuario le avisaron por
+     * portal (el resto de los destinatarios de `sinClasificar` puede incluir
+     * gente que atiende el tipo pero no recibió el aviso original).
      *
      * Se calcula como subconjunto de $sinClasificar y no con una consulta
-     * aparte: así el popup nunca puede ofrecer algo que ya se clasificó, que ya
+     * aparte: así el modal nunca puede ofrecer algo que ya se clasificó, que ya
      * no existe, o que le toca a otra persona del equipo — el recorte por tipo
      * ya viene hecho de arriba, sin repetir el criterio acá.
+     *
+     * No filtra por `read_at`: el modal insiste hasta que el caso se clasifica
+     * de verdad, así que da igual si la notificación quedó marcada leída (el
+     * descarte de "ya lo vi" pasó a ser estado del cliente, ver AppLayout.vue).
      */
-    private function externasNuevas(?User $user, iterable $sinClasificar): iterable
+    private function externasPendientes(?User $user, iterable $sinClasificar): iterable
     {
         $sinClasificar = collect($sinClasificar);
 
@@ -142,7 +134,7 @@ class HandleInertiaRequests extends Middleware
             return [];
         }
 
-        $idsAvisados = $user->unreadNotifications()
+        $idsAvisados = $user->notifications()
             ->where('type', ObservacionExternaRecibidaNotification::class)
             ->get(['id', 'data'])
             ->pluck('data.observacion_id');
@@ -153,15 +145,12 @@ class HandleInertiaRequests extends Middleware
     /**
      * Los casos que este usuario tiene en gestión, para recordárselos al entrar.
      *
-     * A diferencia de `externasNuevas()`, acá no hay notificación de por medio:
-     * es una consulta viva contra `observations`, así que el recordatorio se
-     * apaga solo en cuanto el caso llega a un estado terminal (`cerrada` o
-     * `cancelada`, o sea cualquiera fuera de ESTADOS_ABIERTOS) — sin depender de
-     * que nadie marque nada.
-     *
-     * Los que ya vio se descuentan uno por uno (ver AVISOS_VISTOS) en vez de
-     * apagar el bloque entero: así un caso que le asignan **mientras trabaja**
-     * aparece solo en la siguiente pasada del polling, sin re-loguearse.
+     * A diferencia de `externasPendientes()`, acá no hay notificación de por
+     * medio: es una consulta viva contra `observations`, así que el
+     * recordatorio se apaga solo en cuanto el caso llega a un estado terminal
+     * (`cerrada` o `cancelada`, o sea cualquiera fuera de ESTADOS_ABIERTOS) —
+     * sin depender de que nadie marque nada. El descarte de "ya lo vi en esta
+     * carga de la app" es estado del cliente (ver AppLayout.vue), no de acá.
      */
     private function asignadasAbiertas(?User $user): iterable
     {
@@ -170,7 +159,6 @@ class HandleInertiaRequests extends Middleware
         }
 
         return Observacion::aCargoDe($user)
-            ->whereNotIn('id', session(self::AVISOS_VISTOS, []))
             ->latest()
             ->limit(20)
             ->get(['id', 'numero', 'titulo', 'estado', 'origen', 'contacto_nombre', 'created_at']);
@@ -184,7 +172,8 @@ class HandleInertiaRequests extends Middleware
      * Hasta ahora solo se enteraban por el mail de
      * ObservacionSeguimientoNotification, que sale **una sola vez** al sumarlos;
      * este bloque se los recuerda mientras el caso siga abierto. Igual que
-     * `asignadasAbiertas()`, descuenta lo ya visto en vez de apagarse entero.
+     * `asignadasAbiertas()`, es una consulta viva sin descarte del lado del
+     * servidor.
      */
     private function enSeguimiento(?User $user): iterable
     {
@@ -193,7 +182,6 @@ class HandleInertiaRequests extends Middleware
         }
 
         return Observacion::seguidasPor($user)
-            ->whereNotIn('id', session(self::AVISOS_VISTOS, []))
             ->latest()
             ->limit(20)
             ->get(['id', 'numero', 'titulo', 'estado', 'origen', 'contacto_nombre', 'created_at']);

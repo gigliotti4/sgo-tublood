@@ -1,5 +1,18 @@
+<script lang="ts">
+import { ref } from 'vue'
+
+/**
+ * IDs de observación ya descartados del modal de avisos en esta carga de la
+ * app. AppLayout se remonta en cada navegación de Inertia (no es un layout
+ * persistente), así que esto tiene que vivir a nivel de módulo — igual que
+ * `modalesAbiertos` en Modal.vue — para sobrevivir a la navegación y sin
+ * embargo reiniciarse solo con un login, F5 o pestaña nueva.
+ */
+export const avisosVistos = ref(new Set<number>())
+</script>
+
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { Link, router, usePage, usePoll } from '@inertiajs/vue3'
 import { route } from 'ziggy-js'
 import { usePermissions } from '@/composables/usePermissions'
@@ -56,16 +69,23 @@ const estadoLabels: Record<string, string> = {
 }
 
 /**
- * Modal de avisos al entrar al panel. Tiene dos bloques independientes, y se
- * abre si cualquiera de los dos tiene algo:
+ * Modal de avisos al entrar al panel. Tiene tres bloques independientes, y se
+ * abre si cualquiera de los tres tiene algo:
  *
  * - `externasNuevas`: reclamos nuevos del portal para el equipo de Garantía de
- *   Calidad. Es el subconjunto de `sinClasificar` que este usuario todavía no
- *   vio; cerrar el modal solo calla el popup, el reclamo se sigue viendo en la
- *   campana hasta que alguien lo clasifique de verdad.
- * - `asignadas`: los casos abiertos donde esta persona es la responsable.
- *   Reaparece en cada login mientras el caso siga abierto (el backend lo apaga
- *   con una marca de sesión), y se calla solo al llegar a `cerrada`/`cancelada`.
+ *   Calidad. Es el subconjunto de `sinClasificar` de los que a este usuario le
+ *   avisaron; insiste hasta que alguien clasifique el caso de verdad — cerrar
+ *   el modal solo calla el popup, el reclamo se sigue viendo en la campana.
+ * - `asignadas`/`seguimiento`: los casos abiertos donde esta persona es
+ *   responsable o está sumada como "a notificar". Insisten mientras el caso
+ *   siga abierto y se callan solos al llegar a `cerrada`/`cancelada`.
+ *
+ * El backend siempre devuelve el pendiente completo (son consultas vivas, sin
+ * ningún "ya lo vi" de su lado); lo que hace que el modal no se reabra al
+ * navegar entre pantallas es `avisosVistos`, el `Set` a nivel de módulo
+ * declarado arriba: cerrar el modal descarta ahí los IDs que se mostraron, y
+ * eso dura toda la carga de la app — se reinicia con login, F5 o pestaña
+ * nueva, que es cuando tiene que volver a insistir.
  *
  * Se refresca con polling (no solo al entrar), así que puede aparecer en
  * cualquier pantalla mientras la persona ya está trabajando — por eso se
@@ -73,11 +93,10 @@ const estadoLabels: Record<string, string> = {
  * abierto (ver `modalesAbiertos` en Modal.vue), y solo se evalúa mientras está
  * cerrado: una vez abierto no se vuelve a tocar hasta que el usuario lo cierra.
  */
-const externasNuevas = computed(() => page.props.notificaciones?.externas ?? [])
-const asignadas = computed(() => page.props.notificaciones?.asignadas ?? [])
-const seguimiento = computed(() => page.props.notificaciones?.seguimiento ?? [])
+const externasNuevas = computed(() => (page.props.notificaciones?.externas ?? []).filter(o => !avisosVistos.value.has(o.id)))
+const asignadas = computed(() => (page.props.notificaciones?.asignadas ?? []).filter(o => !avisosVistos.value.has(o.id)))
+const seguimiento = computed(() => (page.props.notificaciones?.seguimiento ?? []).filter(o => !avisosVistos.value.has(o.id)))
 const mostrarAvisos = ref(false)
-const cerrandoAvisos = ref(false)
 
 const esPantallaDeFormulario = computed(() => /Crear|Create|Edit|Nuevo/.test(page.component))
 
@@ -128,7 +147,7 @@ const tituloAvisos = computed(() => {
 watch(
     [bloquesAvisos, () => page.component, modalesAbiertos],
     () => {
-        if (mostrarAvisos.value || cerrandoAvisos.value) return
+        if (mostrarAvisos.value) return
         if (bloquesAvisos.value.length === 0) return
         if (esPantallaDeFormulario.value) return
         if (modalesAbiertos.value > 0) return
@@ -142,16 +161,19 @@ usePoll(60000, { only: ['notificaciones'] })
 
 const cerrarAvisos = (observacionId?: number) => {
     mostrarAvisos.value = false
-    // Bloquea la reapertura mientras page.props todavía tiene la lista vieja
-    // (la respuesta del post es lo que la actualiza): sin esto, el watch de
-    // arriba reabriría el modal en el instante entre el clic y esa respuesta.
-    cerrandoAvisos.value = true
 
-    router.post(
-        route('notificaciones.externas.vistas'),
-        observacionId ? { observacion_id: observacionId } : {},
-        { preserveScroll: true, onFinish: () => { cerrandoAvisos.value = false } },
-    )
+    // Descarta acá y no antes de abrir: así, si el modal nunca se abrió porque
+    // otra pantalla lo bloqueaba (formulario u otro modal), lo pendiente sigue
+    // ahí para la próxima vez que se evalúe.
+    for (const bloque of bloquesAvisos.value) {
+        for (const item of bloque.items) {
+            avisosVistos.value.add(item.id)
+        }
+    }
+
+    if (observacionId) {
+        router.visit(route('observaciones.show', observacionId))
+    }
 }
 
 const fechaCorta = (fecha: string) =>

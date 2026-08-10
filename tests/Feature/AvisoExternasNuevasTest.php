@@ -17,8 +17,9 @@ use Tests\TestCase;
  *
  * - "Sin clasificar" en la campana: consulta viva contra `observations`, se
  *   autolimpia sola cuando alguien clasifica el caso.
- * - El modal: un aviso de una sola vez (el subconjunto de arriba que este
- *   usuario todavía no vio), que cerrar solo calla — no clasifica nada.
+ * - El modal: el subconjunto de arriba de los que a este usuario le avisaron,
+ *   que **insiste hasta clasificar** — cerrarlo (del lado del cliente, no hay
+ *   endpoint) no marca nada en el servidor.
  */
 class AvisoExternasNuevasTest extends TestCase
 {
@@ -112,74 +113,27 @@ class AvisoExternasNuevasTest extends TestCase
         $this->assertSame(1, DB::table('jobs')->count());
     }
 
-    public function test_cerrar_el_modal_marca_los_avisos_como_vistos(): void
-    {
-        $user = $this->usuarioConRolCalidad();
-        $user->notify(new ObservacionExternaRecibidaNotification($this->observacionExterna()));
-
-        $this->actingAs($user)
-            ->post(route('notificaciones.externas.vistas'))
-            ->assertRedirect();
-
-        $this->assertCount(0, $user->fresh()->unreadNotifications);
-    }
-
-    public function test_cerrar_entrando_a_un_reclamo_lleva_al_detalle(): void
+    /**
+     * El corazón de este rediseño: antes, cerrar el modal marcaba el aviso
+     * leído en la base y lo apagaba para siempre. Ahora el "ya lo vi" es
+     * estado del cliente (dura una carga de la app, ver AppLayout.vue) — del
+     * lado del servidor el aviso insiste sin importar `read_at`, así que un
+     * reclamo sin clasificar sigue entrando al modal en cada login/F5 aunque
+     * su notificación ya esté leída.
+     */
+    public function test_una_notificacion_leida_igual_dispara_el_modal(): void
     {
         $user = $this->usuarioConRolCalidad();
         $observacion = $this->observacionExterna();
         $user->notify(new ObservacionExternaRecibidaNotification($observacion));
 
+        $user->unreadNotifications->markAsRead();
+
         $this->actingAs($user)
-            ->post(route('notificaciones.externas.vistas'), ['observacion_id' => $observacion->id])
-            ->assertRedirect(route('observaciones.show', $observacion));
-    }
-
-    /**
-     * El aviso ya no depende de una bandera de sesión: se recalcula en cada
-     * request (el frontend hace polling de esta prop), así que un reclamo que
-     * llega después de cerrado el modal tiene que volver a aparecer sin
-     * necesidad de un nuevo login.
-     */
-    public function test_un_reclamo_nuevo_reaparece_despues_de_cerrar_el_modal(): void
-    {
-        $user = $this->usuarioConRolCalidad();
-        $user->notify(new ObservacionExternaRecibidaNotification($this->observacionExterna()));
-
-        $this->actingAs($user)->post(route('notificaciones.externas.vistas'));
-
-        $this->get('/dashboard')
-            ->assertInertia(fn ($page) => $page->has('notificaciones.externas', 0));
-
-        $user->notify(new ObservacionExternaRecibidaNotification($this->observacionExterna('0002-26')));
-
-        $this->get('/dashboard')
+            ->get('/dashboard')
             ->assertInertia(fn ($page) => $page
                 ->has('notificaciones.externas', 1)
-                ->where('notificaciones.externas.0.numero', '0002-26')
-            );
-    }
-
-    /**
-     * El caso que motivó este rediseño: cerrar el modal (sin clasificar nada)
-     * no puede hacer desaparecer el reclamo de todos lados. La campana tiene
-     * que seguir mostrándolo, porque el trabajo real —clasificarlo— no se hizo.
-     */
-    public function test_cerrar_el_modal_no_saca_el_reclamo_de_la_campana(): void
-    {
-        $user = $this->usuarioConRolCalidad();
-        $observacion = $this->observacionExterna();
-        $user->notify(new ObservacionExternaRecibidaNotification($observacion));
-
-        $this->actingAs($user)
-            ->post(route('notificaciones.externas.vistas'))
-            ->assertRedirect();
-
-        $this->get('/dashboard')
-            ->assertInertia(fn ($page) => $page
-                ->has('notificaciones.externas', 0)
-                ->has('notificaciones.sinClasificar', 1)
-                ->where('notificaciones.sinClasificar.0.id', $observacion->id)
+                ->where('notificaciones.externas.0.id', $observacion->id)
             );
     }
 
