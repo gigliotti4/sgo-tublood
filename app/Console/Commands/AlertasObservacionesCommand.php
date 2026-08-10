@@ -30,7 +30,10 @@ class AlertasObservacionesCommand extends Command
             ->where('vence_at', '<=', now())
             ->where('alerta_nivel', '<', 2)
             ->whereNotNull('responsable_id')
-            ->whereNotIn('estado', config('incidencias.estados_finales', []))
+            // No basta con excluir `estados_finales` (solo 'cerrada'): una
+            // observación cancelada tampoco es trabajo pendiente, y sin este
+            // filtro seguía venciendo y escalando al gerente indefinidamente.
+            ->whereIn('estado', Observacion::ESTADOS_ABIERTOS)
             ->with(['responsable.sector', 'responsable.supervisor', 'responsable.gerente'])
             ->get();
 

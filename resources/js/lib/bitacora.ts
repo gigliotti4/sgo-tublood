@@ -13,6 +13,7 @@ import type { ObservationHistoryEntry } from '@/types'
 export interface CambioSimple { de: string; a: string }
 export interface CambioClasificacion { prioridad: CambioSimple; tipo_caso: CambioSimple }
 export interface CambioNotificados { sumados: string[]; sacados: string[] }
+export interface CambioBaja { tipo: 'cancelacion' | 'borrado' }
 
 export const esClasificacion = (
     entrada: ObservationHistoryEntry,
@@ -21,6 +22,11 @@ export const esClasificacion = (
 export const esNotificados = (
     entrada: ObservationHistoryEntry,
 ): entrada is ObservationHistoryEntry & { cambios: CambioNotificados } => entrada.accion === 'notificados'
+
+/** El motivo de la baja va en `entrada.nota`; `cambios.tipo` solo distingue cancelación de borrado. */
+export const esBaja = (
+    entrada: ObservationHistoryEntry,
+): entrada is ObservationHistoryEntry & { cambios: CambioBaja } => entrada.accion === 'baja'
 
 export const comoCambioSimple = (cambios: ObservationHistoryEntry['cambios']): CambioSimple | null =>
     cambios && 'de' in cambios && 'a' in cambios ? (cambios as unknown as CambioSimple) : null
@@ -34,6 +40,8 @@ export const accionLabels: Record<string, string> = {
     adjunto: 'Archivo adjunto',
     notificados: 'Usuarios a notificar',
     sistema: 'Sistema',
+    baja: 'Baja',
+    restauracion: 'Restauración',
 }
 
 export const accionVariant: Record<string, 'slate' | 'blue' | 'indigo' | 'purple' | 'emerald' | 'amber' | 'red'> = {
@@ -45,6 +53,8 @@ export const accionVariant: Record<string, 'slate' | 'blue' | 'indigo' | 'purple
     adjunto: 'slate',
     notificados: 'emerald',
     sistema: 'slate',
+    baja: 'red',
+    restauracion: 'emerald',
 }
 
 export const nombreAutor = (entrada: Pick<ObservationHistoryEntry, 'user'>) =>

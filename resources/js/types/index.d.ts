@@ -203,6 +203,10 @@ export interface Observacion {
     /** Usuarios a notificar: reciben el aviso y pueden comentar, pero no gestionar el caso. */
     notificados?: { id: number; name: string; apellido: string | null }[]
     created_at: string
+    /** Solo tiene valor si está borrada (soft delete). El motivo de la baja está en `baja.nota`. */
+    deleted_at?: string | null
+    /** La última entrada de bitácora de tipo "baja" (cancelación o borrado), con motivo y autor. */
+    baja?: ObservationHistoryEntry | null
 }
 
 export interface ObservationAttachment {
@@ -221,7 +225,7 @@ export interface ObservationAttachment {
  */
 export interface ObservationHistoryEntry {
     id: number
-    accion: 'comentario' | 'estado' | 'responsable' | 'sector' | 'clasificacion' | 'adjunto' | 'notificados' | 'sistema'
+    accion: 'comentario' | 'estado' | 'responsable' | 'sector' | 'clasificacion' | 'adjunto' | 'notificados' | 'sistema' | 'baja' | 'restauracion'
     nota: string | null
     /** Forma según `accion`: `{de, a}` para estado/responsable/sector, `{prioridad: {de,a}, tipo_caso: {de,a}}` para clasificacion. */
     cambios: Record<string, unknown> | null

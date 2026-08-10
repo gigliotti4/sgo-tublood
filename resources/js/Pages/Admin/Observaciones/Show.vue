@@ -89,6 +89,22 @@ const humanizar = (clave: string) =>
             </div>
         </div>
 
+        <!-- Borrada: solo se llega acá desde la pantalla de Bajas -->
+        <div
+            v-if="observacion.deleted_at"
+            class="mb-6 rounded-2xl border border-error-200 bg-error-50 p-4 dark:border-error-500/30 dark:bg-error-500/15"
+        >
+            <p class="text-sm font-medium text-error-700 dark:text-error-400">
+                Esta observación está borrada ({{ formatFecha(observacion.deleted_at) }}).
+            </p>
+            <p v-if="observacion.baja?.nota" class="mt-1 whitespace-pre-line text-theme-sm text-error-600 dark:text-error-400/80">
+                Motivo: {{ observacion.baja.nota }}
+            </p>
+            <p class="mt-1 text-theme-xs text-error-600 dark:text-error-400/80">
+                No se puede editar ni comentar. Restaurarla se hace desde <Link :href="route('bajas.index')" class="underline">Bajas</Link>.
+            </p>
+        </div>
+
         <div class="grid gap-6 lg:grid-cols-3">
             <!-- Columna principal -->
             <div class="space-y-6 lg:col-span-2">

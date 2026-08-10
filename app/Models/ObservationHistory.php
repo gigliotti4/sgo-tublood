@@ -34,6 +34,11 @@ class ObservationHistory extends Model
 
     public const ACCION_SISTEMA = 'sistema';
 
+    /** `cambios` = ['tipo' => 'cancelacion'|'borrado']; el motivo va en `nota`. */
+    public const ACCION_BAJA = 'baja';
+
+    public const ACCION_RESTAURACION = 'restauracion';
+
     public const ACCIONES = [
         self::ACCION_COMENTARIO,
         self::ACCION_ESTADO,
@@ -43,6 +48,8 @@ class ObservationHistory extends Model
         self::ACCION_ADJUNTO,
         self::ACCION_NOTIFICADOS,
         self::ACCION_SISTEMA,
+        self::ACCION_BAJA,
+        self::ACCION_RESTAURACION,
     ];
 
     /** Sin `updated_at`: una entrada no se modifica. Eloquent sigue completando `created_at` solo. */
@@ -74,9 +81,14 @@ class ObservationHistory extends Model
         });
     }
 
+    /**
+     * `withTrashed()` es obligatorio: sin él, cada entrada de bitácora de una
+     * observación borrada resuelve a `observacion === null` — justo el caso
+     * donde el registro inmutable más importa.
+     */
     public function observacion(): BelongsTo
     {
-        return $this->belongsTo(Observacion::class, 'observation_id');
+        return $this->belongsTo(Observacion::class, 'observation_id')->withTrashed();
     }
 
     /** Null en las entradas automáticas (observer, comandos): no tienen usuario detrás. */

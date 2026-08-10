@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\ArticuloController as AdminArticuloController;
+use App\Http\Controllers\Admin\BajaController;
 use App\Http\Controllers\Admin\BitacoraController;
 use App\Http\Controllers\Admin\ClienteController;
 use App\Http\Controllers\Admin\ObservacionController as AdminObservacionController;
@@ -127,8 +128,9 @@ Route::middleware(['auth'])->group(function () {
             ->middleware('can:comentar,observacion')->name('observaciones.bitacora.store');
         // Va después de /observaciones/nuevo y /observaciones/crear en el archivo,
         // pero igual se restringe a numérico para que no se las coma.
+        // withTrashed(): tiene que poder abrirse desde la pantalla de Bajas.
         Route::get('/observaciones/{observacion}', [AdminObservacionController::class, 'show'])
-            ->whereNumber('observacion')->name('observaciones.show');
+            ->whereNumber('observacion')->withTrashed()->name('observaciones.show');
         // Editar: solo el responsable asignado (o super-admin, vía Gate::before) — ver ObservacionPolicy.
         Route::put('/observaciones/{observacion}', [AdminObservacionController::class, 'update'])
             ->middleware('can:update,observacion')->name('observaciones.update');
@@ -139,6 +141,17 @@ Route::middleware(['auth'])->group(function () {
         // Carga manual interna: formulario dirigido por taxonomía (sector -> tipo -> datos específicos).
         Route::get('/observaciones/crear', [AdminObservacionController::class, 'create'])->name('observaciones.create');
         Route::post('/observaciones', [AdminObservacionController::class, 'store'])->name('observaciones.store');
+    });
+    // Borrar (soft delete, con motivo) y la papelera de canceladas/borradas:
+    // permiso propio, más grave que observaciones.edit — no lo hereda
+    // cualquiera que gestione el caso, solo admin y super-admin.
+    Route::middleware('can:observaciones.delete')->group(function () {
+        Route::delete('/observaciones/{observacion}', [AdminObservacionController::class, 'destroy'])
+            ->name('observaciones.destroy');
+        Route::get('/bajas', [BajaController::class, 'index'])->name('bajas.index');
+        // withTrashed(): la observación a restaurar está borrada por definición.
+        Route::post('/bajas/{observacion}/restaurar', [BajaController::class, 'restore'])
+            ->withTrashed()->name('bajas.restore');
     });
 
     // Roles

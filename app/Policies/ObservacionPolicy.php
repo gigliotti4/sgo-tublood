@@ -20,6 +20,12 @@ class ObservacionPolicy
      */
     public function update(User $user, Observacion $observacion): bool
     {
+        // Una observación borrada solo se gestiona desde la papelera
+        // (restaurar), no desde el flujo normal de edición/gestión del caso.
+        if ($observacion->trashed()) {
+            return false;
+        }
+
         if ($user->id === $observacion->responsable_id) {
             return true;
         }
@@ -37,6 +43,10 @@ class ObservacionPolicy
      */
     public function comentar(User $user, Observacion $observacion): bool
     {
+        if ($observacion->trashed()) {
+            return false;
+        }
+
         return $this->update($user, $observacion)
             || $observacion->notificados()->whereKey($user->id)->exists();
     }

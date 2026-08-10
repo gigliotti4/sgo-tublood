@@ -10,11 +10,13 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 #[ObservedBy(ObservacionObserver::class)]
 class Observacion extends Model
 {
-    use GuardaAdjuntos;
+    use GuardaAdjuntos, SoftDeletes;
 
     public const ESTADOS = [
         'pendiente_clasificacion' => 'Pendiente de clasificación',
@@ -121,6 +123,14 @@ class Observacion extends Model
         return $this->hasMany(ObservationHistory::class, 'observation_id');
     }
 
+    /** La última baja registrada (cancelación o borrado), para mostrar su motivo sin pegarle a toda la bitácora. */
+    public function baja(): HasOne
+    {
+        return $this->hasOne(ObservationHistory::class, 'observation_id')
+            ->where('accion', ObservationHistory::ACCION_BAJA)
+            ->latestOfMany();
+    }
+
     public function productos(): HasMany
     {
         return $this->hasMany(ObservationProduct::class, 'observation_id');
@@ -164,9 +174,14 @@ class Observacion extends Model
         return 'observaciones/'.$this->segmentoSeguro($this->numero, 'sin-numero-'.$this->id);
     }
 
+    /**
+     * `withTrashed()` es obligatorio acá: sin él, borrar una observación libera
+     * su lugar en el correlativo y la próxima alta repite un `numero` que es
+     * `unique()` en el schema — un 500 en el portal público.
+     */
     public static function generarNumero(int $anio): string
     {
-        $correlativo = static::where('anio', $anio)->count() + 1;
+        $correlativo = static::withTrashed()->where('anio', $anio)->count() + 1;
 
         return sprintf('%04d-%02d', $correlativo, $anio % 100);
     }

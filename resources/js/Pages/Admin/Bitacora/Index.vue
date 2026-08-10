@@ -9,7 +9,7 @@ import Pagination from '@/Components/Pagination.vue'
 import Select from '@/Components/Select.vue'
 import TableCard from '@/Components/TableCard.vue'
 import DataRow from '@/Components/DataRow.vue'
-import { accionLabels, accionVariant, comoCambioSimple, esClasificacion, esNotificados, formatFechaHora, formatSize, nombreAutor } from '@/lib/bitacora'
+import { accionLabels, accionVariant, comoCambioSimple, esBaja, esClasificacion, esNotificados, formatFechaHora, formatSize, nombreAutor } from '@/lib/bitacora'
 import type { ObservationHistoryEntry, PaginatedData } from '@/types'
 
 interface UsuarioOption { id: number; name: string; apellido: string | null }
@@ -187,6 +187,9 @@ const limpiarFiltros = () => {
                                         <p v-if="entrada.cambios.sumados.length">Se sumó a {{ entrada.cambios.sumados.join(', ') }}</p>
                                         <p v-if="entrada.cambios.sacados.length">Se sacó a {{ entrada.cambios.sacados.join(', ') }}</p>
                                     </div>
+                                    <p v-else-if="esBaja(entrada)">
+                                        {{ entrada.cambios.tipo === 'borrado' ? 'Observación borrada' : 'Observación cancelada' }}
+                                    </p>
                                     <p v-if="entrada.nota" class="whitespace-pre-line">{{ entrada.nota }}</p>
                                     <ul v-if="entrada.adjuntos.length" class="mt-1 space-y-0.5">
                                         <li v-for="a in entrada.adjuntos" :key="a.id" class="text-theme-xs text-gray-400">
@@ -235,6 +238,9 @@ const limpiarFiltros = () => {
                                     <p v-if="entrada.cambios.sumados.length">Se sumó a {{ entrada.cambios.sumados.join(', ') }}</p>
                                     <p v-if="entrada.cambios.sacados.length">Se sacó a {{ entrada.cambios.sacados.join(', ') }}</p>
                                 </div>
+                                <p v-else-if="esBaja(entrada)">
+                                    {{ entrada.cambios.tipo === 'borrado' ? 'Observación borrada' : 'Observación cancelada' }}
+                                </p>
                                 <p v-if="entrada.nota" class="whitespace-pre-line">{{ entrada.nota }}</p>
                                 <ul v-if="entrada.adjuntos.length" class="mt-1 space-y-0.5">
                                     <li v-for="a in entrada.adjuntos" :key="a.id" class="text-theme-xs text-gray-400">

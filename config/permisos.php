@@ -50,6 +50,10 @@ return [
         // (eso lo decide ObservacionPolicy según el responsable asignado), pero
         // sí habilita la carga manual.
         'observaciones.edit' => ['grupo' => 'observaciones', 'label' => 'Cargar y gestionar observaciones'],
+        // Borrar (soft delete, con motivo obligatorio) y ver/restaurar desde la
+        // papelera de canceladas/borradas. Más grave que observaciones.edit, así
+        // que no lo hereda cualquiera que gestione un caso puntual.
+        'observaciones.delete' => ['grupo' => 'observaciones', 'label' => 'Borrar y restaurar observaciones'],
 
         'bitacora.view' => ['grupo' => 'bitacora', 'label' => 'Ver la bitácora de todas las observaciones'],
 

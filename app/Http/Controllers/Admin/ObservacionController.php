@@ -114,6 +114,7 @@ class ObservacionController extends Controller
                 'sector:id,nombre,dias_gestion',
                 'cliente:id,numero,razon_social,mail,telefono',
                 'productos',
+                'baja.user:id,name,apellido',
                 ...$this->eagerLoadsDeGestion(),
             ]),
             'presentaciones' => ObservationProduct::PRESENTACIONES,
@@ -538,10 +539,16 @@ class ObservacionController extends Controller
             'tipo_caso' => ['nullable', Rule::in(config('incidencias.tipos_caso'))],
             'notificados' => ['array'],
             'notificados.*' => ['integer', 'exists:users,id'],
+            // Solo obligatorio si el estado nuevo es "cancelada": no se pisa el
+            // resto de las ediciones con un campo que no las involucra.
+            'motivo' => ['required_if:estado,cancelada', 'nullable', 'string', 'min:5', 'max:1000'],
         ]);
 
         $notificados = $data['notificados'] ?? null;
         unset($data['notificados']);
+
+        $motivo = $data['motivo'] ?? null;
+        unset($data['motivo']);
 
         // Clasificar: si se completó prioridad + tipo de caso y seguía pendiente,
         // pasa automáticamente a "clasificada" (flujo de Garantía de Calidad).
@@ -551,11 +558,55 @@ class ObservacionController extends Controller
 
         $observacion->update($data);
 
+        // Va después del update(): el motivo cuenta *por qué* se canceló, así
+        // que tiene sentido una vez que el estado ya cambió de verdad. El
+        // observer deja aparte su propia entrada "De X a Cancelada" — son dos
+        // relatos distintos (el cambio, y el porqué) y los dos sirven.
+        if ($data['estado'] === 'cancelada' && $motivo !== null) {
+            $observacion->historial()->create([
+                'user_id' => auth()->id(),
+                'accion' => ObservationHistory::ACCION_BAJA,
+                'nota' => $motivo,
+                'cambios' => ['tipo' => 'cancelacion'],
+            ]);
+        }
+
         if ($notificados !== null) {
             $this->sincronizarNotificados($observacion, $notificados);
         }
 
         return redirect()->route('observaciones.index')
             ->with('success', 'Observación actualizada correctamente.');
+    }
+
+    /**
+     * Borrado lógico: el motivo queda en la bitácora (inmutable) y no en una
+     * columna propia, así restaurar no pierde nada y no hay dos versiones del
+     * mismo relato. El `deleted_at` es un UPDATE, no dispara los
+     * `cascadeOnDelete()` de la base, así que el historial y los adjuntos
+     * quedan intactos — ver `ObservationHistory::booted()`, que además
+     * bloquearía cualquier intento de tocarlos.
+     */
+    public function destroy(Request $request, Observacion $observacion)
+    {
+        $this->authorize('observaciones.delete');
+
+        $data = $request->validate([
+            'motivo' => ['required', 'string', 'min:5', 'max:1000'],
+        ]);
+
+        DB::transaction(function () use ($observacion, $data) {
+            $observacion->historial()->create([
+                'user_id' => auth()->id(),
+                'accion' => ObservationHistory::ACCION_BAJA,
+                'nota' => $data['motivo'],
+                'cambios' => ['tipo' => 'borrado'],
+            ]);
+
+            $observacion->delete();
+        });
+
+        return redirect()->route('observaciones.index')
+            ->with('success', 'Observación borrada correctamente.');
     }
 }

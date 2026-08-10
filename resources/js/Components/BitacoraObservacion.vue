@@ -5,7 +5,7 @@ import Badge from '@/Components/Badge.vue'
 import Button from '@/Components/Button.vue'
 import Icon from '@/Components/Icon.vue'
 import Textarea from '@/Components/Textarea.vue'
-import { accionLabels, accionVariant, comoCambioSimple, esClasificacion, esNotificados, formatFechaHora, formatSize, nombreAutor } from '@/lib/bitacora'
+import { accionLabels, accionVariant, comoCambioSimple, esBaja, esClasificacion, esNotificados, formatFechaHora, formatSize, nombreAutor } from '@/lib/bitacora'
 import type { ObservationHistoryEntry } from '@/types'
 
 /**
@@ -113,7 +113,12 @@ const enviar = () => {
                     </div>
                 </dl>
 
-                <!-- Comentario / nota libre -->
+                <!-- Baja: cancelación o borrado, el motivo va abajo en `nota` -->
+                <p v-if="esBaja(entrada)" class="mt-2 text-theme-sm text-gray-600 dark:text-gray-300">
+                    {{ entrada.cambios.tipo === 'borrado' ? 'Observación borrada' : 'Observación cancelada' }}
+                </p>
+
+                <!-- Comentario / nota libre / motivo de una baja -->
                 <p v-if="entrada.nota" class="mt-2 whitespace-pre-line text-theme-sm text-gray-600 dark:text-gray-300">
                     {{ entrada.nota }}
                 </p>

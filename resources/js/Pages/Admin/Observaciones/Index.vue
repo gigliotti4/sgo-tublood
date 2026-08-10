@@ -18,6 +18,7 @@ import TableCard from '@/Components/TableCard.vue'
 import DataRow from '@/Components/DataRow.vue'
 import SelectorUsuarios from '@/Components/SelectorUsuarios.vue'
 import SelectorMultiple from '@/Components/SelectorMultiple.vue'
+import Textarea from '@/Components/Textarea.vue'
 import type { Observacion, PaginatedData } from '@/types'
 
 interface UsuarioOption {
@@ -52,7 +53,7 @@ const props = defineProps<{
     presentaciones: Record<string, string>
 }>()
 
-const { isSuperAdmin, user } = usePermissions()
+const { isSuperAdmin, user, hasPermission } = usePermissions()
 
 // Refleja ObservacionPolicy::update(): responsable asignado, o cualquiera del
 // sector de la observación (para que el sector destino de una derivación
@@ -179,6 +180,9 @@ const form = useForm({
     prioridad: null as string | null,
     tipo_caso: null as string | null,
     notificados: [] as number[],
+    // Solo se manda (y el backend solo lo exige) cuando el estado nuevo es
+    // "cancelada": ver ObservacionController::update().
+    motivo: null as string | null,
 })
 
 const abrirEdicion = (o: Observacion) => {
@@ -190,9 +194,35 @@ const abrirEdicion = (o: Observacion) => {
     form.prioridad = o.prioridad
     form.tipo_caso = o.tipo_caso
     form.notificados = (o.notificados ?? []).map(u => u.id)
+    form.motivo = null
 }
 
 const cerrarEdicion = () => { idEnEdicion.value = null }
+
+// ── Borrado (soft delete, con motivo obligatorio) ───────────────────────────
+
+const idABorrar = ref<number | null>(null)
+
+const observacionABorrar = computed(
+    () => props.observaciones.data.find(o => o.id === idABorrar.value) ?? null,
+)
+
+const borrarForm = useForm({ motivo: '' })
+
+const abrirBorrado = (o: Observacion) => {
+    idABorrar.value = o.id
+    borrarForm.clearErrors()
+    borrarForm.motivo = ''
+}
+
+const cerrarBorrado = () => { idABorrar.value = null }
+
+const confirmarBorrado = () => {
+    if (!observacionABorrar.value) return
+    borrarForm.delete(route('observaciones.destroy', observacionABorrar.value.id), {
+        onSuccess: cerrarBorrado,
+    })
+}
 
 const nombreCompleto = (u: UsuarioOption) => [u.name, u.apellido].filter(Boolean).join(' ')
 
@@ -380,6 +410,16 @@ const guardar = () => {
                                             <Icon name="pencil" class="h-4.5 w-4.5" />
                                             <span class="sr-only">Editar {{ o.numero }}</span>
                                         </button>
+                                        <button
+                                            v-if="hasPermission('observaciones.delete')"
+                                            type="button"
+                                            class="cursor-pointer rounded-lg p-2 text-gray-400 transition-colors hover:bg-error-50 hover:text-error-500 dark:hover:bg-error-500/10 dark:hover:text-error-400"
+                                            title="Borrar"
+                                            @click="abrirBorrado(o)"
+                                        >
+                                            <Icon name="trash" class="h-4.5 w-4.5" />
+                                            <span class="sr-only">Borrar {{ o.numero }}</span>
+                                        </button>
                                     </div>
                                 </td>
                             </tr>
@@ -412,6 +452,16 @@ const guardar = () => {
                             >
                                 <Icon name="pencil" class="h-4.5 w-4.5" />
                                 <span class="sr-only">Editar {{ o.numero }}</span>
+                            </button>
+                            <button
+                                v-if="hasPermission('observaciones.delete')"
+                                type="button"
+                                class="cursor-pointer rounded-lg p-2 text-gray-400 transition-colors hover:bg-error-50 hover:text-error-500 dark:hover:bg-error-500/10 dark:hover:text-error-400"
+                                title="Borrar"
+                                @click="abrirBorrado(o)"
+                            >
+                                <Icon name="trash" class="h-4.5 w-4.5" />
+                                <span class="sr-only">Borrar {{ o.numero }}</span>
                             </button>
                         </template>
                         <template #body>
@@ -599,6 +649,15 @@ const guardar = () => {
                                 </option>
                             </Select>
 
+                            <Textarea
+                                v-if="form.estado === 'cancelada'"
+                                v-model="form.motivo"
+                                label="Motivo de la cancelación"
+                                :rows="2"
+                                required
+                                :error="form.errors.motivo"
+                            />
+
                             <Select
                                 v-model="form.sector_id"
                                 label="Sector"
@@ -637,6 +696,32 @@ const guardar = () => {
                             <Button variant="outline" @click="cerrarEdicion">Cancelar</Button>
                         </div>
                     </form>
+                </div>
+            </template>
+        </Modal>
+
+        <!-- Confirmación de borrado: motivo obligatorio, queda en la bitácora -->
+        <Modal :show="observacionABorrar !== null" title="Borrar observación" size="sm" @close="cerrarBorrado">
+            <template v-if="observacionABorrar">
+                <p class="text-theme-sm text-gray-600 dark:text-gray-300">
+                    Vas a borrar <span class="font-mono font-medium text-gray-800 dark:text-white/90">{{ observacionABorrar.numero }}</span> — {{ observacionABorrar.titulo }}.
+                    No se pierde el registro: queda en <strong>Bajas</strong> con este motivo, y se puede restaurar.
+                </p>
+
+                <Textarea
+                    v-model="borrarForm.motivo"
+                    label="Motivo"
+                    :rows="3"
+                    required
+                    class="mt-4"
+                    :error="borrarForm.errors.motivo"
+                />
+
+                <div class="mt-5 flex justify-end gap-3">
+                    <Button variant="outline" @click="cerrarBorrado">Cancelar</Button>
+                    <Button variant="danger" :disabled="borrarForm.processing" @click="confirmarBorrado">
+                        {{ borrarForm.processing ? 'Borrando…' : 'Borrar' }}
+                    </Button>
                 </div>
             </template>
         </Modal>

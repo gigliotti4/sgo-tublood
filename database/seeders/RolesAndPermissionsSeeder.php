@@ -19,7 +19,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'roles.view', 'roles.create', 'roles.edit', 'roles.delete',
             'permissions.view',
             'clientes.view', 'clientes.sync', 'clientes.edit', 'clientes.vencimientos',
-            'observaciones.view', 'observaciones.edit',
+            'observaciones.view', 'observaciones.edit', 'observaciones.delete',
             'bitacora.view',
             'articulos.view', 'articulos.edit', 'articulos.sync', 'articulos.import',
         ];
@@ -36,7 +36,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'users.view', 'users.create', 'users.edit',
             'roles.view',
             'clientes.view', 'clientes.sync', 'clientes.edit',
-            'observaciones.view', 'observaciones.edit',
+            'observaciones.view', 'observaciones.edit', 'observaciones.delete',
             'bitacora.view',
             'articulos.view', 'articulos.edit', 'articulos.sync', 'articulos.import',
         ]);
