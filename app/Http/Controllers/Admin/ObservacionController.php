@@ -408,12 +408,18 @@ class ObservacionController extends Controller
         }
 
         // Reglas dinámicas de "Datos específicos" según el tipo, con los labels de
-        // la taxonomía como nombres de campo en los mensajes de error.
-        $especificos = $request->validate(
-            TaxonomiaIncidencias::reglasValidacion($sector->slug, $base['tipo']),
-            [],
-            TaxonomiaIncidencias::atributosValidacion($sector->slug, $base['tipo'])
-        );
+        // la taxonomía como nombres de campo en los mensajes de error. Se suma acá
+        // (no en un validate() aparte) la exigencia de N° de cliente de los tipos
+        // que la declaran, para que ambos grupos de errores salgan en una sola ronda.
+        $reglas = TaxonomiaIncidencias::reglasValidacion($sector->slug, $base['tipo']);
+        $atributos = TaxonomiaIncidencias::atributosValidacion($sector->slug, $base['tipo']);
+
+        if (TaxonomiaIncidencias::requiereCliente($sector->slug, $base['tipo'])) {
+            $reglas['contacto_numero_cliente'] = ['required', 'string', 'max:255'];
+            $atributos['contacto_numero_cliente'] = 'n° de cliente';
+        }
+
+        $especificos = $request->validate($reglas, [], $atributos);
 
         DB::transaction(function () use ($base, $sector, $especificos, $request) {
             $anio = (int) now()->format('Y');

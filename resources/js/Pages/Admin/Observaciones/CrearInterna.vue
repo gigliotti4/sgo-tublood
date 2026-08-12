@@ -21,7 +21,7 @@ interface UsuarioOption {
     sector_id: number | null
     sector: { nombre: string; dias_gestion: number | null } | null
 }
-interface TipoDef { codigo: string; label: string; campos?: CampoDef[]; especial?: boolean }
+interface TipoDef { codigo: string; label: string; campos?: CampoDef[]; especial?: boolean; requiere_cliente?: boolean }
 type Taxonomia = Record<string, Record<string, TipoDef>>
 
 interface ProductoForm {
@@ -99,6 +99,10 @@ const gruposDeTipos = computed(() => {
 
 const tipoEspecial = computed(() =>
     props.taxonomia[sectorSlug.value ?? '']?.[form.tipo]?.especial === true
+)
+
+const requiereCliente = computed(() =>
+    props.taxonomia[sectorSlug.value ?? '']?.[form.tipo]?.requiere_cliente === true
 )
 
 const camposDelTipo = computed<CampoDef[]>(() => {
@@ -236,10 +240,13 @@ const submit = () => form.post(route('observaciones.store'), { forceFormData: tr
 
                 <FormSection
                     title="Cliente"
-                    description="Opcional: si la incidencia involucra a un cliente, cargalo acá."
+                    :description="requiereCliente
+                        ? 'Este tipo de incidencia necesita el N° de cliente.'
+                        : 'Opcional: si la incidencia involucra a un cliente, cargalo acá.'"
                 >
                     <Input
                         v-model="form.contacto_numero_cliente"
+                        :required="requiereCliente"
                         label="N° de cliente"
                         hint="Si coincide con un cliente sincronizado de RP Sistemas, la observación queda vinculada."
                         :error="form.errors.contacto_numero_cliente"

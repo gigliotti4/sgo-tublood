@@ -91,6 +91,18 @@ class TaxonomiaIncidencias
     }
 
     /**
+     * True si el tipo exige cargar el N° de cliente del bloque base "Cliente".
+     *
+     * Reemplaza a los campos `numero_cliente` que estos tipos declaraban en
+     * "Datos específicos": duplicaban el campo base y, al no ser el base, no
+     * resolvían el vínculo con la tabla `clientes`.
+     */
+    public static function requiereCliente(string $sectorSlug, string $tipoKey): bool
+    {
+        return ! empty(static::tipo($sectorSlug, $tipoKey)['requiere_cliente']);
+    }
+
+    /**
      * True si el tipo lleva la lista de productos afectados.
      *
      * Hoy solo "Falla de producto": "Disconformidad de servicio" comparte el

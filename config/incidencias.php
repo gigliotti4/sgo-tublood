@@ -15,6 +15,11 @@
 | Campo (def): id, label, tipo (text|textarea|number|date|select|radio),
 | required (bool), opciones (para select/radio).
 |
+| Un tipo puede llevar `requiere_cliente` (bool, hermano de `campos`) cuando
+| necesita el N° de cliente del bloque base "Cliente" del formulario (no un
+| campo propio en "Datos específicos": ese bloque ya resuelve el vínculo con
+| la tabla `clientes`, duplicarlo ahí no lo hace).
+|
 */
 
 return [
@@ -88,9 +93,9 @@ return [
             'demora_facturacion' => [
                 'codigo' => '2.2',
                 'label' => 'Demora de facturación / NC',
+                'requiere_cliente' => true,
                 'campos' => [
                     ['id' => 'numero_remito', 'label' => 'Número de remito', 'tipo' => 'text'],
-                    ['id' => 'numero_cliente', 'label' => 'Número de cliente', 'tipo' => 'text', 'required' => true],
                 ],
             ],
         ],
@@ -100,8 +105,6 @@ return [
                 'codigo' => '3.1',
                 'label' => 'Demora en entrega',
                 'campos' => [
-                    ['id' => 'numero_cliente', 'label' => 'Número de cliente', 'tipo' => 'text'],
-                    ['id' => 'razon_social', 'label' => 'Razón social', 'tipo' => 'text'],
                     ['id' => 'numero_hoja_ruta', 'label' => 'N° hoja de ruta', 'tipo' => 'text'],
                 ],
             ],
@@ -149,19 +152,20 @@ return [
             'pedido_mal_armado' => [
                 'codigo' => '4.1',
                 'label' => 'Pedido mal armado',
+                'requiere_cliente' => true,
                 'campos' => [
                     ['id' => 'numero_remito', 'label' => 'Número de remito', 'tipo' => 'text', 'required' => true],
-                    ['id' => 'cliente', 'label' => 'Cliente', 'tipo' => 'text', 'required' => true],
                 ],
             ],
             'falla_recepcion' => [
                 'codigo' => '4.2',
                 'label' => 'Falla en recepción',
+                'requiere_cliente' => true,
                 'campos' => [
                     ['id' => 'codigo_producto', 'label' => 'Código de producto', 'tipo' => 'text', 'required' => true],
                     ['id' => 'descripcion', 'label' => 'Descripción', 'tipo' => 'text', 'required' => true],
                     ['id' => 'cantidades', 'label' => 'Cantidades', 'tipo' => 'number', 'required' => true],
-                    ['id' => 'numero_proceso_cliente', 'label' => 'N° proceso / N° cliente', 'tipo' => 'text', 'required' => true],
+                    ['id' => 'numero_proceso', 'label' => 'N° de proceso', 'tipo' => 'text', 'required' => true],
                 ],
             ],
             'falla_wms' => [
@@ -209,8 +213,8 @@ return [
             'error_pedido_cliente' => [
                 'codigo' => '5.4',
                 'label' => 'Error en pedido',
+                'requiere_cliente' => true,
                 'campos' => [
-                    ['id' => 'numero_cliente', 'label' => 'Número de cliente', 'tipo' => 'text', 'required' => true],
                     ['id' => 'codigo_producto', 'label' => 'Código de producto', 'tipo' => 'text', 'required' => true],
                 ],
             ],

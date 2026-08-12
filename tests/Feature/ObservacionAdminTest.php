@@ -266,6 +266,47 @@ class ObservacionAdminTest extends TestCase
             ->assertSessionHasErrors('datos_especificos.tipo_comprobante');
     }
 
+    public function test_store_interna_exige_numero_cliente_en_tipo_que_lo_requiere(): void
+    {
+        $user = $this->userWith('observaciones.edit');
+        $sector = Sector::create(['nombre' => 'Facturación', 'slug' => 'facturacion']);
+
+        $this->actingAs($user)
+            ->post('/observaciones', [
+                'origen' => 'interna',
+                'sector_id' => $sector->id,
+                'tipo' => 'demora_facturacion',
+                'titulo' => 'Título',
+                'descripcion' => 'Detalle.',
+                'prioridad' => 'alta',
+                'tipo_caso' => 'Desarrollo habitual de actividades',
+            ])
+            ->assertSessionHasErrors('contacto_numero_cliente');
+    }
+
+    public function test_store_interna_con_numero_cliente_vincula_cliente_existente(): void
+    {
+        $user = $this->userWith('observaciones.edit');
+        $sector = Sector::create(['nombre' => 'Facturación', 'slug' => 'facturacion']);
+        $cliente = Cliente::create(['numero' => '456', 'razon_social' => 'Cliente SA']);
+
+        $this->actingAs($user)
+            ->post('/observaciones', [
+                'origen' => 'interna',
+                'sector_id' => $sector->id,
+                'tipo' => 'demora_facturacion',
+                'titulo' => 'Título',
+                'descripcion' => 'Detalle.',
+                'prioridad' => 'alta',
+                'tipo_caso' => 'Desarrollo habitual de actividades',
+                'contacto_numero_cliente' => '456',
+            ])
+            ->assertRedirect(route('observaciones.index'));
+
+        $observacion = Observacion::first();
+        $this->assertSame($cliente->id, $observacion->cliente_id);
+    }
+
     public function test_store_interna_falla_producto_en_garantia_calidad(): void
     {
         $user = $this->userWith('observaciones.edit');
