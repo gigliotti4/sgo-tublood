@@ -5,13 +5,13 @@ namespace App\Notifications;
 use App\Models\Observacion;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Notifications\Messages\BroadcastMessage;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 /**
- * Molde común de los avisos de una observación: mismo par de canales
- * (`database` alimenta la campana del panel, `mail` sale por Resend en
- * producción y al log en dev) y misma forma de payload para el frontend.
+ * Molde común de los avisos de una observación: `database` alimenta la
+ * campana, `broadcast` actualiza el panel en vivo y `mail` sale por Resend.
  *
  * Va encolada porque cada mail es una llamada HTTP a Resend: así la request
  * del usuario no espera, y una caída del proveedor no rompe la operación.
@@ -25,23 +25,23 @@ abstract class ObservacionNotification extends Notification implements ShouldQue
     /** @return array<int, string> */
     public function via(object $notifiable): array
     {
-        return ['database', 'mail'];
+        return ['database', 'broadcast', 'mail'];
     }
 
     /**
-     * El canal `database` se resuelve en el momento, sin pasar por la cola.
-     *
-     * Es un INSERT local —no hay nada que pueda colgar la request— y es lo que
-     * alimenta la campana y el modal de reclamos nuevos del panel: si esperara a
-     * un worker, alguien podría entrar al sistema y no ver un reclamo que ya
-     * está cargado. Encolar solo tiene sentido para `mail`, que sí sale por HTTP
-     * a Resend, y ese sigue yendo a la conexión por defecto.
+     * La fila de `database` se inserta en el momento. El broadcast se difiere
+     * hasta después de responder y luego sale en sync: así funciona en hosting
+     * compartido sin un worker permanente y un fallo externo no rompe el alta.
+     * El mail conserva la conexión de cola por defecto.
      *
      * @return array<string, string>
      */
     public function viaConnections(): array
     {
-        return ['database' => 'sync'];
+        return [
+            'database' => 'sync',
+            'broadcast' => config('broadcasting.notification_queue_connection'),
+        ];
     }
 
     /** Clave estable para que el frontend distinga el tipo de aviso. */
@@ -58,7 +58,13 @@ abstract class ObservacionNotification extends Notification implements ShouldQue
             ->greeting("Hola {$notifiable->name},")
             ->line($this->mensaje())
             ->line("Observación {$this->observacion->numero}: {$this->observacion->titulo}")
-            ->action('Ver en el sistema', route('observaciones.index'));
+            ->action('Ver en el sistema', route('observaciones.show', $this->observacion));
+    }
+
+    public function toBroadcast(object $notifiable): BroadcastMessage
+    {
+        return (new BroadcastMessage($this->toArray($notifiable)))
+            ->onConnection(config('broadcasting.event_queue_connection'));
     }
 
     /** @return array<string, mixed> */
@@ -70,6 +76,7 @@ abstract class ObservacionNotification extends Notification implements ShouldQue
             'numero' => $this->observacion->numero,
             'titulo' => $this->observacion->titulo,
             'mensaje' => $this->mensaje(),
+            'url' => route('observaciones.show', $this->observacion),
         ];
     }
 }

@@ -36,6 +36,9 @@ class HandleInertiaRequests extends Middleware
                 'success' => session('success'),
                 'error' => session('error'),
             ],
+            // Solo son datos publicos del broadcaster. El App ID y el secret
+            // permanecen siempre del lado del servidor.
+            'broadcasting' => $this->broadcastingConfig(),
             'notificaciones' => [
                 // Permiso propio y no `clientes.view`: seguir los vencimientos
                 // es tarea de una persona puntual, no de cualquiera que pueda
@@ -73,6 +76,23 @@ class HandleInertiaRequests extends Middleware
                 'seguimiento' => $this->enSeguimiento($user),
             ],
         ]);
+    }
+
+    /** @return array<string, mixed> */
+    private function broadcastingConfig(): array
+    {
+        $driver = config('broadcasting.default');
+        $connection = config("broadcasting.connections.{$driver}", []);
+        $options = $connection['options'] ?? [];
+
+        return [
+            'driver' => in_array($driver, ['pusher', 'reverb'], true) ? $driver : 'null',
+            'key' => $connection['key'] ?? null,
+            'cluster' => $options['cluster'] ?? null,
+            'host' => $options['host'] ?? null,
+            'port' => isset($options['port']) ? (int) $options['port'] : null,
+            'scheme' => $options['scheme'] ?? null,
+        ];
     }
 
     /**

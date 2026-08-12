@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Observacion;
 use App\Models\Sector;
 use App\Models\User;
+use App\Notifications\ObservacionAsignadaNotification;
 use App\Notifications\ObservacionEscaladaNotification;
 use App\Notifications\ObservacionFinalizadaNotification;
 use App\Notifications\ObservacionVencidaNotification;
@@ -58,6 +59,49 @@ class AlertasObservacionTest extends TestCase
         $this->assertNotNull($observacion->responsable_asignado_at);
         $this->assertSame('2026-07-23', $observacion->vence_at->toDateString());
         $this->assertSame(0, $observacion->alerta_nivel);
+    }
+
+    public function test_crear_con_responsable_le_avisa_en_el_panel(): void
+    {
+        Notification::fake();
+        $responsable = $this->responsable();
+        $observacion = $this->observacion(['responsable_id' => $responsable->id]);
+
+        Notification::assertSentTo(
+            $responsable,
+            ObservacionAsignadaNotification::class,
+            fn ($notificacion) => $notificacion->toArray($responsable)['tipo'] === 'observacion_asignada'
+                && $notificacion->toArray($responsable)['observacion_id'] === $observacion->id
+                && $notificacion->via($responsable) === ['database', 'broadcast'],
+        );
+    }
+
+    public function test_el_broadcast_no_necesita_un_worker_permanente(): void
+    {
+        $responsable = User::factory()->create();
+        $observacion = $this->observacion();
+        $notificacion = new ObservacionAsignadaNotification($observacion);
+
+        $this->assertSame('deferred', $notificacion->viaConnections()['broadcast']);
+        $this->assertSame('sync', $notificacion->toBroadcast($responsable)->connection);
+    }
+
+    public function test_reasignar_le_avisa_solo_al_nuevo_responsable(): void
+    {
+        Notification::fake();
+        $anterior = $this->responsable();
+        $nuevo = $this->responsable();
+        $observacion = $this->observacion(['responsable_id' => $anterior->id]);
+
+        Notification::fake();
+        $observacion->update(['responsable_id' => $nuevo->id]);
+
+        Notification::assertSentTo(
+            $nuevo,
+            ObservacionAsignadaNotification::class,
+            fn ($notificacion) => $notificacion->toArray($nuevo)['tipo'] === 'observacion_reasignada',
+        );
+        Notification::assertNotSentTo($anterior, ObservacionAsignadaNotification::class);
     }
 
     public function test_el_plazo_saltea_el_fin_de_semana(): void

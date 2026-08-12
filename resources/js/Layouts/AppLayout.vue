@@ -9,11 +9,13 @@ import { ref } from 'vue'
  * embargo reiniciarse solo con un login, F5 o pestaña nueva.
  */
 export const avisosVistos = ref(new Set<number>())
+let broadcastingFingerprint: string | null = null
 </script>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { Link, router, usePage, usePoll } from '@inertiajs/vue3'
+import { configureEcho, useEchoNotification } from '@laravel/echo-vue'
 import { route } from 'ziggy-js'
 import { usePermissions } from '@/composables/usePermissions'
 import { useDarkMode } from '@/composables/useDarkMode'
@@ -24,12 +26,53 @@ import type { ObservacionSinClasificar, PageProps } from '@/types'
 const { user, hasPermission } = usePermissions()
 const { isDark, toggleTheme } = useDarkMode()
 const page = usePage<PageProps>()
+const currentBroadcastingFingerprint = JSON.stringify(page.props.broadcasting)
+
+if (broadcastingFingerprint !== currentBroadcastingFingerprint && page.props.broadcasting.driver === 'pusher') {
+    configureEcho({
+        broadcaster: 'pusher',
+        key: page.props.broadcasting.key ?? '',
+        cluster: page.props.broadcasting.cluster ?? 'mt1',
+        forceTLS: true,
+    })
+    broadcastingFingerprint = currentBroadcastingFingerprint
+} else if (broadcastingFingerprint !== currentBroadcastingFingerprint && page.props.broadcasting.driver === 'reverb') {
+    configureEcho({
+        broadcaster: 'reverb',
+        key: page.props.broadcasting.key ?? '',
+        wsHost: page.props.broadcasting.host ?? 'localhost',
+        wsPort: page.props.broadcasting.port ?? 8080,
+        wssPort: page.props.broadcasting.port ?? 443,
+        forceTLS: page.props.broadcasting.scheme === 'https',
+        enabledTransports: ['ws', 'wss'],
+    })
+    broadcastingFingerprint = currentBroadcastingFingerprint
+} else if (broadcastingFingerprint !== currentBroadcastingFingerprint) {
+    configureEcho({ broadcaster: 'null' })
+    broadcastingFingerprint = currentBroadcastingFingerprint
+}
 
 const sidebarCollapsed = ref(false)
 const mobileSidebarOpen = ref(false)
 const notificacionesOpen = ref(false)
 const userMenuOpen = ref(false)
 const fabOpen = ref(false)
+
+interface NotificacionTiempoReal {
+    tipo: string
+    observacion_id: number
+    numero: string
+    titulo: string
+    mensaje: string
+    url: string
+}
+
+interface ToastNotificacion extends NotificacionTiempoReal {
+    id: string
+}
+
+const toasts = ref<ToastNotificacion[]>([])
+const toastTimers = new Map<string, number>()
 
 // Mismos íconos que las tarjetas de Admin/Observaciones/Nuevo.vue, para que
 // el atajo del FAB se vea consistente con esa pantalla (que sigue existiendo).
@@ -56,6 +99,48 @@ const alertas = computed(() => page.props.notificaciones?.alertas ?? [])
 // subconjunto de esta misma lista.
 const sinClasificar = computed(() => page.props.notificaciones?.sinClasificar ?? [])
 const totalNotificaciones = computed(() => vencimientos.value.length + alertas.value.length + sinClasificar.value.length)
+
+const quitarToast = (id: string) => {
+    toasts.value = toasts.value.filter(toast => toast.id !== id)
+    const timer = toastTimers.get(id)
+    if (timer) window.clearTimeout(timer)
+    toastTimers.delete(id)
+}
+
+const recibirNotificacion = (payload: NotificacionTiempoReal & { id: string }) => {
+    avisosVistos.value.add(payload.observacion_id)
+    quitarToast(payload.id)
+    toasts.value.unshift(payload)
+    toastTimers.set(payload.id, window.setTimeout(() => quitarToast(payload.id), 8000))
+
+    // La fila de database ya fue creada antes del broadcast. Recargar solo
+    // esta prop actualiza la campana y las consultas vivas sin mover la vista.
+    router.reload({ only: ['notificaciones'] })
+}
+
+const abrirToast = (toast: ToastNotificacion) => {
+    quitarToast(toast.id)
+    router.visit(toast.url)
+}
+
+const estiloToast = (tipo: string) => {
+    if (tipo === 'observacion_vencida' || tipo === 'observacion_escalada') {
+        return 'border-error-200 bg-error-50 text-error-700 dark:border-error-500/30 dark:bg-gray-900 dark:text-error-300'
+    }
+    if (tipo === 'observacion_finalizada') {
+        return 'border-success-200 bg-success-50 text-success-700 dark:border-success-500/30 dark:bg-gray-900 dark:text-success-300'
+    }
+    if (tipo === 'observacion_externa_recibida') {
+        return 'border-warning-200 bg-warning-50 text-warning-700 dark:border-warning-500/30 dark:bg-gray-900 dark:text-warning-300'
+    }
+
+    return 'border-brand-200 bg-white text-gray-800 dark:border-brand-500/30 dark:bg-gray-900 dark:text-white/90'
+}
+
+useEchoNotification<NotificacionTiempoReal>(
+    `App.Models.User.${user.value?.id ?? 0}`,
+    recibirNotificacion,
+)
 
 const marcarLeidas = () => router.post(route('notificaciones.leidas'), {}, { preserveScroll: true })
 
@@ -259,7 +344,11 @@ const handleEsc = (e: KeyboardEvent) => {
     }
 }
 onMounted(() => window.addEventListener('keydown', handleEsc))
-onUnmounted(() => window.removeEventListener('keydown', handleEsc))
+onUnmounted(() => {
+    window.removeEventListener('keydown', handleEsc)
+    toastTimers.forEach(timer => window.clearTimeout(timer))
+    toastTimers.clear()
+})
 
 // Heroicons paths (24px stroke)
 const icons: Record<string, string> = {
@@ -286,6 +375,36 @@ const icons: Record<string, string> = {
 
 <template>
     <div class="min-h-screen bg-gray-50 dark:bg-gray-950 flex font-outfit text-gray-700 dark:text-gray-400">
+
+        <div
+            aria-live="polite"
+            class="pointer-events-none fixed right-4 top-20 z-[70] flex w-[calc(100%-2rem)] max-w-sm flex-col gap-2 sm:right-6 sm:w-full"
+        >
+            <TransitionGroup name="toast">
+                <div
+                    v-for="toast in toasts"
+                    :key="toast.id"
+                    class="pointer-events-auto flex items-start gap-3 rounded-lg border p-3 shadow-theme-lg"
+                    :class="estiloToast(toast.tipo)"
+                >
+                    <button type="button" class="min-w-0 flex-1 text-left" @click="abrirToast(toast)">
+                        <p class="text-xs font-semibold uppercase">Nueva notificación</p>
+                        <p class="mt-0.5 truncate text-sm font-semibold">{{ toast.numero }} - {{ toast.titulo }}</p>
+                        <p class="mt-1 line-clamp-2 text-xs opacity-80">{{ toast.mensaje }}</p>
+                    </button>
+                    <button
+                        type="button"
+                        class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md opacity-60 transition hover:bg-black/5 hover:opacity-100 dark:hover:bg-white/10"
+                        title="Cerrar notificación"
+                        @click="quitarToast(toast.id)"
+                    >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4">
+                            <path stroke-linecap="round" stroke-linejoin="round" :d="icons.x" />
+                        </svg>
+                    </button>
+                </div>
+            </TransitionGroup>
+        </div>
 
         <!-- Overlay mobile -->
         <Transition name="fade">
@@ -518,7 +637,7 @@ const icons: Record<string, string> = {
                                 <ul class="divide-y divide-gray-100 dark:divide-gray-800">
                                     <li v-for="a in alertas" :key="a.id">
                                         <Link
-                                            :href="route('observaciones.index')"
+                                            :href="a.data.url ?? route('observaciones.index')"
                                             class="block px-5 py-3 transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
                                             @click="notificacionesOpen = false"
                                         >
@@ -701,4 +820,7 @@ const icons: Record<string, string> = {
 
 .slide-down-enter-active, .slide-down-leave-active { transition: all 0.2s; }
 .slide-down-enter-from, .slide-down-leave-to { opacity: 0; transform: translateY(-8px); }
+
+.toast-enter-active, .toast-leave-active { transition: opacity 0.2s, transform 0.2s; }
+.toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(-8px); }
 </style>

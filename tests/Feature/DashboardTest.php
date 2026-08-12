@@ -59,4 +59,23 @@ class DashboardTest extends TestCase
                 ->has('asignadas', 1)
             );
     }
+
+    public function test_comparte_la_configuracion_publica_de_pusher_sin_el_secret(): void
+    {
+        config([
+            'broadcasting.default' => 'pusher',
+            'broadcasting.connections.pusher.key' => 'public-key',
+            'broadcasting.connections.pusher.secret' => 'private-secret',
+            'broadcasting.connections.pusher.options.cluster' => 'sa1',
+        ]);
+
+        $this->actingAs(User::factory()->create())
+            ->get('/dashboard')
+            ->assertInertia(fn ($page) => $page
+                ->where('broadcasting.driver', 'pusher')
+                ->where('broadcasting.key', 'public-key')
+                ->where('broadcasting.cluster', 'sa1')
+                ->missing('broadcasting.secret')
+            );
+    }
 }

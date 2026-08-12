@@ -6,6 +6,7 @@ use App\Models\Observacion;
 use App\Models\ObservationHistory;
 use App\Models\Sector;
 use App\Models\User;
+use App\Notifications\ObservacionAsignadaNotification;
 use App\Notifications\ObservacionFinalizadaNotification;
 
 /**
@@ -48,12 +49,24 @@ class ObservacionObserver
     {
         $this->registrarCambios($observacion);
 
+        if ($observacion->wasChanged('responsable_id') && $observacion->responsable_id !== null) {
+            User::find($observacion->responsable_id)?->notify(new ObservacionAsignadaNotification(
+                $observacion,
+                $observacion->getOriginal('responsable_id') !== null,
+            ));
+        }
+
         if (! $observacion->wasChanged('estado') || ! $observacion->estaFinalizada()) {
             return;
         }
 
         $observacion->responsable?->gerente
             ?->notify(new ObservacionFinalizadaNotification($observacion));
+    }
+
+    public function created(Observacion $observacion): void
+    {
+        User::find($observacion->responsable_id)?->notify(new ObservacionAsignadaNotification($observacion));
     }
 
     /**

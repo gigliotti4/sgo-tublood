@@ -96,10 +96,8 @@ class AvisoExternasNuevasTest extends TestCase
     }
 
     /**
-     * El aviso en pantalla no puede depender de que haya un worker corriendo:
-     * si esperara a la cola, alguien podría entrar al panel y no ver un reclamo
-     * que ya está cargado. El mail sí se encola, que es la llamada HTTP a Resend
-     * y lo único que justifica el worker.
+     * La fila de la campana no espera a la cola. El mail queda como único job
+     * persistente; el broadcast se ejecuta después de responder.
      */
     public function test_el_aviso_en_pantalla_no_espera_a_la_cola(): void
     {

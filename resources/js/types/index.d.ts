@@ -25,11 +25,12 @@ export interface AlertaNotificacion {
     id: string
     created_at: string
     data: {
-        tipo: 'observacion_vencida' | 'observacion_escalada' | 'observacion_finalizada'
+        tipo: 'observacion_asignada' | 'observacion_reasignada' | 'observacion_seguimiento' | 'observacion_vencida' | 'observacion_escalada' | 'observacion_finalizada'
         observacion_id: number
         numero: string
         titulo: string
         mensaje: string
+        url: string
     }
 }
 
@@ -89,6 +90,14 @@ export interface PageProps extends Record<string, unknown> {
     flash: {
         success?: string
         error?: string
+    }
+    broadcasting: {
+        driver: 'pusher' | 'reverb' | 'null'
+        key: string | null
+        cluster: string | null
+        host: string | null
+        port: number | null
+        scheme: 'http' | 'https' | null
     }
     notificaciones: {
         vencimientos: ClienteVencimiento[]
