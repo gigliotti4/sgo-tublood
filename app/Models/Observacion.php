@@ -66,12 +66,10 @@ class Observacion extends Model
         'ejecutivo_cuenta',
         'prioridad',
         'tipo_caso',
-        'tecnovigilancia',
         'datos_especificos',
     ];
 
     protected $casts = [
-        'tecnovigilancia' => 'boolean',
         'datos_especificos' => 'array',
         'responsable_asignado_at' => 'datetime',
         'vence_at' => 'datetime',

@@ -36,7 +36,6 @@ const props = defineProps<{
     }
     kpis: {
         tiempoSla: number | null
-        tecnovigilancia: number
         critica: number
         sinClasificar: number
     }
@@ -201,17 +200,13 @@ const statCards = computed<StatCard[]>(() => [
         </div>
 
         <!-- KPI row -->
-        <div class="mb-6 grid grid-cols-1 divide-y divide-gray-100 rounded-2xl border border-gray-200 bg-white dark:divide-gray-800 dark:border-gray-800 dark:bg-white/[0.03] sm:grid-cols-2 sm:divide-y-0 sm:divide-x xl:grid-cols-4">
+        <div class="mb-6 grid grid-cols-1 divide-y divide-gray-100 rounded-2xl border border-gray-200 bg-white dark:divide-gray-800 dark:border-gray-800 dark:bg-white/[0.03] sm:grid-cols-2 sm:divide-y-0 sm:divide-x xl:grid-cols-3">
             <div class="px-6 py-5">
                 <p class="text-theme-xs font-medium uppercase tracking-wide text-gray-400">KPI: Tiempo &lt;72h</p>
                 <p class="mt-1 text-2xl font-bold" :class="(kpis.tiempoSla ?? 0) >= 85 ? 'text-success-600 dark:text-success-400' : 'text-error-500 dark:text-error-400'">
                     {{ kpis.tiempoSla ?? 0 }}%
                 </p>
                 <p class="mt-0.5 text-theme-xs text-gray-400">Meta &gt; 85%</p>
-            </div>
-            <div class="px-6 py-5">
-                <p class="text-theme-xs font-medium uppercase tracking-wide text-gray-400">Tecnovigilancia</p>
-                <p class="mt-1 text-2xl font-bold text-error-500 dark:text-error-400">{{ kpis.tecnovigilancia }}</p>
             </div>
             <div class="px-6 py-5">
                 <p class="text-theme-xs font-medium uppercase tracking-wide text-gray-400">Crítica</p>

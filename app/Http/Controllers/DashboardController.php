@@ -32,7 +32,6 @@ class DashboardController extends Controller
             'kpis' => [
                 // TODO: requiere sla_configs para calcular el % de cumplimiento (pendiente).
                 'tiempoSla' => null,
-                'tecnovigilancia' => Observacion::where('tecnovigilancia', true)->count(),
                 'critica' => Observacion::where('prioridad', 'critica')->count(),
                 'sinClasificar' => Observacion::where('estado', 'pendiente_clasificacion')->count(),
             ],

@@ -201,7 +201,6 @@ export interface Observacion {
     sector: { id: number; nombre: string } | null
     prioridad: string | null
     tipo_caso: string | null
-    tecnovigilancia: boolean
     datos_especificos: Record<string, string | number | null> | null
     cliente: { id: number; numero: string; razon_social: string; mail: string | null; telefono: string | null } | null
     productos: ObservationProduct[]

@@ -29,7 +29,6 @@ class DashboardTest extends TestCase
             'contacto_email' => 'cliente@example.com',
             'titulo' => 'Título de prueba',
             'descripcion' => 'Descripción de prueba',
-            'tecnovigilancia' => true,
             'responsable_id' => $user->id,
         ]);
 
@@ -53,7 +52,6 @@ class DashboardTest extends TestCase
                 ->where('stats.abiertas', 1)
                 ->where('stats.cerradas', 1)
                 ->where('stats.asignadasAMi', 1)
-                ->where('kpis.tecnovigilancia', 1)
                 ->where('kpis.critica', 1)
                 ->has('ultimas', 2)
                 ->has('asignadas', 1)
