@@ -25,7 +25,7 @@ export interface AlertaNotificacion {
     id: string
     created_at: string
     data: {
-        tipo: 'observacion_asignada' | 'observacion_reasignada' | 'observacion_seguimiento' | 'observacion_vencida' | 'observacion_escalada' | 'observacion_finalizada'
+        tipo: 'observacion_asignada' | 'observacion_reasignada' | 'observacion_seguimiento' | 'observacion_critica' | 'observacion_vencida' | 'observacion_escalada' | 'observacion_finalizada'
         observacion_id: number
         numero: string
         titulo: string

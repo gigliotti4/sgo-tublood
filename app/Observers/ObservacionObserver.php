@@ -7,6 +7,7 @@ use App\Models\ObservationHistory;
 use App\Models\Sector;
 use App\Models\User;
 use App\Notifications\ObservacionAsignadaNotification;
+use App\Notifications\ObservacionCriticaNotification;
 use App\Notifications\ObservacionFinalizadaNotification;
 
 /**
@@ -56,6 +57,8 @@ class ObservacionObserver
             ));
         }
 
+        $this->avisarSiPasoACritica($observacion);
+
         if (! $observacion->wasChanged('estado') || ! $observacion->estaFinalizada()) {
             return;
         }
@@ -74,6 +77,37 @@ class ObservacionObserver
         }
 
         User::find($observacion->responsable_id)?->notify(new ObservacionAsignadaNotification($observacion));
+    }
+
+    /**
+     * Aviso al responsable cuando el caso entra en prioridad crítica.
+     *
+     * Tres condiciones que valen la pena tener presentes:
+     *
+     * - Solo al **entrar** en crítica (`wasChanged` + valor nuevo), no ante
+     *   cualquier movimiento de prioridad.
+     * - **No** si en el mismo guardado cambió el responsable: el aviso de
+     *   asignación ya viaja con la prioridad nueva y sale en rojo, así que este
+     *   sería el mismo hecho contado dos veces.
+     * - **No** a quien hizo el cambio. Cuando Calidad clasifica un caso de otra
+     *   persona el aviso sirve; cuando el propio responsable se lo marca
+     *   crítico, avisarle de su propia acción es ruido.
+     */
+    private function avisarSiPasoACritica(Observacion $observacion): void
+    {
+        if (! $observacion->wasChanged('prioridad') || $observacion->prioridad !== 'critica') {
+            return;
+        }
+
+        if ($observacion->wasChanged('responsable_id') || $observacion->responsable_id === null) {
+            return;
+        }
+
+        if ($observacion->responsable_id === auth()->id()) {
+            return;
+        }
+
+        User::find($observacion->responsable_id)?->notify(new ObservacionCriticaNotification($observacion));
     }
 
     /**

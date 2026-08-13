@@ -6,6 +6,7 @@ use App\Models\Observacion;
 use App\Models\Sector;
 use App\Models\User;
 use App\Notifications\ObservacionAsignadaNotification;
+use App\Notifications\ObservacionCriticaNotification;
 use App\Notifications\ObservacionEscaladaNotification;
 use App\Notifications\ObservacionFinalizadaNotification;
 use App\Notifications\ObservacionVencidaNotification;
@@ -74,6 +75,83 @@ class AlertasObservacionTest extends TestCase
                 && $notificacion->toArray($responsable)['observacion_id'] === $observacion->id
                 && $notificacion->via($responsable) === ['database', 'broadcast'],
         );
+    }
+
+    // ── Paso a prioridad crítica ─────────────────────────────────────────────
+
+    public function test_pasar_a_critica_le_avisa_al_responsable(): void
+    {
+        Notification::fake();
+        $responsable = $this->responsable();
+        $observacion = $this->observacion(['responsable_id' => $responsable->id, 'prioridad' => 'alta']);
+
+        $observacion->update(['prioridad' => 'critica']);
+
+        Notification::assertSentTo(
+            $responsable,
+            ObservacionCriticaNotification::class,
+            fn ($n) => $n->toArray($responsable)['prioridad'] === 'critica'
+                && $n->via($responsable) === ['database', 'broadcast'],
+        );
+    }
+
+    /** Solo se avisa al entrar en crítica, no ante cualquier movimiento. */
+    public function test_bajar_de_critica_no_avisa(): void
+    {
+        Notification::fake();
+        $responsable = $this->responsable();
+        $observacion = $this->observacion(['responsable_id' => $responsable->id, 'prioridad' => 'critica']);
+
+        $observacion->update(['prioridad' => 'alta']);
+
+        Notification::assertNotSentTo($responsable, ObservacionCriticaNotification::class);
+    }
+
+    public function test_guardar_sin_tocar_la_prioridad_no_reavisa(): void
+    {
+        $responsable = $this->responsable();
+        $observacion = $this->observacion(['responsable_id' => $responsable->id, 'prioridad' => 'critica']);
+
+        Notification::fake();
+        $observacion->update(['estado' => 'en_proceso']);
+
+        Notification::assertNotSentTo($responsable, ObservacionCriticaNotification::class);
+    }
+
+    /** El aviso de asignación ya viaja en rojo con la prioridad nueva. */
+    public function test_si_ademas_cambia_el_responsable_solo_avisa_la_asignacion(): void
+    {
+        Notification::fake();
+        $observacion = $this->observacion(['responsable_id' => $this->responsable()->id, 'prioridad' => 'alta']);
+        $nuevo = $this->responsable();
+
+        $observacion->update(['prioridad' => 'critica', 'responsable_id' => $nuevo->id]);
+
+        Notification::assertSentTo($nuevo, ObservacionAsignadaNotification::class);
+        Notification::assertNotSentTo($nuevo, ObservacionCriticaNotification::class);
+    }
+
+    /** Avisarle a alguien de su propia acción es ruido. */
+    public function test_no_le_avisa_a_quien_hizo_el_cambio(): void
+    {
+        Notification::fake();
+        $responsable = $this->responsable();
+        $observacion = $this->observacion(['responsable_id' => $responsable->id, 'prioridad' => 'alta']);
+
+        $this->actingAs($responsable);
+        $observacion->update(['prioridad' => 'critica']);
+
+        Notification::assertNotSentTo($responsable, ObservacionCriticaNotification::class);
+    }
+
+    public function test_sin_responsable_no_avisa_a_nadie(): void
+    {
+        Notification::fake();
+        $observacion = $this->observacion(['prioridad' => 'alta']);
+
+        $observacion->update(['prioridad' => 'critica']);
+
+        Notification::assertNothingSent();
     }
 
     /** El toast y la campana pintan en rojo desde este campo del payload. */
