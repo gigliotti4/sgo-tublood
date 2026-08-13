@@ -6,6 +6,7 @@ use App\Models\Cliente;
 use App\Models\Observacion;
 use App\Models\Sector;
 use App\Models\User;
+use App\Notifications\ObservacionAsignadaNotification;
 use App\Notifications\ObservacionExternaRecibidaNotification;
 use App\Notifications\ObservacionRecibidaClienteNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -43,6 +44,17 @@ class ObservacionPublicaTest extends TestCase
                     'tipo_comprobante' => 'remito',
                 ],
             ],
+        ];
+    }
+
+    private function datosDisconformidad(): array
+    {
+        return [
+            'tipo' => 'disconformidad_servicio',
+            'contacto_nombre' => 'Cliente de Prueba SA',
+            'contacto_email' => 'cliente@example.com',
+            'titulo' => 'Demora en la entrega',
+            'descripcion' => 'El pedido llegó tarde.',
         ];
     }
 
@@ -363,6 +375,122 @@ class ObservacionPublicaTest extends TestCase
     }
 
     // ── mail_nuevo ───────────────────────────────────────────────────────────
+
+    // ── Asignación automática del responsable ────────────────────────────────
+
+    public function test_una_falla_de_producto_queda_asignada_a_calidad_de_producto(): void
+    {
+        $producto = $this->conRol('calidad_producto');
+        $this->conRol('calidad_servicio');
+
+        $this->post('/cargar-observacion', $this->datosFallaProducto());
+
+        $this->assertSame($producto->id, Observacion::first()->responsable_id);
+    }
+
+    public function test_una_disconformidad_queda_asignada_a_calidad_de_servicio(): void
+    {
+        $this->conRol('calidad_producto');
+        $servicio = $this->conRol('calidad_servicio');
+
+        $this->post('/cargar-observacion', $this->datosDisconformidad());
+
+        $this->assertSame($servicio->id, Observacion::first()->responsable_id);
+    }
+
+    /**
+     * Sin un orden explícito el ganador dependería del motor de base de datos.
+     */
+    public function test_con_dos_personas_en_el_rol_gana_la_de_id_mas_bajo(): void
+    {
+        $primera = $this->conRol('calidad_producto');
+        $this->conRol('calidad_producto');
+
+        $this->post('/cargar-observacion', $this->datosFallaProducto());
+
+        $this->assertSame($primera->id, Observacion::first()->responsable_id);
+    }
+
+    /**
+     * La regresión que más importa: el portal es público y un reclamo no puede
+     * fallar porque falte configurar un rol.
+     */
+    public function test_sin_nadie_con_el_rol_el_reclamo_entra_sin_responsable(): void
+    {
+        Notification::fake();
+
+        $sector = Sector::create(['nombre' => 'Garantía de Calidad', 'slug' => 'garantia_calidad']);
+        $delSector = User::factory()->create(['sector_id' => $sector->id]);
+
+        $this->post('/cargar-observacion', $this->datosFallaProducto())
+            ->assertRedirect(route('observaciones.public.confirmacion'));
+
+        $this->assertNull(Observacion::first()->responsable_id);
+        Notification::assertSentTo($delSector, ObservacionExternaRecibidaNotification::class);
+    }
+
+    /** El plazo sale del sector del responsable, en días hábiles. */
+    public function test_asignar_al_entrar_arranca_el_reloj_de_gestion(): void
+    {
+        $sector = Sector::create([
+            'nombre' => 'Garantía de Calidad',
+            'slug' => 'garantia_calidad',
+            'dias_gestion' => 3,
+        ]);
+        $producto = $this->conRol('calidad_producto');
+        $producto->update(['sector_id' => $sector->id]);
+
+        $this->post('/cargar-observacion', $this->datosFallaProducto());
+
+        $observacion = Observacion::first();
+        $this->assertNotNull($observacion->responsable_asignado_at);
+        $this->assertNotNull($observacion->vence_at);
+    }
+
+    /** Sin sector cargado no hay contra qué medir: entra igual, pero sin reloj. */
+    public function test_un_responsable_sin_sector_deja_la_observacion_sin_vencimiento(): void
+    {
+        $this->conRol('calidad_producto');
+
+        $this->post('/cargar-observacion', $this->datosFallaProducto());
+
+        $observacion = Observacion::first();
+        $this->assertNotNull($observacion->responsable_id);
+        $this->assertNull($observacion->vence_at);
+    }
+
+    /**
+     * Quien recibe el reclamo por ser el responsable no recibe además el aviso
+     * de asignación: sería el mismo hecho contado dos veces.
+     */
+    public function test_no_manda_el_aviso_de_asignacion_ademas_del_de_reclamo_nuevo(): void
+    {
+        Notification::fake();
+
+        $producto = $this->conRol('calidad_producto');
+
+        $this->post('/cargar-observacion', $this->datosFallaProducto());
+
+        Notification::assertSentTo($producto, ObservacionExternaRecibidaNotification::class);
+        Notification::assertNotSentTo($producto, ObservacionAsignadaNotification::class);
+    }
+
+    /**
+     * La bandera que silencia el aviso vive solo en memoria, así que no puede
+     * colarse en una reasignación posterior: ahí el aviso sí corresponde.
+     */
+    public function test_reasignar_despues_si_manda_el_aviso_de_asignacion(): void
+    {
+        $this->conRol('calidad_producto');
+        $this->post('/cargar-observacion', $this->datosFallaProducto());
+
+        Notification::fake();
+        $otro = User::factory()->create();
+
+        Observacion::first()->update(['responsable_id' => $otro->id]);
+
+        Notification::assertSentTo($otro, ObservacionAsignadaNotification::class);
+    }
 
     public function test_guarda_el_mail_del_cliente_como_mail_nuevo(): void
     {

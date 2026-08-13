@@ -39,6 +39,22 @@ class Observacion extends Model
      */
     public const ESTADOS_ABIERTOS = ['pendiente_clasificacion', 'clasificada', 'en_proceso', 'derivada'];
 
+    /**
+     * Bandera en memoria (no es columna): la usa el alta del portal para que el
+     * observer no mande el aviso de asignación.
+     *
+     * El reclamo externo entra ya asignado según el tipo, y a esa persona
+     * `Portal\ObservacionController::avisar()` le manda el aviso de "reclamo
+     * nuevo". Sin esto recibiría además el de "te asignaron", que es el mismo
+     * hecho contado dos veces.
+     *
+     * No alcanza con mirar `origen === 'externa'` en el observer: una externa
+     * cargada a mano desde el panel también elige responsable, y ahí el aviso
+     * de asignación sí corresponde. Lo que distingue los dos casos es quién
+     * asignó, no de dónde viene el reclamo.
+     */
+    public bool $omitirAvisoDeAsignacion = false;
+
     protected $table = 'observations';
 
     protected $fillable = [

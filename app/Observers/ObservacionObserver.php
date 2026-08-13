@@ -66,6 +66,13 @@ class ObservacionObserver
 
     public function created(Observacion $observacion): void
     {
+        // El alta del portal asigna sola por tipo y avisa con "entró un reclamo
+        // nuevo"; sumarle el de asignación sería contar el mismo hecho dos
+        // veces. Ver `Observacion::$omitirAvisoDeAsignacion`.
+        if ($observacion->omitirAvisoDeAsignacion) {
+            return;
+        }
+
         User::find($observacion->responsable_id)?->notify(new ObservacionAsignadaNotification($observacion));
     }
 

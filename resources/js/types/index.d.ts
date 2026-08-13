@@ -31,6 +31,8 @@ export interface AlertaNotificacion {
         titulo: string
         mensaje: string
         url: string
+        /** `null` mientras el caso no esté clasificado. Pinta el aviso en rojo si es `critica`. */
+        prioridad: string | null
     }
 }
 
@@ -47,6 +49,12 @@ export interface ObservacionSinClasificar {
     origen: 'interna' | 'externa'
     contacto_nombre: string | null
     created_at: string
+    /**
+     * `null` mientras el caso no esté clasificado, que es el estado de todo
+     * reclamo recién entrado: el rojo aparece en los bloques "a tu cargo" y
+     * "en seguimiento", no en "Entró un reclamo nuevo".
+     */
+    prioridad: string | null
     /** Solo viaja en `asignadas`: los sin clasificar están todos en el mismo estado. */
     estado?: string
 }

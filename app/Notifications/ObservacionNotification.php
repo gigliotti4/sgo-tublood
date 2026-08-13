@@ -85,6 +85,10 @@ abstract class ObservacionNotification extends Notification implements ShouldQue
             'titulo' => $this->observacion->titulo,
             'mensaje' => $this->mensaje(),
             'url' => route('observaciones.show', $this->observacion),
+            // Viaja a los dos canales de una (`toBroadcast` reenvía esto tal
+            // cual) para que el toast y la campana puedan pintar en rojo un
+            // caso crítico. Es `null` mientras no esté clasificado.
+            'prioridad' => $this->observacion->prioridad,
         ];
     }
 }

@@ -103,7 +103,7 @@ class ObservacionController extends Controller
             // el reclamo se guarda igual — nunca se pierde por esto.
             $sectorId = Sector::where('slug', TaxonomiaIncidencias::sectorDeTipo($data['tipo']))->value('id');
 
-            $observacion = Observacion::create([
+            $observacion = new Observacion([
                 ...Arr::except($data, ['productos', 'attachments']),
                 'numero' => $numero,
                 'anio' => $anio,
@@ -111,7 +111,14 @@ class ObservacionController extends Controller
                 'origen' => 'externa',
                 'cliente_id' => $clienteId,
                 'sector_id' => $sectorId,
+                'responsable_id' => $this->responsableDelTipo($data['tipo']),
             ]);
+
+            // La persona que queda a cargo se entera por el aviso de reclamo
+            // nuevo que manda `avisar()`; el de asignación sería el mismo hecho
+            // contado dos veces.
+            $observacion->omitirAvisoDeAsignacion = true;
+            $observacion->save();
 
             foreach ($data['productos'] ?? [] as $producto) {
                 $observacion->productos()->create($producto);
@@ -167,6 +174,32 @@ class ObservacionController extends Controller
         } catch (Throwable $e) {
             Log::error("No se pudieron enviar los avisos de la observación {$observacion->numero}: {$e->getMessage()}");
         }
+    }
+
+    /**
+     * A quién queda asignado el reclamo, según el **tipo**: el mapeo
+     * `incidencias.roles_por_tipo` reparte los dos tipos del portal dentro de
+     * Garantía de Calidad (falla de producto y disconformidad de servicio los
+     * atienden personas distintas). Se asigna por rol y no por usuario fijo:
+     * cambiar de responsable es mover el rol desde el panel, sin tocar código.
+     *
+     * Devuelve `null` si nadie tiene el rol, y ahí el reclamo se guarda sin
+     * responsable igual que antes: `avisar()` cae a su fallback y el caso queda
+     * a la vista de todo el equipo de Calidad. El portal es público y un
+     * reclamo no puede fallar porque falte configurar un rol.
+     *
+     * Si hay más de una persona con el rol gana la de `id` más bajo: sin un
+     * orden explícito el resultado dependería del motor de base de datos.
+     */
+    private function responsableDelTipo(?string $tipo): ?int
+    {
+        $rol = TaxonomiaIncidencias::rolDeTipo($tipo);
+
+        if ($rol === null) {
+            return null;
+        }
+
+        return $this->porRol($rol)->orderBy('id')->value('id');
     }
 
     /** Usuarios con el rol que atiende ese tipo de reclamo. */

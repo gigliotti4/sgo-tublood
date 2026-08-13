@@ -76,6 +76,34 @@ class AlertasObservacionTest extends TestCase
         );
     }
 
+    /** El toast y la campana pintan en rojo desde este campo del payload. */
+    public function test_el_payload_del_aviso_lleva_la_prioridad(): void
+    {
+        Notification::fake();
+        $responsable = $this->responsable();
+        $this->observacion(['responsable_id' => $responsable->id, 'prioridad' => 'critica']);
+
+        Notification::assertSentTo(
+            $responsable,
+            ObservacionAsignadaNotification::class,
+            fn ($notificacion) => $notificacion->toArray($responsable)['prioridad'] === 'critica',
+        );
+    }
+
+    public function test_el_payload_lleva_la_prioridad_en_null_si_no_esta_clasificada(): void
+    {
+        Notification::fake();
+        $responsable = $this->responsable();
+        $this->observacion(['responsable_id' => $responsable->id]);
+
+        Notification::assertSentTo(
+            $responsable,
+            ObservacionAsignadaNotification::class,
+            fn ($notificacion) => array_key_exists('prioridad', $notificacion->toArray($responsable))
+                && $notificacion->toArray($responsable)['prioridad'] === null,
+        );
+    }
+
     public function test_observacion_critica_marca_el_asunto_del_mail(): void
     {
         Notification::fake();

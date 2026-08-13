@@ -129,7 +129,7 @@ class HandleInertiaRequests extends Middleware
             ->when($tipos !== null, fn ($q) => $q->whereIn('tipo', $tipos))
             ->latest()
             ->limit(20)
-            ->get(['id', 'numero', 'titulo', 'origen', 'contacto_nombre', 'created_at']);
+            ->get(['id', 'numero', 'titulo', 'origen', 'contacto_nombre', 'prioridad', 'created_at']);
     }
 
     /**
@@ -181,7 +181,7 @@ class HandleInertiaRequests extends Middleware
         return Observacion::aCargoDe($user)
             ->latest()
             ->limit(20)
-            ->get(['id', 'numero', 'titulo', 'estado', 'origen', 'contacto_nombre', 'created_at']);
+            ->get(['id', 'numero', 'titulo', 'estado', 'origen', 'contacto_nombre', 'prioridad', 'created_at']);
     }
 
     /**
@@ -204,6 +204,6 @@ class HandleInertiaRequests extends Middleware
         return Observacion::seguidasPor($user)
             ->latest()
             ->limit(20)
-            ->get(['id', 'numero', 'titulo', 'estado', 'origen', 'contacto_nombre', 'created_at']);
+            ->get(['id', 'numero', 'titulo', 'estado', 'origen', 'contacto_nombre', 'prioridad', 'created_at']);
     }
 }

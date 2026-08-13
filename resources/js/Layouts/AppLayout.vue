@@ -65,6 +65,8 @@ interface NotificacionTiempoReal {
     titulo: string
     mensaje: string
     url: string
+    /** `null` mientras el caso no esté clasificado. */
+    prioridad: string | null
 }
 
 interface ToastNotificacion extends NotificacionTiempoReal {
@@ -123,8 +125,15 @@ const abrirToast = (toast: ToastNotificacion) => {
     router.visit(toast.url)
 }
 
-const estiloToast = (tipo: string) => {
-    if (tipo === 'observacion_vencida' || tipo === 'observacion_escalada') {
+const esCritica = (prioridad: string | null | undefined) => prioridad === 'critica'
+
+/**
+ * La criticidad manda sobre el tipo de aviso: un caso crítico se pinta rojo
+ * aunque el aviso sea de asignación o de seguimiento. Reusa el mismo rojo que
+ * ya usan vencida y escalada para no inventar un tono nuevo.
+ */
+const estiloToast = ({ tipo, prioridad }: ToastNotificacion) => {
+    if (esCritica(prioridad) || tipo === 'observacion_vencida' || tipo === 'observacion_escalada') {
         return 'border-error-200 bg-error-50 text-error-700 dark:border-error-500/30 dark:bg-gray-900 dark:text-error-300'
     }
     if (tipo === 'observacion_finalizada') {
@@ -387,10 +396,21 @@ const icons: Record<string, string> = {
                     v-for="toast in toasts"
                     :key="toast.id"
                     class="pointer-events-auto flex items-start gap-3 rounded-lg border p-3 shadow-theme-lg"
-                    :class="estiloToast(toast.tipo)"
+                    :class="estiloToast(toast)"
                 >
                     <button type="button" class="min-w-0 flex-1 text-left" @click="abrirToast(toast)">
-                        <p class="text-xs font-semibold uppercase">Nueva notificación</p>
+                        <p class="flex items-center gap-2 text-xs font-semibold uppercase">
+                            Nueva notificación
+                            <!-- El chip además del color: un rojo sobre ámbar no
+                                 se distingue de un vistazo, y hay gente que no
+                                 diferencia esos dos tonos. -->
+                            <span
+                                v-if="esCritica(toast.prioridad)"
+                                class="rounded-full bg-error-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white"
+                            >
+                                Crítica
+                            </span>
+                        </p>
                         <p class="mt-0.5 truncate text-sm font-semibold">{{ toast.numero }} - {{ toast.titulo }}</p>
                         <p class="mt-1 line-clamp-2 text-xs opacity-80">{{ toast.mensaje }}</p>
                     </button>
@@ -774,11 +794,20 @@ const icons: Record<string, string> = {
                     <li v-for="o in bloque.items" :key="o.id">
                         <button
                             type="button"
-                            class="flex w-full cursor-pointer items-start justify-between gap-4 px-1 py-3.5 text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
+                            class="flex w-full cursor-pointer items-start justify-between gap-4 py-3.5 text-left transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
+                            :class="esCritica(o.prioridad)
+                                ? 'border-l-2 border-error-500 bg-error-50/40 pl-3 dark:bg-error-500/10'
+                                : 'px-1'"
                             @click="cerrarAvisos(o.id)"
                         >
                             <div class="min-w-0">
                                 <p class="truncate text-sm font-medium text-gray-800 dark:text-white/90">
+                                    <span
+                                        v-if="esCritica(o.prioridad)"
+                                        class="mr-1.5 rounded-full bg-error-500 px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none text-white"
+                                    >
+                                        Crítica
+                                    </span>
                                     {{ o.numero }} — {{ o.titulo }}
                                 </p>
                                 <p class="mt-0.5 text-theme-xs text-gray-500 dark:text-gray-400">
