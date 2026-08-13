@@ -62,6 +62,7 @@ const formatFecha = (d: string | null) => {
 const showImportModal = ref(false)
 const importForm = useForm({
     archivo: null as File | null,
+    crear_faltantes: false,
 })
 
 const onArchivoChange = (e: Event) => {
@@ -131,6 +132,7 @@ const submitImport = () => {
                             <tr class="border-b border-gray-100 dark:border-gray-800">
                                 <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Código</th>
                                 <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Descripción</th>
+                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Proveedor</th>
                                 <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">PM</th>
                                 <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Legajo</th>
                                 <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Vencimiento</th>
@@ -140,7 +142,7 @@ const submitImport = () => {
                         </thead>
                         <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
                             <tr v-if="articulos.data.length === 0">
-                                <td colspan="7" class="px-4 py-12 text-center text-sm text-gray-400">
+                                <td colspan="8" class="px-4 py-12 text-center text-sm text-gray-400">
                                     <template v-if="search">
                                         No se encontraron artículos para "<span class="font-medium">{{ search }}</span>".
                                     </template>
@@ -161,6 +163,7 @@ const submitImport = () => {
                                         {{ articulo.descripcion_adicional }}
                                     </span>
                                 </td>
+                                <td class="max-w-52 truncate px-4 py-3.5 text-theme-xs text-gray-600 dark:text-gray-300">{{ articulo.proveedor?.razon_social ?? '—' }}</td>
                                 <td class="px-4 py-3.5 text-theme-xs text-gray-600 dark:text-gray-300">{{ articulo.pm ?? '—' }}</td>
                                 <td class="px-4 py-3.5 text-theme-xs text-gray-600 dark:text-gray-300">{{ articulo.legajo ?? '—' }}</td>
                                 <td class="px-4 py-3.5 text-theme-xs text-gray-500 dark:text-gray-400">{{ formatFecha(articulo.fecha_vencimiento) }}</td>
@@ -199,6 +202,7 @@ const submitImport = () => {
                             </Link>
                         </template>
                         <template #body>
+                            <DataRow label="Proveedor">{{ articulo.proveedor?.razon_social ?? '—' }}</DataRow>
                             <DataRow label="PM">{{ articulo.pm ?? '—' }}</DataRow>
                             <DataRow label="Legajo">{{ articulo.legajo ?? '—' }}</DataRow>
                             <DataRow label="Vencimiento">{{ formatFecha(articulo.fecha_vencimiento) }}</DataRow>
@@ -238,12 +242,33 @@ const submitImport = () => {
                     </p>
                     <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
                         Con encabezado, buscado por nombre de columna (no importa el orden ni si hay huecos):
-                        <strong>código de artículo</strong>, <strong>fecha de vencimiento</strong>,
-                        <strong>PM</strong>, <strong>legajo</strong> y <strong>observaciones</strong>.
-                        Solo se actualizan artículos que ya estén en el catálogo; un código que no matchea
-                        queda avisado, no se crea.
+                        <strong>código de artículo</strong>, <strong>descripción</strong>,
+                        <strong>fecha de vencimiento</strong>, <strong>PM</strong>, <strong>legajo</strong>,
+                        <strong>observaciones</strong> y <strong>proveedor</strong> (la razón social, como en
+                        <code>proveedor_principal</code>). Se usan solo las columnas que estén; las celdas
+                        vacías no pisan lo que ya está cargado.
+                    </p>
+                    <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                        El proveedor se busca en el padrón por razón social, ignorando puntos y espacios.
                     </p>
                 </div>
+
+                <label class="flex cursor-pointer items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+                    <input
+                        v-model="importForm.crear_faltantes"
+                        type="checkbox"
+                        class="mt-0.5 h-4 w-4 shrink-0 rounded accent-brand-500 dark:accent-brand-400"
+                    />
+                    <span>
+                        Crear los artículos y proveedores que falten
+                        <span class="block text-xs text-gray-500 dark:text-gray-400">
+                            Los artículos se dan de alta con la columna de descripción, y los proveedores con
+                            su razón social (sin número, que se completa solo al importar el padrón). Sin
+                            tildar, lo que no esté cargado se saltea con aviso — que es lo que corresponde
+                            para la planilla de Calidad.
+                        </span>
+                    </span>
+                </label>
 
                 <div class="flex gap-3 pt-2">
                     <Button type="submit" variant="primary" :disabled="importForm.processing">

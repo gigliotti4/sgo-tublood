@@ -19,6 +19,7 @@ class ArticuloController extends Controller
         $search = $request->string('search')->trim()->value();
 
         $articulos = Articulo::query()
+            ->with('proveedor:id,numero,razon_social')
             ->when($search, fn ($q) => $q->buscar($search))
             ->orderBy('descripcion')
             ->paginate(50)
@@ -48,7 +49,7 @@ class ArticuloController extends Controller
         $this->authorize('articulos.edit');
 
         return inertia('Admin/Articulos/Edit', [
-            'articulo' => $articulo,
+            'articulo' => $articulo->load('proveedor:id,numero,razon_social'),
         ]);
     }
 
@@ -62,6 +63,7 @@ class ArticuloController extends Controller
             'legajo' => ['nullable', 'string', 'max:255'],
             'observaciones' => ['nullable', 'string'],
             'link_registro' => ['nullable', 'url', 'max:500'],
+            'proveedor_id' => ['nullable', 'integer', 'exists:proveedores,id'],
         ]);
 
         $articulo->update($data);
@@ -76,16 +78,28 @@ class ArticuloController extends Controller
 
         $data = $request->validate([
             'archivo' => ['required', 'file', 'mimes:xlsx,xls,csv'],
+            'crear_faltantes' => ['boolean'],
         ]);
 
         try {
-            $resultado = $service->import($data['archivo']);
+            $resultado = $service->import($data['archivo'], $request->boolean('crear_faltantes'));
         } catch (\InvalidArgumentException $e) {
             return redirect()->route('articulos.index')->with('error', $e->getMessage());
         }
 
-        $redirect = redirect()->route('articulos.index')
-            ->with('success', "Importación completa: {$resultado['actualizados']} artículos actualizados.");
+        $mensaje = "Importación completa: {$resultado['actualizados']} artículos actualizados";
+
+        if ($resultado['creados'] > 0) {
+            $mensaje .= ", {$resultado['creados']} creados";
+        }
+
+        if ($resultado['proveedoresCreados'] > 0) {
+            $mensaje .= ", {$resultado['proveedoresCreados']} proveedores nuevos";
+        }
+
+        $mensaje .= '.';
+
+        $redirect = redirect()->route('articulos.index')->with('success', $mensaje);
 
         if ($resultado['advertencias'] !== []) {
             $redirect->with('error', implode(' | ', $resultado['advertencias']));

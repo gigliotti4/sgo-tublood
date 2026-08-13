@@ -5,6 +5,7 @@ import Input from '@/Components/Input.vue'
 import InputFecha from '@/Components/InputFecha.vue'
 import Textarea from '@/Components/Textarea.vue'
 import Button from '@/Components/Button.vue'
+import SelectorProveedor from '@/Components/SelectorProveedor.vue'
 import type { Articulo } from '@/types'
 
 const props = defineProps<{ articulo: Articulo }>()
@@ -15,7 +16,19 @@ const form = useForm({
     legajo: props.articulo.legajo ?? '',
     observaciones: props.articulo.observaciones ?? '',
     link_registro: props.articulo.link_registro ?? '',
+    proveedor_id: props.articulo.proveedor_id ?? null,
 })
+
+// Evita que el selector tenga que buscar el proveedor ya guardado solo para
+// poder mostrar su razón social.
+const proveedorInicial = props.articulo.proveedor
+    ? {
+        id: props.articulo.proveedor.id,
+        label: props.articulo.proveedor.numero
+            ? `${props.articulo.proveedor.razon_social} (N° ${props.articulo.proveedor.numero})`
+            : `${props.articulo.proveedor.razon_social} (sin número)`,
+    }
+    : null
 
 const submit = () => form.put(route('articulos.update', props.articulo.id))
 </script>
@@ -46,7 +59,9 @@ const submit = () => form.put(route('articulos.update', props.articulo.id))
                     <dd class="text-gray-800 dark:text-white/90">{{ articulo.codigo_barras ?? '—' }}</dd>
                     <dt class="text-gray-400">Unidad de medida</dt>
                     <dd class="text-gray-800 dark:text-white/90">{{ articulo.unidad_medida ?? '—' }}</dd>
-                    <dt class="text-gray-400">Proveedor</dt>
+                    <!-- Rotulado "Cód. proveedor (ERP)" y no "Proveedor": el
+                         proveedor de verdad es el del bloque de abajo. -->
+                    <dt class="text-gray-400">Cód. proveedor (ERP)</dt>
                     <dd class="text-gray-800 dark:text-white/90">{{ articulo.codigo_proveedor ?? '—' }}</dd>
                 </dl>
             </div>
@@ -55,6 +70,13 @@ const submit = () => form.put(route('articulos.update', props.articulo.id))
             <div class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
                 <p class="mb-3 text-theme-xs font-medium uppercase tracking-wide text-gray-400">Datos propios</p>
                 <form @submit.prevent="submit" class="space-y-4">
+                    <SelectorProveedor
+                        v-model="form.proveedor_id"
+                        label="Proveedor"
+                        hint="Se completa con el Excel de artículos; acá se corrige a mano si no matcheó."
+                        :inicial="proveedorInicial"
+                        :error="form.errors.proveedor_id"
+                    />
                     <InputFecha
                         v-model="form.fecha_vencimiento"
                         label="Fecha de vencimiento"

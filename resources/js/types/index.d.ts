@@ -67,7 +67,12 @@ export interface Articulo {
     descripcion_agrupacion_3: string | null
     stock: string | null
     stock_disponible: string | null
+    /** String suelto del ERP. No confundir con `proveedor_id`: son padrones distintos. */
     codigo_proveedor: string | null
+    /** FK al padrón local. Campo propio del panel: la sincronización no lo toca. */
+    proveedor_id: number | null
+    /** Solo viaja cuando el controller lo eager-loadea. */
+    proveedor?: { id: number; numero: string | null; razon_social: string } | null
     modificado_en: string | null
     synced_at: string | null
     fecha_vencimiento: string | null

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Jobs\SyncArticulosJob;
 use App\Models\Articulo;
+use App\Models\Proveedor;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
@@ -98,5 +99,50 @@ class ArticuloControllerTest extends TestCase
         $this->assertSame('236-80', $articulo->pm);
         $this->assertSame('133', $articulo->legajo);
         $this->assertSame('Revisar con Calidad', $articulo->observaciones);
+    }
+
+    public function test_update_asigna_y_limpia_el_proveedor(): void
+    {
+        $proveedor = Proveedor::create(['numero' => '1500', 'razon_social' => 'PROPATO HNOS S A I C']);
+        $articulo = Articulo::create(['codigo' => 'RE-1631', 'descripcion' => 'AGUJA 40/12 TERUMO']);
+        $user = $this->userWith('articulos.view', 'articulos.edit');
+
+        $this->actingAs($user)
+            ->put("/articulos/{$articulo->id}", ['proveedor_id' => $proveedor->id])
+            ->assertRedirect(route('articulos.edit', $articulo));
+
+        $this->assertSame($proveedor->id, $articulo->fresh()->proveedor_id);
+
+        $this->actingAs($user)
+            ->put("/articulos/{$articulo->id}", ['proveedor_id' => null])
+            ->assertRedirect(route('articulos.edit', $articulo));
+
+        $this->assertNull($articulo->fresh()->proveedor_id);
+    }
+
+    public function test_update_rechaza_un_proveedor_inexistente(): void
+    {
+        $articulo = Articulo::create(['codigo' => 'RE-1631', 'descripcion' => 'AGUJA 40/12 TERUMO']);
+        $user = $this->userWith('articulos.view', 'articulos.edit');
+
+        $this->actingAs($user)
+            ->put("/articulos/{$articulo->id}", ['proveedor_id' => 99999])
+            ->assertSessionHasErrors('proveedor_id');
+    }
+
+    public function test_el_listado_trae_la_razon_social_del_proveedor(): void
+    {
+        $proveedor = Proveedor::create(['numero' => '1500', 'razon_social' => 'PROPATO HNOS S A I C']);
+        Articulo::create([
+            'codigo' => 'RE-1631',
+            'descripcion' => 'AGUJA 40/12 TERUMO',
+            'proveedor_id' => $proveedor->id,
+        ]);
+        $user = $this->userWith('articulos.view');
+
+        $this->actingAs($user)
+            ->get('/articulos')
+            ->assertInertia(fn ($page) => $page
+                ->where('articulos.data.0.proveedor.razon_social', 'PROPATO HNOS S A I C'));
     }
 }

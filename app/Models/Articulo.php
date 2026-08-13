@@ -4,15 +4,21 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * Artículo del catálogo de RP Sistemas.
  *
  * Los datos del ERP (código, descripción, stock, agrupaciones...) son de solo
  * lectura: los llena `ArticuloSyncService` y se pisan en cada sincronización.
- * `fecha_vencimiento`, `pm`, `legajo` y `observaciones` son la excepción: son
- * propios del panel, se cargan a mano o por Excel, y el `upsert()` del sync
- * **no los toca a propósito** — ver el comentario en `ArticuloSyncService`.
+ * `fecha_vencimiento`, `pm`, `legajo`, `observaciones`, `link_registro` y
+ * `proveedor_id` son la excepción: son propios del panel, se cargan a mano o
+ * por Excel, y el `upsert()` del sync **no los toca a propósito** — ver el
+ * comentario en `ArticuloSyncService`.
+ *
+ * ⚠️ `codigo_proveedor` (string del ERP, se pisa en cada sync) y `proveedor_id`
+ * (FK al padrón local, propia del panel) son dos campos distintos: no está
+ * confirmado que usen la misma numeración.
  */
 class Articulo extends Model
 {
@@ -33,6 +39,7 @@ class Articulo extends Model
         'stock',
         'stock_disponible',
         'codigo_proveedor',
+        'proveedor_id',
         'modificado_en',
         'synced_at',
         'fecha_vencimiento',
@@ -49,6 +56,11 @@ class Articulo extends Model
         'synced_at' => 'datetime',
         'fecha_vencimiento' => 'date',
     ];
+
+    public function proveedor(): BelongsTo
+    {
+        return $this->belongsTo(Proveedor::class);
+    }
 
     /**
      * Búsqueda: por código, descripción, código de barras, PM o legajo.

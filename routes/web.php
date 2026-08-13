@@ -108,6 +108,9 @@ Route::middleware(['auth'])->group(function () {
 
     // Proveedores. Padrón cargado por Excel: no hay sync con RP Sistemas.
     Route::middleware('can:proveedores.view')->group(function () {
+        // Antes de /proveedores/{proveedor}/edit y del index paginado: es el
+        // autocompletado del selector de proveedor de un artículo.
+        Route::get('/proveedores/buscar', [ProveedorController::class, 'buscar'])->name('proveedores.buscar');
         Route::get('/proveedores', [ProveedorController::class, 'index'])->name('proveedores.index');
     });
     // Antes de /proveedores/{proveedor}/edit para que no haya ambigüedad.
