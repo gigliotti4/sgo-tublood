@@ -31,6 +31,7 @@ class Cliente extends Model
         'nombre_vendedor',
         'codigo_postal',
         'fecha_vencimiento',
+        'categoria',
         'synced_at',
     ];
 

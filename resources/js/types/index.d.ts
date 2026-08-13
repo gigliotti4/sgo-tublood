@@ -164,6 +164,7 @@ export interface Cliente {
     nombre_vendedor: string | null
     codigo_postal: string | null
     fecha_vencimiento: string | null
+    categoria: string | null
     synced_at: string | null
     attachments?: ClienteAttachment[]
 }

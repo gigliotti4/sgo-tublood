@@ -112,12 +112,13 @@ const formatFechaVencimiento = (d: string | null) => {
                                 <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Teléfono</th>
                                 <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Mail</th>
                                 <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Vencimiento</th>
+                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Categoría</th>
                                 <th v-if="hasPermission('clientes.edit')" class="px-4 py-3" />
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
                             <tr v-if="clientes.data.length === 0">
-                                <td colspan="9" class="px-4 py-12 text-center text-sm text-gray-400">
+                                <td colspan="10" class="px-4 py-12 text-center text-sm text-gray-400">
                                     <template v-if="search">
                                         No se encontraron clientes para "<span class="font-medium">{{ search }}</span>".
                                     </template>
@@ -151,6 +152,7 @@ const formatFechaVencimiento = (d: string | null) => {
                                     <span v-else>—</span>
                                 </td>
                                 <td class="px-4 py-3.5 text-theme-xs text-gray-500 dark:text-gray-400">{{ formatFechaVencimiento(cliente.fecha_vencimiento) }}</td>
+                                <td class="px-4 py-3.5 text-theme-xs text-gray-500 dark:text-gray-400">{{ cliente.categoria || '—' }}</td>
                                 <td v-if="hasPermission('clientes.edit')" class="px-4 py-3.5 text-right">
                                     <Link
                                         :href="route('clientes.edit', cliente.id)"
@@ -194,6 +196,7 @@ const formatFechaVencimiento = (d: string | null) => {
                                 <span v-else>—</span>
                             </DataRow>
                             <DataRow label="Vencimiento">{{ formatFechaVencimiento(cliente.fecha_vencimiento) }}</DataRow>
+                            <DataRow label="Categoría">{{ cliente.categoria || '—' }}</DataRow>
                         </template>
                     </TableCard>
                 </div>

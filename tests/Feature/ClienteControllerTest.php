@@ -99,6 +99,18 @@ class ClienteControllerTest extends TestCase
         $this->assertSame('2027-01-15', $cliente->fresh()->fecha_vencimiento->toDateString());
     }
 
+    public function test_update_setea_categoria(): void
+    {
+        $cliente = Cliente::create(['numero' => '1', 'razon_social' => 'Empresa Test SA']);
+        $user = $this->userWith('clientes.view', 'clientes.edit');
+
+        $this->actingAs($user)
+            ->put("/clientes/{$cliente->id}", ['categoria' => 'Distribuidor'])
+            ->assertRedirect(route('clientes.edit', $cliente));
+
+        $this->assertSame('Distribuidor', $cliente->fresh()->categoria);
+    }
+
     public function test_los_archivos_van_a_una_carpeta_con_el_numero_de_cliente(): void
     {
         Storage::fake('local');

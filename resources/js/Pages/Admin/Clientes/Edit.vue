@@ -12,6 +12,7 @@ const props = defineProps<{ cliente: Cliente }>()
 const form = useForm({
     fecha_vencimiento: props.cliente.fecha_vencimiento?.slice(0, 10) ?? '',
     mail_nuevo: props.cliente.mail_nuevo ?? '',
+    categoria: props.cliente.categoria ?? '',
 })
 
 const submit = () => form.put(route('clientes.update', props.cliente.id))
@@ -107,6 +108,11 @@ const formatSize = (bytes: number) => {
                         label="Mail de contacto"
                         hint="Se completa solo cuando el cliente carga un reclamo por el portal. La sincronización con RP Sistemas no lo pisa."
                         :error="form.errors.mail_nuevo"
+                    />
+                    <Input
+                        v-model="form.categoria"
+                        label="Categoría"
+                        :error="form.errors.categoria"
                     />
                     <div class="flex gap-3 pt-2">
                         <Button type="submit" variant="primary" :disabled="form.processing">Guardar cambios</Button>
