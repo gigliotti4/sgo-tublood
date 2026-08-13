@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\BajaController;
 use App\Http\Controllers\Admin\BitacoraController;
 use App\Http\Controllers\Admin\ClienteController;
 use App\Http\Controllers\Admin\ObservacionController as AdminObservacionController;
+use App\Http\Controllers\Admin\ProveedorController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\SectorController;
 use App\Http\Controllers\Admin\UserController;
@@ -103,6 +104,19 @@ Route::middleware(['auth'])->group(function () {
     Route::middleware('can:articulos.edit')->group(function () {
         Route::get('/articulos/{articulo}/edit', [AdminArticuloController::class, 'edit'])->name('articulos.edit');
         Route::put('/articulos/{articulo}', [AdminArticuloController::class, 'update'])->name('articulos.update');
+    });
+
+    // Proveedores. Padrón cargado por Excel: no hay sync con RP Sistemas.
+    Route::middleware('can:proveedores.view')->group(function () {
+        Route::get('/proveedores', [ProveedorController::class, 'index'])->name('proveedores.index');
+    });
+    // Antes de /proveedores/{proveedor}/edit para que no haya ambigüedad.
+    Route::middleware('can:proveedores.import')->group(function () {
+        Route::post('/proveedores/import', [ProveedorController::class, 'import'])->name('proveedores.import');
+    });
+    Route::middleware('can:proveedores.edit')->group(function () {
+        Route::get('/proveedores/{proveedor}/edit', [ProveedorController::class, 'edit'])->name('proveedores.edit');
+        Route::put('/proveedores/{proveedor}', [ProveedorController::class, 'update'])->name('proveedores.update');
     });
 
     // Observaciones

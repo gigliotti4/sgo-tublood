@@ -26,6 +26,7 @@ return [
         'observaciones' => 'Observaciones',
         'bitacora' => 'Bitácora',
         'articulos' => 'Artículos',
+        'proveedores' => 'Proveedores',
     ],
 
     'etiquetas' => [
@@ -61,6 +62,10 @@ return [
         'articulos.edit' => ['grupo' => 'articulos', 'label' => 'Editar datos propios de artículos'],
         'articulos.sync' => ['grupo' => 'articulos', 'label' => 'Sincronizar con RP Sistemas'],
         'articulos.import' => ['grupo' => 'articulos', 'label' => 'Importar Excel de artículos'],
+
+        'proveedores.view' => ['grupo' => 'proveedores', 'label' => 'Ver proveedores'],
+        'proveedores.edit' => ['grupo' => 'proveedores', 'label' => 'Editar proveedores'],
+        'proveedores.import' => ['grupo' => 'proveedores', 'label' => 'Importar Excel de proveedores'],
     ],
 
 ];

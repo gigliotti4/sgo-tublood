@@ -77,6 +77,22 @@ export interface Articulo {
     link_registro: string | null
 }
 
+/** Proveedor del padrón. `numero`, `razon_social` y `domicilio` vienen del Excel; el resto se carga a mano en el panel. */
+export interface Proveedor {
+    id: number
+    /** `null` en los que creó el import de artículos: esa planilla no trae el NUM_PROV. */
+    numero: string | null
+    razon_social: string
+    domicilio: string | null
+    cuit: string | null
+    telefono: string | null
+    mail: string | null
+    localidad: string | null
+    observaciones: string | null
+    created_at: string | null
+    updated_at: string | null
+}
+
 export interface ClienteVencimiento {
     id: number
     numero: string
