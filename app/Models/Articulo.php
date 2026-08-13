@@ -39,6 +39,7 @@ class Articulo extends Model
         'pm',
         'legajo',
         'observaciones',
+        'link_registro',
     ];
 
     protected $casts = [

@@ -74,6 +74,7 @@ export interface Articulo {
     pm: string | null
     legajo: string | null
     observaciones: string | null
+    link_registro: string | null
 }
 
 export interface ClienteVencimiento {

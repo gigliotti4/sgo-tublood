@@ -14,6 +14,7 @@ const form = useForm({
     pm: props.articulo.pm ?? '',
     legajo: props.articulo.legajo ?? '',
     observaciones: props.articulo.observaciones ?? '',
+    link_registro: props.articulo.link_registro ?? '',
 })
 
 const submit = () => form.put(route('articulos.update', props.articulo.id))
@@ -74,6 +75,13 @@ const submit = () => form.put(route('articulos.update', props.articulo.id))
                         v-model="form.observaciones"
                         label="Observaciones"
                         :error="form.errors.observaciones"
+                    />
+                    <Input
+                        v-model="form.link_registro"
+                        type="url"
+                        label="Link de registro"
+                        hint="URL del registro del producto médico."
+                        :error="form.errors.link_registro"
                     />
                     <div class="flex gap-3 pt-2">
                         <Button type="submit" variant="primary" :disabled="form.processing">Guardar cambios</Button>

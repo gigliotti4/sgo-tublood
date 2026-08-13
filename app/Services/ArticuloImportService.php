@@ -118,6 +118,7 @@ class ArticuloImportService
             'pm' => $buscar(['pm']),
             'legajo' => $buscar(['legajo']),
             'observaciones' => $buscar(['observacion', 'obs']),
+            'link_registro' => $buscar(['link', 'url', 'registro']),
         ];
     }
 

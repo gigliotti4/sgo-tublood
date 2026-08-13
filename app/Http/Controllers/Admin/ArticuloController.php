@@ -61,6 +61,7 @@ class ArticuloController extends Controller
             'pm' => ['nullable', 'string', 'max:255'],
             'legajo' => ['nullable', 'string', 'max:255'],
             'observaciones' => ['nullable', 'string'],
+            'link_registro' => ['nullable', 'url', 'max:500'],
         ]);
 
         $articulo->update($data);
