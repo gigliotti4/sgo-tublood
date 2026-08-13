@@ -34,7 +34,7 @@ class ObservacionRecibidaClienteNotification extends Notification implements Sho
         return (new MailMessage)
             ->subject("Recibimos tu reclamo — N° {$this->observacion->numero}")
             ->greeting("Hola {$this->observacion->contacto_nombre},")
-            ->line('Recibimos tu reclamo y ya está en revisión por nuestro equipo de Garantía de Calidad.')
+            ->line('Recibimos tu reclamo y ya está en revisión por nuestro equipo de Calidad.')
             ->line("**Número de seguimiento: {$this->observacion->numero}**")
             ->line("Asunto: {$this->observacion->titulo}")
             ->line('Guardá este número: es la referencia para cualquier consulta sobre el caso.')

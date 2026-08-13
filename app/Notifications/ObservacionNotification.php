@@ -53,9 +53,17 @@ abstract class ObservacionNotification extends Notification implements ShouldQue
 
     public function toMail(object $notifiable): MailMessage
     {
-        return (new MailMessage)
-            ->subject($this->asunto())
-            ->greeting("Hola {$notifiable->name},")
+        $critica = $this->observacion->prioridad === 'critica';
+
+        $mail = (new MailMessage)
+            ->subject(($critica ? '🔴 CRÍTICA — ' : '').$this->asunto())
+            ->greeting("Hola {$notifiable->name},");
+
+        if ($critica) {
+            $mail->line('**Esta observación es de prioridad CRÍTICA.**');
+        }
+
+        return $mail
             ->line($this->mensaje())
             ->line("Observación {$this->observacion->numero}: {$this->observacion->titulo}")
             ->action('Ver en el sistema', route('observaciones.show', $this->observacion));

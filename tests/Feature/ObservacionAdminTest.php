@@ -2,11 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Models\Articulo;
 use App\Models\Cliente;
 use App\Models\Observacion;
 use App\Models\Sector;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -192,6 +194,88 @@ class ObservacionAdminTest extends TestCase
             ->assertRedirect(route('observaciones.index'));
 
         $this->assertSame('cerrada', $observacion->fresh()->estado);
+    }
+
+    public function test_update_rechaza_cerrar_a_quien_no_es_super_admin(): void
+    {
+        $user = $this->userWith('observaciones.view');
+
+        $observacion = Observacion::create([
+            'numero' => '0001-26',
+            'anio' => 2026,
+            'tipo' => 'falla_producto',
+            'estado' => 'en_proceso',
+            'contacto_nombre' => 'Cliente Test',
+            'contacto_email' => 'cliente@example.com',
+            'titulo' => 'Título de prueba',
+            'descripcion' => 'Descripción de prueba',
+            'responsable_id' => $user->id,
+        ]);
+
+        $this->actingAs($user)
+            ->put("/observaciones/{$observacion->id}", [
+                'responsable_id' => $user->id,
+                'estado' => 'cerrada',
+            ])
+            ->assertSessionHasErrors('estado');
+
+        $this->assertSame('en_proceso', $observacion->fresh()->estado);
+    }
+
+    public function test_update_rechaza_cancelar_a_quien_no_es_super_admin(): void
+    {
+        $user = $this->userWith('observaciones.view');
+
+        $observacion = Observacion::create([
+            'numero' => '0001-26',
+            'anio' => 2026,
+            'tipo' => 'falla_producto',
+            'estado' => 'en_proceso',
+            'contacto_nombre' => 'Cliente Test',
+            'contacto_email' => 'cliente@example.com',
+            'titulo' => 'Título de prueba',
+            'descripcion' => 'Descripción de prueba',
+            'responsable_id' => $user->id,
+        ]);
+
+        $this->actingAs($user)
+            ->put("/observaciones/{$observacion->id}", [
+                'responsable_id' => $user->id,
+                'estado' => 'cancelada',
+                'motivo' => 'Duplicado de otro caso',
+            ])
+            ->assertSessionHasErrors('estado');
+
+        $this->assertSame('en_proceso', $observacion->fresh()->estado);
+    }
+
+    public function test_update_permite_a_no_admin_seguir_editando_un_caso_ya_cerrado(): void
+    {
+        $user = $this->userWith('observaciones.view');
+
+        $observacion = Observacion::create([
+            'numero' => '0001-26',
+            'anio' => 2026,
+            'tipo' => 'falla_producto',
+            'estado' => 'cerrada',
+            'contacto_nombre' => 'Cliente Test',
+            'contacto_email' => 'cliente@example.com',
+            'titulo' => 'Título de prueba',
+            'descripcion' => 'Descripción de prueba',
+            'responsable_id' => $user->id,
+        ]);
+
+        // Mantener el estado que ya tenía (cerrada) no es una transición: no
+        // debería exigir super-admin, aunque el usuario no lo sea.
+        $this->actingAs($user)
+            ->put("/observaciones/{$observacion->id}", [
+                'responsable_id' => $user->id,
+                'estado' => 'cerrada',
+                'prioridad' => 'alta',
+            ])
+            ->assertRedirect(route('observaciones.index'));
+
+        $this->assertSame('alta', $observacion->fresh()->prioridad);
     }
 
     public function test_create_requiere_permiso_observaciones_edit(): void
@@ -661,6 +745,119 @@ class ObservacionAdminTest extends TestCase
                 ->where('observaciones.data.0.titulo', 'Con producto')
                 ->where('filters.q', 'GUIA-123')
             );
+    }
+
+    public function test_show_muestra_articulo_y_pm_cuando_el_codigo_matchea_el_catalogo(): void
+    {
+        Articulo::create(['codigo' => 'GUIA-123', 'descripcion' => 'Guía de infusión 2m', 'pm' => 'PM 236-80']);
+
+        $observacion = $this->observacion();
+        $observacion->productos()->create([
+            'producto' => 'Guía de infusión',
+            'codigo' => 'GUIA-123',
+            'cantidad_afectada' => 1,
+            'lote' => 'L-1',
+            'fecha_vencimiento' => '2027-01-01',
+            'numero_remito' => 'R-1',
+            'tipo_comprobante' => 'remito',
+        ]);
+
+        $user = $this->userWith('observaciones.view');
+
+        $this->actingAs($user)->get("/observaciones/{$observacion->id}")
+            ->assertInertia(fn ($page) => $page
+                ->where('observacion.productos.0.articulo.descripcion', 'Guía de infusión 2m')
+                ->where('observacion.productos.0.articulo.pm', 'PM 236-80')
+            );
+    }
+
+    public function test_show_no_rompe_cuando_el_codigo_no_matchea_ningun_articulo(): void
+    {
+        $observacion = $this->observacion();
+        $observacion->productos()->create([
+            'producto' => 'Cargado a mano en el portal',
+            'codigo' => 'CODIGO-INEXISTENTE',
+            'cantidad_afectada' => 1,
+            'lote' => 'L-1',
+            'fecha_vencimiento' => '2027-01-01',
+            'numero_remito' => 'R-1',
+            'tipo_comprobante' => 'remito',
+        ]);
+
+        $user = $this->userWith('observaciones.view');
+
+        $this->actingAs($user)->get("/observaciones/{$observacion->id}")
+            ->assertStatus(200)
+            ->assertInertia(fn ($page) => $page
+                ->where('observacion.productos.0.articulo', null)
+            );
+    }
+
+    public function test_filtro_articulo_codigo_es_exacto_no_texto_libre(): void
+    {
+        $conProducto = $this->observacion(['titulo' => 'Con producto']);
+        $conProducto->productos()->create([
+            'producto' => 'Guía de infusión',
+            'codigo' => 'GUIA-123',
+            'cantidad_afectada' => 1,
+            'lote' => 'L-1',
+            'fecha_vencimiento' => '2027-01-01',
+            'numero_remito' => 'R-1',
+            'tipo_comprobante' => 'remito',
+        ]);
+        $otraObservacion = $this->observacion(['titulo' => 'Otro producto']);
+        $otraObservacion->productos()->create([
+            'producto' => 'Otra guía',
+            'codigo' => 'GUIA-999',
+            'cantidad_afectada' => 1,
+            'lote' => 'L-2',
+            'fecha_vencimiento' => '2027-01-01',
+            'numero_remito' => 'R-2',
+            'tipo_comprobante' => 'remito',
+        ]);
+
+        $user = $this->userWith('observaciones.view');
+
+        $this->actingAs($user)->get('/observaciones?'.http_build_query(['articulo_codigo' => ['GUIA-123']]))
+            ->assertInertia(fn ($page) => $page
+                ->has('observaciones.data', 1)
+                ->where('observaciones.data.0.titulo', 'Con producto')
+            );
+    }
+
+    public function test_export_genera_un_xlsx_con_las_filas_filtradas(): void
+    {
+        $this->observacion(['titulo' => 'Incluida', 'anio' => 2026]);
+        $this->observacion(['titulo' => 'De otro año', 'anio' => 2025]);
+
+        $user = $this->userWith('observaciones.view');
+
+        $response = $this->actingAs($user)
+            ->get('/observaciones/export?'.http_build_query(['anio' => [2026]]));
+
+        $response->assertStatus(200);
+        $this->assertSame(
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            $response->headers->get('content-type')
+        );
+
+        $archivo = tempnam(sys_get_temp_dir(), 'xlsx');
+        file_put_contents($archivo, $response->streamedContent());
+
+        $hoja = IOFactory::load($archivo)->getActiveSheet();
+        $filas = $hoja->toArray();
+        unlink($archivo);
+
+        $this->assertSame('N°', $filas[0][0]);
+        $this->assertCount(2, $filas); // encabezado + 1 fila de datos
+        $this->assertSame('Incluida', $filas[1][3]);
+    }
+
+    public function test_export_requiere_permiso_observaciones_view(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->get('/observaciones/export')->assertStatus(403);
     }
 
     public function test_buscador_filtra_abiertas_y_cerradas(): void

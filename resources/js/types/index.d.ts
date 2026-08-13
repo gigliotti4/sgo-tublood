@@ -179,6 +179,8 @@ export interface ObservationProduct {
     fecha_vencimiento: string
     numero_remito: string
     tipo_comprobante: string
+    /** Solo si `codigo` matchea un artículo del catálogo sincronizado. */
+    articulo?: { descripcion: string; pm: string | null } | null
 }
 
 export interface Observacion {

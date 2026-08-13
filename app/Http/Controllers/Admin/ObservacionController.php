@@ -11,8 +11,10 @@ use App\Models\ObservationProduct;
 use App\Models\Sector;
 use App\Models\User;
 use App\Notifications\ObservacionSeguimientoNotification;
+use App\Services\ObservacionExportService;
 use App\Support\TaxonomiaIncidencias;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -33,11 +35,10 @@ class ObservacionController extends Controller
         'Santa Fe', 'Santiago del Estero', 'Tierra del Fuego', 'Tucumán',
     ];
 
-    public function index(Request $request)
+    /** @return array<string, array<int, mixed>> */
+    private function reglasDeFiltros(): array
     {
-        $this->authorize('observaciones.view');
-
-        $filters = $request->validate([
+        return [
             'q' => ['nullable', 'string', 'max:255'],
             'origen' => ['nullable', Rule::in(array_keys(Observacion::ORIGENES))],
             'prioridad' => ['nullable', Rule::in(array_keys(config('incidencias.prioridades')))],
@@ -46,42 +47,64 @@ class ObservacionController extends Controller
             'responsable_id.*' => ['integer', 'exists:users,id'],
             'creado_por' => ['nullable', 'array'],
             'creado_por.*' => ['integer', 'exists:users,id'],
+            'articulo_codigo' => ['nullable', 'array'],
+            'articulo_codigo.*' => ['string'],
             'apertura' => ['nullable', 'in:abierta,cerrada'],
             'desde' => ['nullable', 'date'],
             'hasta' => ['nullable', 'date', 'after_or_equal:desde'],
-        ]);
+            'anio' => ['nullable', 'array'],
+            'anio.*' => ['integer'],
+        ];
+    }
+
+    /**
+     * Mismo filtrado para el listado paginado y para la exportación a Excel:
+     * un solo lugar donde se define qué significa cada filtro.
+     */
+    private function filtrarObservaciones(array $filters): Builder
+    {
+        return Observacion::query()
+            // Texto libre: un solo campo que barre número, título, descripción,
+            // cliente (vinculado o los datos tipeados en el portal) y productos.
+            ->when($filters['q'] ?? null, fn ($query, $q) => $query->where(function ($query) use ($q) {
+                $query->where('numero', 'like', "%{$q}%")
+                    ->orWhere('titulo', 'like', "%{$q}%")
+                    ->orWhere('descripcion', 'like', "%{$q}%")
+                    ->orWhere('contacto_nombre', 'like', "%{$q}%")
+                    ->orWhereHas('cliente', fn ($c) => $c
+                        ->where('razon_social', 'like', "%{$q}%")
+                        ->orWhere('numero', 'like', "%{$q}%"))
+                    ->orWhereHas('productos', fn ($p) => $p
+                        ->where('producto', 'like', "%{$q}%")
+                        ->orWhere('codigo', 'like', "%{$q}%")
+                        ->orWhere('lote', 'like', "%{$q}%"));
+            }))
+            ->when($filters['origen'] ?? null, fn ($query, $v) => $query->where('origen', $v))
+            ->when($filters['prioridad'] ?? null, fn ($query, $v) => $query->where('prioridad', $v))
+            ->when($filters['tipo_caso'] ?? null, fn ($query, $v) => $query->where('tipo_caso', $v))
+            ->when($filters['responsable_id'] ?? null, fn ($query, $v) => $query->whereIn('responsable_id', $v))
+            ->when($filters['creado_por'] ?? null, fn ($query, $v) => $query->whereIn('created_by', $v))
+            ->when($filters['articulo_codigo'] ?? null, fn ($query, $v) => $query->whereHas('productos', fn ($p) => $p->whereIn('codigo', $v)))
+            ->when($filters['apertura'] ?? null, fn ($query, $v) => $v === 'abierta'
+                ? $query->whereIn('estado', Observacion::ESTADOS_ABIERTOS)
+                : $query->whereNotIn('estado', Observacion::ESTADOS_ABIERTOS))
+            ->when($filters['desde'] ?? null, fn ($query, $v) => $query->whereDate('created_at', '>=', $v))
+            ->when($filters['hasta'] ?? null, fn ($query, $v) => $query->whereDate('created_at', '<=', $v))
+            ->when($filters['anio'] ?? null, fn ($query, $v) => $query->whereIn('anio', $v));
+    }
+
+    public function index(Request $request)
+    {
+        $this->authorize('observaciones.view');
+
+        $filters = $request->validate($this->reglasDeFiltros());
 
         return inertia('Admin/Observaciones/Index', [
-            'observaciones' => Observacion::query()
+            'observaciones' => $this->filtrarObservaciones($filters)
                 ->with([
                     'responsable:id,name', 'sector:id,nombre', 'cliente:id,numero,razon_social,mail,telefono', 'productos',
                     ...$this->eagerLoadsDeGestion(),
                 ])
-                // Texto libre: un solo campo que barre número, título, descripción,
-                // cliente (vinculado o los datos tipeados en el portal) y productos.
-                ->when($filters['q'] ?? null, fn ($query, $q) => $query->where(function ($query) use ($q) {
-                    $query->where('numero', 'like', "%{$q}%")
-                        ->orWhere('titulo', 'like', "%{$q}%")
-                        ->orWhere('descripcion', 'like', "%{$q}%")
-                        ->orWhere('contacto_nombre', 'like', "%{$q}%")
-                        ->orWhereHas('cliente', fn ($c) => $c
-                            ->where('razon_social', 'like', "%{$q}%")
-                            ->orWhere('numero', 'like', "%{$q}%"))
-                        ->orWhereHas('productos', fn ($p) => $p
-                            ->where('producto', 'like', "%{$q}%")
-                            ->orWhere('codigo', 'like', "%{$q}%")
-                            ->orWhere('lote', 'like', "%{$q}%"));
-                }))
-                ->when($filters['origen'] ?? null, fn ($query, $v) => $query->where('origen', $v))
-                ->when($filters['prioridad'] ?? null, fn ($query, $v) => $query->where('prioridad', $v))
-                ->when($filters['tipo_caso'] ?? null, fn ($query, $v) => $query->where('tipo_caso', $v))
-                ->when($filters['responsable_id'] ?? null, fn ($query, $v) => $query->whereIn('responsable_id', $v))
-                ->when($filters['creado_por'] ?? null, fn ($query, $v) => $query->whereIn('created_by', $v))
-                ->when($filters['apertura'] ?? null, fn ($query, $v) => $v === 'abierta'
-                    ? $query->whereIn('estado', Observacion::ESTADOS_ABIERTOS)
-                    : $query->whereNotIn('estado', Observacion::ESTADOS_ABIERTOS))
-                ->when($filters['desde'] ?? null, fn ($query, $v) => $query->whereDate('created_at', '>=', $v))
-                ->when($filters['hasta'] ?? null, fn ($query, $v) => $query->whereDate('created_at', '<=', $v))
                 ->latest()
                 ->paginate(20)
                 ->withQueryString(),
@@ -94,7 +117,23 @@ class ObservacionController extends Controller
             'tipoLabels' => TaxonomiaIncidencias::etiquetasTipos(),
             'prioridades' => config('incidencias.prioridades'),
             'tiposCaso' => config('incidencias.tipos_caso'),
+            'aniosDisponibles' => Observacion::query()->select('anio')->distinct()->orderByDesc('anio')->pluck('anio'),
         ]);
+    }
+
+    /** Mismos filtros que index(), pero devuelve todo el resultado como .xlsx en vez de paginar. */
+    public function export(Request $request): StreamedResponse
+    {
+        $this->authorize('observaciones.view');
+
+        $filters = $request->validate($this->reglasDeFiltros());
+
+        $observaciones = $this->filtrarObservaciones($filters)
+            ->with(['responsable:id,name', 'sector:id,nombre', 'cliente:id,razon_social', 'creador:id,name'])
+            ->latest()
+            ->get();
+
+        return (new ObservacionExportService)->exportar($observaciones);
     }
 
     /**
@@ -114,6 +153,7 @@ class ObservacionController extends Controller
                 'sector:id,nombre,dias_gestion',
                 'cliente:id,numero,razon_social,mail,telefono',
                 'productos',
+                'productos.articulo:codigo,descripcion,pm',
                 'baja.user:id,name,apellido',
                 ...$this->eagerLoadsDeGestion(),
             ]),
@@ -555,6 +595,17 @@ class ObservacionController extends Controller
 
         $motivo = $data['motivo'] ?? null;
         unset($data['motivo']);
+
+        // Cerrar y cancelar quedan reservados a super-admin: el resto de las
+        // transiciones de estado (incluida reabrir un caso cerrado/cancelado)
+        // sigue permitido para responsable/sector, como ya autoriza la Policy.
+        if (in_array($data['estado'], ['cerrada', 'cancelada'], true)
+            && $observacion->estado !== $data['estado']
+            && ! $request->user()->hasRole('super-admin')) {
+            throw ValidationException::withMessages([
+                'estado' => 'Solo un Super Admin puede cerrar o cancelar una observación.',
+            ]);
+        }
 
         // Clasificar: si se completó prioridad + tipo de caso y seguía pendiente,
         // pasa automáticamente a "clasificada" (flujo de Garantía de Calidad).

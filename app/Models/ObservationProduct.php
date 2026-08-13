@@ -34,4 +34,14 @@ class ObservationProduct extends Model
     {
         return $this->belongsTo(Observacion::class, 'observation_id');
     }
+
+    /**
+     * Solo de lectura, sin constraint en base: `codigo` es texto libre (puede
+     * venir tipeado a mano desde el portal) y no siempre matchea un artículo
+     * del catálogo sincronizado.
+     */
+    public function articulo(): BelongsTo
+    {
+        return $this->belongsTo(Articulo::class, 'codigo', 'codigo');
+    }
 }

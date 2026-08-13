@@ -57,6 +57,7 @@
             font-size: 7.5pt;
         }
         .chip-alerta { background: #fef2f2; color: #b91c1c; }
+        .valor-critico { color: #b91c1c; font-weight: bold; }
 
         table { width: 100%; border-collapse: collapse; }
 
@@ -114,8 +115,8 @@
     <span class="chip">{{ $observacion->origen === 'interna' ? 'Interna' : 'Externa' }}</span>
     <span class="chip">{{ $estados[$observacion->estado] ?? $observacion->estado }}</span>
     <span class="chip">{{ $tipoLabels[$observacion->tipo] ?? $observacion->tipo }}</span>
-    @if ($observacion->tecnovigilancia)
-        <span class="chip chip-alerta">Tecnovigilancia</span>
+    @if ($observacion->prioridad === 'critica')
+        <span class="chip chip-alerta">Crítica</span>
     @endif
 </div>
 
@@ -125,7 +126,7 @@
         <td class="k">Responsable</td>
         <td class="v">{{ $observacion->responsable?->name ?? 'Sin asignar' }}</td>
         <td class="k">Prioridad</td>
-        <td class="v">{{ $observacion->prioridad ? ($prioridades[$observacion->prioridad] ?? $observacion->prioridad) : 'Sin clasificar' }}</td>
+        <td class="v {{ $observacion->prioridad === 'critica' ? 'valor-critico' : '' }}">{{ $observacion->prioridad ? ($prioridades[$observacion->prioridad] ?? $observacion->prioridad) : 'Sin clasificar' }}</td>
     </tr>
     <tr>
         <td class="k">Sector</td>

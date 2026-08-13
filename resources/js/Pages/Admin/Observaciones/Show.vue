@@ -66,7 +66,7 @@ const humanizar = (clave: string) =>
                     <Badge :variant="estadoVariant[observacion.estado] ?? 'slate'">
                         {{ estadoLabels[observacion.estado] ?? observacion.estado }}
                     </Badge>
-                    <Badge v-if="observacion.tecnovigilancia" variant="red">Tecnovigilancia</Badge>
+                    <Badge v-if="observacion.prioridad === 'critica'" variant="red">Crítica</Badge>
                 </div>
             </div>
             <div class="flex flex-wrap items-center gap-3">
@@ -150,6 +150,8 @@ const humanizar = (clave: string) =>
                                 <tr class="text-left text-gray-400">
                                     <th class="py-1.5 pr-4 font-medium">Código</th>
                                     <th class="py-1.5 pr-4 font-medium">Producto</th>
+                                    <th class="py-1.5 pr-4 font-medium">Artículo</th>
+                                    <th class="py-1.5 pr-4 font-medium">PM</th>
                                     <th class="py-1.5 pr-4 font-medium">Cantidad</th>
                                     <th class="py-1.5 pr-4 font-medium">Presentación</th>
                                     <th class="py-1.5 pr-4 font-medium">Lote</th>
@@ -162,6 +164,8 @@ const humanizar = (clave: string) =>
                                 <tr v-for="p in observacion.productos" :key="p.id" class="text-gray-600 dark:text-gray-300">
                                     <td class="py-2 pr-4">{{ p.codigo ?? '—' }}</td>
                                     <td class="py-2 pr-4">{{ p.producto }}</td>
+                                    <td class="py-2 pr-4">{{ p.articulo?.descripcion ?? '—' }}</td>
+                                    <td class="py-2 pr-4">{{ p.articulo?.pm ?? '—' }}</td>
                                     <td class="py-2 pr-4">{{ p.cantidad_afectada }}</td>
                                     <td class="py-2 pr-4">{{ p.tipo_presentacion ? (presentaciones[p.tipo_presentacion] ?? p.tipo_presentacion) : '—' }}</td>
                                     <td class="py-2 pr-4">{{ p.lote }}</td>

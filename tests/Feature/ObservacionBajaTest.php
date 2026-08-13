@@ -10,6 +10,7 @@ use App\Notifications\ObservacionVencidaNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 /**
@@ -196,7 +197,12 @@ class ObservacionBajaTest extends TestCase
 
     public function test_cancelar_con_motivo_registra_la_baja(): void
     {
-        $user = $this->userWith('observaciones.view');
+        // Cancelar queda reservado a super-admin (ver ObservacionAdminTest para
+        // el rechazo a quien no lo es). super-admin saltea el Gate entero, así
+        // que no hace falta darle ningún permiso aparte.
+        $user = User::factory()->create();
+        Role::firstOrCreate(['name' => 'super-admin']);
+        $user->assignRole('super-admin');
         $observacion = $this->observacion(['responsable_id' => $user->id]);
 
         $this->actingAs($user)

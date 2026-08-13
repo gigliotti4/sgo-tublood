@@ -76,6 +76,32 @@ class AlertasObservacionTest extends TestCase
         );
     }
 
+    public function test_observacion_critica_marca_el_asunto_del_mail(): void
+    {
+        Notification::fake();
+        $responsable = $this->responsable();
+        $observacion = $this->observacion(['responsable_id' => $responsable->id, 'prioridad' => 'critica']);
+
+        Notification::assertSentTo(
+            $responsable,
+            ObservacionAsignadaNotification::class,
+            fn ($notificacion) => str_starts_with($notificacion->toMail($responsable)->subject, '🔴 CRÍTICA — '),
+        );
+    }
+
+    public function test_observacion_no_critica_no_marca_el_asunto_del_mail(): void
+    {
+        Notification::fake();
+        $responsable = $this->responsable();
+        $observacion = $this->observacion(['responsable_id' => $responsable->id, 'prioridad' => 'alta']);
+
+        Notification::assertSentTo(
+            $responsable,
+            ObservacionAsignadaNotification::class,
+            fn ($notificacion) => ! str_contains($notificacion->toMail($responsable)->subject, 'CRÍTICA'),
+        );
+    }
+
     public function test_el_broadcast_no_necesita_un_worker_permanente(): void
     {
         $responsable = User::factory()->create();

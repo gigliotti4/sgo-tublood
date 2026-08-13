@@ -108,6 +108,7 @@ Route::middleware(['auth'])->group(function () {
     // Observaciones
     Route::middleware('can:observaciones.view')->group(function () {
         Route::get('/observaciones', [AdminObservacionController::class, 'index'])->name('observaciones.index');
+        Route::get('/observaciones/export', [AdminObservacionController::class, 'export'])->name('observaciones.export');
         // El parámetro se llama {attachment} (no {archivo}) porque scopeBindings
         // busca la relación por el plural del nombre: Observacion::attachments().
         Route::get('/observaciones/{observacion}/archivos/{attachment}', [AdminObservacionController::class, 'downloadArchivo'])

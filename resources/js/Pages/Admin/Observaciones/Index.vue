@@ -18,6 +18,7 @@ import TableCard from '@/Components/TableCard.vue'
 import DataRow from '@/Components/DataRow.vue'
 import SelectorUsuarios from '@/Components/SelectorUsuarios.vue'
 import SelectorMultiple from '@/Components/SelectorMultiple.vue'
+import SelectorMultipleAsync, { type OpcionAsync } from '@/Components/SelectorMultipleAsync.vue'
 import Textarea from '@/Components/Textarea.vue'
 import type { Observacion, PaginatedData } from '@/types'
 
@@ -37,9 +38,11 @@ interface Filtros {
     tipo_caso?: string
     responsable_id?: number[]
     creado_por?: number[]
+    articulo_codigo?: string[]
     apertura?: string
     desde?: string
     hasta?: string
+    anio?: number[]
 }
 
 const props = defineProps<{
@@ -51,6 +54,7 @@ const props = defineProps<{
     prioridades: Record<string, string>
     tiposCaso: string[]
     presentaciones: Record<string, string>
+    aniosDisponibles: number[]
 }>()
 
 const { isSuperAdmin, user, hasPermission } = usePermissions()
@@ -77,9 +81,11 @@ const filtros = reactive({
     // "el responsable es cualquiera de estos"), no un solo valor.
     responsable_id: Array.isArray(props.filters.responsable_id) ? props.filters.responsable_id : [] as number[],
     creado_por: Array.isArray(props.filters.creado_por) ? props.filters.creado_por : [] as number[],
+    articulo_codigo: Array.isArray(props.filters.articulo_codigo) ? props.filters.articulo_codigo : [] as string[],
     apertura: props.filters.apertura ?? '',
     desde: props.filters.desde ?? '',
     hasta: props.filters.hasta ?? '',
+    anio: Array.isArray(props.filters.anio) ? props.filters.anio : [] as number[],
 })
 
 const vacio = (v: unknown) => Array.isArray(v) ? v.length === 0 : v === ''
@@ -90,15 +96,19 @@ const hayFiltros = computed(() => Object.values(filtros).some(v => !vacio(v)))
 // sentido filtrar por un parcial y el backend la rechazaría (regla `date`).
 const fechaParcial = (v: string) => v !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(v)
 
+const filtrosVigentes = () => Object.fromEntries(Object.entries(filtros).filter(([, v]) => !vacio(v)))
+
 const aplicarFiltros = () => {
     if (fechaParcial(filtros.desde) || fechaParcial(filtros.hasta)) return
-    const params = Object.fromEntries(Object.entries(filtros).filter(([, v]) => !vacio(v)))
-    router.get(route('observaciones.index'), params, {
+    router.get(route('observaciones.index'), filtrosVigentes(), {
         preserveState: true,
         preserveScroll: true,
         replace: true,
     })
 }
+
+// Descarga directa (no navegación de Inertia): con los mismos filtros que el listado.
+const urlExportar = computed(() => route('observaciones.export', filtrosVigentes()))
 
 // Un solo debounce para todos los filtros: absorbe el tipeo en el campo de
 // texto y hace que "Limpiar" (que resetea todo junto) dispare un único request.
@@ -111,7 +121,7 @@ watch(filtros, () => {
 const limpiarFiltros = () => {
     Object.assign(filtros, {
         q: '', origen: '', prioridad: '', tipo_caso: '',
-        responsable_id: [], creado_por: [], apertura: '', desde: '', hasta: '',
+        responsable_id: [], creado_por: [], articulo_codigo: [], apertura: '', desde: '', hasta: '', anio: [],
     })
 }
 
@@ -173,6 +183,17 @@ const observacionEnEdicion = computed(
     () => props.observaciones.data.find(o => o.id === idEnEdicion.value) ?? null,
 )
 
+/**
+ * Cerrar y cancelar quedan reservados a super-admin (ver ObservacionController::update()).
+ * Un no-admin conserva el estado actual en el select aunque ya sea cerrada/cancelada,
+ * pero no puede elegir ninguno de los dos si el caso está en otro estado.
+ */
+const estadoOpciones = computed(() => Object.entries(estadoLabels).filter(
+    ([estado]) => isSuperAdmin.value
+        || !['cerrada', 'cancelada'].includes(estado)
+        || estado === observacionEnEdicion.value?.estado,
+))
+
 const form = useForm({
     responsable_id: null as number | null,
     sector_id: null as number | null,
@@ -226,6 +247,13 @@ const confirmarBorrado = () => {
 
 const nombreCompleto = (u: UsuarioOption) => [u.name, u.apellido].filter(Boolean).join(' ')
 
+interface ArticuloSugerido { codigo: string; descripcion: string }
+const mapearArticulo = (item: unknown): OpcionAsync => {
+    const a = item as ArticuloSugerido
+
+    return { id: a.codigo, label: `${a.codigo} — ${a.descripcion}` }
+}
+
 /**
  * El sector de la observación **no** recorta la lista de responsables: se puede
  * asignar a cualquiera, porque un caso derivado a un sector lo puede terminar
@@ -259,9 +287,18 @@ const guardar = () => {
     <Head title="Observaciones" />
     <AppLayout>
         <div class="space-y-6">
-            <div>
-                <h1 class="text-xl font-semibold text-gray-800 dark:text-white/90">Observaciones</h1>
-                <p class="mt-0.5 text-theme-sm text-gray-500 dark:text-gray-400">Listado de observaciones cargadas en el sistema</p>
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <h1 class="text-xl font-semibold text-gray-800 dark:text-white/90">Observaciones</h1>
+                    <p class="mt-0.5 text-theme-sm text-gray-500 dark:text-gray-400">Listado de observaciones cargadas en el sistema</p>
+                </div>
+                <!-- Descarga directa, no navegación de Inertia: por eso <a> y no <Link>. -->
+                <a
+                    :href="urlExportar"
+                    class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-white/[0.05]"
+                >
+                    Exportar a Excel
+                </a>
             </div>
 
             <div class="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
@@ -323,12 +360,30 @@ const guardar = () => {
                             />
                         </div>
 
+                        <div class="xl:col-span-3">
+                            <SelectorMultipleAsync
+                                v-model="filtros.articulo_codigo"
+                                route="articulos.buscar"
+                                label="Producto/Artículo"
+                                placeholder="Todos"
+                                :mapear="mapearArticulo"
+                            />
+                        </div>
+
                         <div class="xl:col-span-2">
                             <InputFecha v-model="filtros.desde" label="Creada desde" />
                         </div>
 
                         <div class="xl:col-span-2">
                             <InputFecha v-model="filtros.hasta" label="Creada hasta" />
+                        </div>
+
+                        <div class="xl:col-span-2">
+                            <SelectorMultiple
+                                v-model="filtros.anio"
+                                label="Año"
+                                :opciones="aniosDisponibles.map(a => ({ id: a, label: String(a) }))"
+                            />
                         </div>
 
                         <div v-if="hayFiltros" class="flex items-end sm:col-span-2 xl:col-span-2">
@@ -372,7 +427,10 @@ const guardar = () => {
                                 <td class="px-5 py-3.5 font-mono text-theme-xs text-gray-500 dark:text-gray-400">{{ o.numero }}</td>
                                 <td class="px-5 py-3.5 text-theme-sm text-gray-600 dark:text-gray-300">{{ tipoLabels[o.tipo] ?? o.tipo }}</td>
                                 <td class="px-5 py-3.5">
-                                    <Badge variant="slate">{{ origenLabels[o.origen] ?? o.origen }}</Badge>
+                                    <div class="flex items-center gap-1.5">
+                                        <Badge variant="slate">{{ origenLabels[o.origen] ?? o.origen }}</Badge>
+                                        <Badge v-if="o.prioridad === 'critica'" variant="red">Crítica</Badge>
+                                    </div>
                                 </td>
                                 <td class="px-5 py-3.5 text-theme-sm font-medium text-gray-800 dark:text-white/90">{{ o.titulo }}</td>
                                 <td class="px-5 py-3.5 text-theme-sm text-gray-600 dark:text-gray-300">
@@ -431,7 +489,10 @@ const guardar = () => {
                 <div v-if="observaciones.data.length" class="space-y-3 p-4 md:hidden">
                     <TableCard v-for="o in observaciones.data" :key="o.id">
                         <template #header>
-                            <p class="truncate text-theme-sm font-medium text-gray-800 dark:text-white/90">{{ o.titulo }}</p>
+                            <div class="flex items-center gap-1.5">
+                                <p class="truncate text-theme-sm font-medium text-gray-800 dark:text-white/90">{{ o.titulo }}</p>
+                                <Badge v-if="o.prioridad === 'critica'" variant="red">Crítica</Badge>
+                            </div>
                             <p class="font-mono text-theme-xs text-gray-400">{{ o.numero }}</p>
                         </template>
                         <template #actions>
@@ -644,7 +705,7 @@ const guardar = () => {
 
                         <FormSection title="Asignación" :columns="1">
                             <Select v-model="form.estado" label="Estado" :error="form.errors.estado">
-                                <option v-for="(label, estado) in estadoLabels" :key="estado" :value="estado">
+                                <option v-for="[estado, label] in estadoOpciones" :key="estado" :value="estado">
                                     {{ label }}
                                 </option>
                             </Select>
