@@ -8,6 +8,7 @@ import Input from '@/Components/Input.vue'
 import Icon from '@/Components/Icon.vue'
 import Button from '@/Components/Button.vue'
 import Pagination from '@/Components/Pagination.vue'
+import ContadorRegistros from '@/Components/ContadorRegistros.vue'
 import TableCard from '@/Components/TableCard.vue'
 import DataRow from '@/Components/DataRow.vue'
 import type { Cliente, PaginatedData } from '@/types'
@@ -16,6 +17,7 @@ const props = defineProps<{
     clientes: PaginatedData<Cliente>
     filters: { search: string }
     lastSync: string | null
+    total: number
 }>()
 
 const { hasPermission } = usePermissions()
@@ -67,7 +69,10 @@ const formatFechaVencimiento = (d: string | null) => {
             <!-- Header -->
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h1 class="text-xl font-semibold text-gray-800 dark:text-white/90">Clientes</h1>
+                    <div class="flex items-center gap-2.5">
+                        <h1 class="text-xl font-semibold text-gray-800 dark:text-white/90">Clientes</h1>
+                        <ContadorRegistros :total="total" :filtrados="clientes.total" />
+                    </div>
                     <p class="mt-0.5 text-theme-sm text-gray-500 dark:text-gray-400">
                         Última sincronización: {{ formatDate(lastSync) }}
                     </p>

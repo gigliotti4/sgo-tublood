@@ -54,6 +54,21 @@ class ArticuloControllerTest extends TestCase
         );
     }
 
+    /** El contador del encabezado necesita el total sin filtrar, no el del paginador. */
+    public function test_el_listado_manda_el_total_sin_filtrar(): void
+    {
+        Articulo::create(['codigo' => 'RE-1631', 'descripcion' => 'AGUJA 40/12 TERUMO']);
+        Articulo::create(['codigo' => 'RE-999', 'descripcion' => 'GASA ESTERIL']);
+
+        $user = $this->userWith('articulos.view');
+
+        $this->actingAs($user)
+            ->get('/articulos?search=AGUJA')
+            ->assertInertia(fn ($page) => $page
+                ->where('total', 2)
+                ->where('articulos.total', 1));
+    }
+
     public function test_sync_requiere_permiso_articulos_sync(): void
     {
         $user = $this->userWith('articulos.view');

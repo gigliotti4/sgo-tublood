@@ -31,6 +31,8 @@ class ArticuloController extends Controller
             'articulos' => $articulos,
             'filters' => ['search' => $search],
             'lastSync' => $lastSync,
+            // Sin filtrar: el paginador ya trae el total de la búsqueda vigente.
+            'total' => Articulo::count(),
         ]);
     }
 

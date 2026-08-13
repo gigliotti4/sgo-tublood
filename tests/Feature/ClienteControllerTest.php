@@ -61,6 +61,21 @@ class ClienteControllerTest extends TestCase
         );
     }
 
+    /** El contador del encabezado necesita el total sin filtrar, no el del paginador. */
+    public function test_el_listado_manda_el_total_sin_filtrar(): void
+    {
+        Cliente::create(['numero' => '1', 'razon_social' => 'Empresa Alpha SA', 'cuit' => '30-1234-0']);
+        Cliente::create(['numero' => '2', 'razon_social' => 'Distribuidora Beta SRL', 'cuit' => '30-9999-0']);
+
+        $user = $this->userWith('clientes.view');
+
+        $this->actingAs($user)
+            ->get('/clientes?search=Alpha')
+            ->assertInertia(fn ($page) => $page
+                ->where('total', 2)
+                ->where('clientes.total', 1));
+    }
+
     public function test_sync_requiere_permiso_clientes_sync(): void
     {
         $user = $this->userWith('clientes.view');

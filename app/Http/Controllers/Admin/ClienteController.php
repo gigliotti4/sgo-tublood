@@ -37,6 +37,8 @@ class ClienteController extends Controller
             'clientes' => $clientes,
             'filters' => ['search' => $search],
             'lastSync' => $lastSync,
+            // Sin filtrar: el paginador ya trae el total de la búsqueda vigente.
+            'total' => Cliente::count(),
         ]);
     }
 
