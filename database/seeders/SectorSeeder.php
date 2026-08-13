@@ -16,9 +16,9 @@ class SectorSeeder extends Seeder
             'logistica' => ['nombre' => 'Logística', 'dias_gestion' => 5],
             'deposito' => ['nombre' => 'Depósito', 'dias_gestion' => 3],
             'comercial' => ['nombre' => 'Comercial', 'dias_gestion' => 2],
-            'comex' => ['nombre' => 'COMEX', 'dias_gestion' => null],
+            'comex' => ['nombre' => 'Compras', 'dias_gestion' => null],
             'asuntos_regulatorios' => ['nombre' => 'Asuntos Regulatorios', 'dias_gestion' => 5],
-            'garantia_calidad' => ['nombre' => 'Garantía de Calidad', 'dias_gestion' => 3],
+            'garantia_calidad' => ['nombre' => 'Calidad', 'dias_gestion' => 3],
             'direccion_tecnica' => ['nombre' => 'Dirección Técnica', 'dias_gestion' => null],
         ];
 
