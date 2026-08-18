@@ -83,12 +83,21 @@ class ClienteSyncTest extends TestCase
         ]);
     }
 
-    public function test_sync_actualiza_datos_del_erp_pero_preserva_fecha_vencimiento(): void
+    /**
+     * El ERP manda los datos comerciales; la clasificación documental es del
+     * panel y la sync (cada 5 minutos) no la puede pisar.
+     */
+    public function test_sync_actualiza_datos_del_erp_pero_preserva_los_campos_propios(): void
     {
         $cliente = Cliente::create([
             'numero' => '1',
             'razon_social' => 'Nombre Viejo SA',
             'fecha_vencimiento' => '2027-06-15',
+            'tipo_cliente' => 'importador',
+            'tiene_legajo' => true,
+            'habilitado' => false,
+            'notas' => 'Pidió prórroga.',
+            'documentacion_completa' => true,
         ]);
 
         Http::fake([
@@ -104,6 +113,11 @@ class ClienteSyncTest extends TestCase
         $cliente->refresh();
         $this->assertSame('Nombre Nuevo SA', $cliente->razon_social);
         $this->assertSame('2027-06-15', $cliente->fecha_vencimiento->toDateString());
+        $this->assertSame('importador', $cliente->tipo_cliente);
+        $this->assertTrue($cliente->tiene_legajo);
+        $this->assertFalse($cliente->habilitado);
+        $this->assertSame('Pidió prórroga.', $cliente->notas);
+        $this->assertTrue($cliente->documentacion_completa);
     }
 
     public function test_sync_es_idempotente(): void

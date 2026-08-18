@@ -207,6 +207,35 @@ export interface ClienteAttachment {
     size: number
     created_at: string
 }
+/** Una fila del checklist de documentación de un cliente. */
+export interface ClienteDocumento {
+    id: number
+    documento: string
+    presentado: boolean
+    fecha_vencimiento: string | null
+}
+/**
+ * Un documento del catálogo del tipo, ya cruzado con lo que el registro tenga
+ * cargado. Lo arma ClienteController::checklist().
+ */
+export interface DocumentoChecklist {
+    documento: string
+    label: string
+    obligatorio: boolean
+    vence: boolean
+    /** Su vencimiento es el del registro ("lo que determina el VTO final"). */
+    determina_vencimiento: boolean
+    presentado: boolean
+    fecha_vencimiento: string | null
+}
+/** El "control automático" de la planilla — ver ClasificacionDocumental. */
+export interface EstadoDocumentacion {
+    completa: boolean
+    faltantes: string[]
+    vencidos: { documento: string; label: string; fecha_vencimiento: string }[]
+    proximo_vencimiento: string | null
+    dias_para_vencer: number | null
+}
 
 export interface Cliente {
     id: number
@@ -230,10 +259,20 @@ export interface Cliente {
     codigo_vendedor: string | null
     nombre_vendedor: string | null
     codigo_postal: string | null
+    /** Derivado: sale del documento que determina el VTO final de su tipo. */
     fecha_vencimiento: string | null
-    categoria: string | null
+    /** Slug del catálogo de config/documentacion.php. */
+    tipo_cliente: string | null
+    tiene_legajo: boolean
+    habilitado: boolean
+    notas: string | null
+    /** Derivado, denormalizado para poder filtrar el listado. */
+    documentacion_completa: boolean
+    /** Solo en el listado (`withExists`): tiene algún documento vencido. */
+    tiene_vencidos?: boolean
     synced_at: string | null
     attachments?: ClienteAttachment[]
+    documentos?: ClienteDocumento[]
 }
 
 export interface ObservationProduct {

@@ -84,6 +84,8 @@ Route::middleware(['auth'])->group(function () {
     Route::middleware('can:clientes.edit')->group(function () {
         Route::get('/clientes/{cliente}/edit', [ClienteController::class, 'edit'])->name('clientes.edit');
         Route::put('/clientes/{cliente}', [ClienteController::class, 'update'])->name('clientes.update');
+        Route::put('/clientes/{cliente}/documentacion', [ClienteController::class, 'updateDocumentacion'])
+            ->name('clientes.documentacion.update');
         Route::post('/clientes/{cliente}/archivos', [ClienteController::class, 'uploadArchivo'])
             ->name('clientes.archivos.store');
         Route::delete('/clientes/{cliente}/archivos/{attachment}', [ClienteController::class, 'destroyArchivo'])

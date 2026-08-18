@@ -5,6 +5,8 @@ import { route } from 'ziggy-js'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { usePermissions } from '@/composables/usePermissions'
 import Input from '@/Components/Input.vue'
+import Select from '@/Components/Select.vue'
+import Badge from '@/Components/Badge.vue'
 import Icon from '@/Components/Icon.vue'
 import Button from '@/Components/Button.vue'
 import Pagination from '@/Components/Pagination.vue'
@@ -15,7 +17,8 @@ import type { Cliente, PaginatedData } from '@/types'
 
 const props = defineProps<{
     clientes: PaginatedData<Cliente>
-    filters: { search: string }
+    filters: { search: string; tipo_cliente: string; estado_documental: string }
+    tipos: Record<string, string>
     lastSync: string | null
     total: number
 }>()
@@ -23,18 +26,45 @@ const props = defineProps<{
 const { hasPermission } = usePermissions()
 
 const search = ref(props.filters.search ?? '')
+const tipoCliente = ref(props.filters.tipo_cliente ?? '')
+const filtroEstado = ref(props.filters.estado_documental ?? '')
+
+const recargar = () => {
+    router.get(route('clientes.index'), {
+        search: search.value,
+        tipo_cliente: tipoCliente.value,
+        estado_documental: filtroEstado.value,
+    }, {
+        preserveState: true,
+        preserveScroll: true,
+        replace: true,
+    })
+}
+
 let debounce: ReturnType<typeof setTimeout>
 
-watch(search, (val) => {
+// Solo el buscador necesita debounce: los selects cambian de a un valor.
+watch(search, () => {
     clearTimeout(debounce)
-    debounce = setTimeout(() => {
-        router.get(route('clientes.index'), { search: val }, {
-            preserveState: true,
-            preserveScroll: true,
-            replace: true,
-        })
-    }, 350)
+    debounce = setTimeout(recargar, 350)
 })
+
+watch([tipoCliente, filtroEstado], recargar)
+
+const ESTADOS_DOCUMENTALES: Record<string, string> = {
+    completa: 'Documentación completa',
+    incompleta: 'Documentación incompleta',
+    vencida: 'Con documentación vencida',
+    sin_tipo: 'Sin tipo de cliente',
+}
+
+/** Mismo criterio que Cliente::estadoDocumentacion(): vencida gana sobre completa. */
+const semaforoDocumental = (c: Cliente) => {
+    if (!c.tipo_cliente) return { label: 'Sin tipo', variant: 'slate' as const }
+    if (c.tiene_vencidos) return { label: 'Vencida', variant: 'red' as const }
+    if (c.documentacion_completa) return { label: 'Completa', variant: 'emerald' as const }
+    return { label: 'Incompleta', variant: 'amber' as const }
+}
 
 const syncing = ref(false)
 
@@ -78,22 +108,24 @@ const formatFechaVencimiento = (d: string | null) => {
                     </p>
                 </div>
 
-                <Button v-if="hasPermission('clientes.sync')" variant="brand" :disabled="syncing" @click="triggerSync">
-                    <svg
-                        class="w-4 h-4"
-                        :class="{ 'animate-spin': syncing }"
-                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    >
-                        <path stroke-linecap="round" stroke-linejoin="round"
-                            d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
-                        />
-                    </svg>
-                    {{ syncing ? 'Sincronizando...' : 'Sincronizar' }}
-                </Button>
+                <div class="flex flex-wrap items-center gap-3">
+                    <Button v-if="hasPermission('clientes.sync')" variant="brand" :disabled="syncing" @click="triggerSync">
+                        <svg
+                            class="w-4 h-4"
+                            :class="{ 'animate-spin': syncing }"
+                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        >
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
+                            />
+                        </svg>
+                        {{ syncing ? 'Sincronizando...' : 'Sincronizar' }}
+                    </Button>
+                </div>
             </div>
 
-            <!-- Buscador -->
-            <div class="max-w-sm">
+            <!-- Buscador y filtros -->
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <Input v-model="search" type="text" placeholder="Buscar por razón social, CUIT, N°...">
                     <template #icon>
                         <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -101,6 +133,14 @@ const formatFechaVencimiento = (d: string | null) => {
                         </svg>
                     </template>
                 </Input>
+                <Select v-model="tipoCliente">
+                    <option value="">Todos los tipos</option>
+                    <option v-for="(label, slug) in tipos" :key="slug" :value="slug">{{ label }}</option>
+                </Select>
+                <Select v-model="filtroEstado">
+                    <option value="">Toda la documentación</option>
+                    <option v-for="(label, valor) in ESTADOS_DOCUMENTALES" :key="valor" :value="valor">{{ label }}</option>
+                </Select>
             </div>
 
             <!-- Tabla -->
@@ -117,13 +157,14 @@ const formatFechaVencimiento = (d: string | null) => {
                                 <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Teléfono</th>
                                 <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Mail</th>
                                 <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Vencimiento</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Categoría</th>
+                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Tipo</th>
+                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Documentación</th>
                                 <th v-if="hasPermission('clientes.edit')" class="px-4 py-3" />
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
                             <tr v-if="clientes.data.length === 0">
-                                <td colspan="10" class="px-4 py-12 text-center text-sm text-gray-400">
+                                <td colspan="11" class="px-4 py-12 text-center text-sm text-gray-400">
                                     <template v-if="search">
                                         No se encontraron clientes para "<span class="font-medium">{{ search }}</span>".
                                     </template>
@@ -157,7 +198,12 @@ const formatFechaVencimiento = (d: string | null) => {
                                     <span v-else>—</span>
                                 </td>
                                 <td class="px-4 py-3.5 text-theme-xs text-gray-500 dark:text-gray-400">{{ formatFechaVencimiento(cliente.fecha_vencimiento) }}</td>
-                                <td class="px-4 py-3.5 text-theme-xs text-gray-500 dark:text-gray-400">{{ cliente.categoria || '—' }}</td>
+                                <td class="px-4 py-3.5 text-theme-xs text-gray-500 dark:text-gray-400">
+                                    {{ cliente.tipo_cliente ? tipos[cliente.tipo_cliente] : '—' }}
+                                </td>
+                                <td class="px-4 py-3.5">
+                                    <Badge :variant="semaforoDocumental(cliente).variant">{{ semaforoDocumental(cliente).label }}</Badge>
+                                </td>
                                 <td v-if="hasPermission('clientes.edit')" class="px-4 py-3.5 text-right">
                                     <Link
                                         :href="route('clientes.edit', cliente.id)"
@@ -201,7 +247,10 @@ const formatFechaVencimiento = (d: string | null) => {
                                 <span v-else>—</span>
                             </DataRow>
                             <DataRow label="Vencimiento">{{ formatFechaVencimiento(cliente.fecha_vencimiento) }}</DataRow>
-                            <DataRow label="Categoría">{{ cliente.categoria || '—' }}</DataRow>
+                            <DataRow label="Tipo">{{ cliente.tipo_cliente ? tipos[cliente.tipo_cliente] : '—' }}</DataRow>
+                            <DataRow label="Documentación">
+                                <Badge :variant="semaforoDocumental(cliente).variant">{{ semaforoDocumental(cliente).label }}</Badge>
+                            </DataRow>
                         </template>
                     </TableCard>
                 </div>

@@ -1,21 +1,44 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { Head, Link, router, useForm } from '@inertiajs/vue3'
 import Input from '@/Components/Input.vue'
-import InputFecha from '@/Components/InputFecha.vue'
+import Select from '@/Components/Select.vue'
+import Textarea from '@/Components/Textarea.vue'
+import RadioGroup from '@/Components/RadioGroup.vue'
 import Button from '@/Components/Button.vue'
-import type { Cliente } from '@/types'
+import ControlDocumental from '@/Components/ControlDocumental.vue'
+import ChecklistDocumentos from '@/Components/ChecklistDocumentos.vue'
+import type { Cliente, DocumentoChecklist, EstadoDocumentacion } from '@/types'
 
-const props = defineProps<{ cliente: Cliente }>()
+const props = defineProps<{
+    cliente: Cliente
+    tipos: Record<string, string>
+    documentos: DocumentoChecklist[]
+    estado: EstadoDocumentacion
+    /** Clave del documento del que sale el vencimiento del cliente, si el tipo tiene uno. */
+    documentoDeterminante: string | null
+}>()
 
 const form = useForm({
-    fecha_vencimiento: props.cliente.fecha_vencimiento?.slice(0, 10) ?? '',
     mail_nuevo: props.cliente.mail_nuevo ?? '',
-    categoria: props.cliente.categoria ?? '',
+    tipo_cliente: props.cliente.tipo_cliente ?? '',
+    // El RadioGroup trabaja con strings; el backend los valida como boolean.
+    tiene_legajo: props.cliente.tiene_legajo ? '1' : '0',
+    habilitado: props.cliente.habilitado ? '1' : '0',
+    notas: props.cliente.notas ?? '',
 })
 
 const submit = () => form.put(route('clientes.update', props.cliente.id))
+
+const opcionesSiNo = [
+    { value: '1', label: 'Sí' },
+    { value: '0', label: 'No' },
+]
+
+const etiquetaDeterminante = computed(() =>
+    props.documentos.find(d => d.documento === props.documentoDeterminante)?.label ?? null,
+)
 
 const uploadForm = useForm({
     archivos: [] as File[],
@@ -93,14 +116,30 @@ const formatSize = (bytes: number) => {
                 </dl>
             </div>
 
-            <!-- Campo propio -->
+            <!-- Campos propios -->
             <div class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
-                <p class="mb-3 text-theme-xs font-medium uppercase tracking-wide text-gray-400">Datos propios</p>
+                <p class="mb-3 text-theme-xs font-medium uppercase tracking-wide text-gray-400">Datos generales</p>
                 <form @submit.prevent="submit" class="space-y-4">
-                    <InputFecha
-                        v-model="form.fecha_vencimiento"
-                        label="Fecha de vencimiento"
-                        :error="form.errors.fecha_vencimiento"
+                    <Select
+                        v-model="form.tipo_cliente"
+                        label="Tipo de cliente"
+                        hint="Define qué documentación se le exige."
+                        :error="form.errors.tipo_cliente"
+                    >
+                        <option value="">— Sin clasificar —</option>
+                        <option v-for="(label, slug) in tipos" :key="slug" :value="slug">{{ label }}</option>
+                    </Select>
+                    <RadioGroup
+                        v-model="form.tiene_legajo"
+                        label="Tiene legajo"
+                        :opciones="opcionesSiNo"
+                        :error="form.errors.tiene_legajo"
+                    />
+                    <RadioGroup
+                        v-model="form.habilitado"
+                        label="Habilitado"
+                        :opciones="opcionesSiNo"
+                        :error="form.errors.habilitado"
                     />
                     <Input
                         v-model="form.mail_nuevo"
@@ -109,16 +148,31 @@ const formatSize = (bytes: number) => {
                         hint="Se completa solo cuando el cliente carga un reclamo por el portal. La sincronización con RP Sistemas no lo pisa."
                         :error="form.errors.mail_nuevo"
                     />
-                    <Input
-                        v-model="form.categoria"
-                        label="Categoría"
-                        :error="form.errors.categoria"
+                    <Textarea
+                        v-model="form.notas"
+                        label="Observaciones"
+                        :rows="3"
+                        :error="form.errors.notas"
                     />
                     <div class="flex gap-3 pt-2">
                         <Button type="submit" variant="primary" :disabled="form.processing">Guardar cambios</Button>
                     </div>
                 </form>
             </div>
+
+            <ControlDocumental
+                :estado="estado"
+                :tipo="cliente.tipo_cliente"
+                :fecha-vencimiento="cliente.fecha_vencimiento"
+                :etiqueta-determinante="etiquetaDeterminante"
+                entidad="cliente"
+            />
+
+            <ChecklistDocumentos
+                :documentos="documentos"
+                :url="route('clientes.documentacion.update', cliente.id)"
+                entidad="cliente"
+            />
 
             <!-- Archivos -->
             <div class="space-y-4 rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">

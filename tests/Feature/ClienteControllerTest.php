@@ -102,28 +102,289 @@ class ClienteControllerTest extends TestCase
         $this->actingAs($user)->get("/clientes/{$cliente->id}/edit")->assertStatus(403);
     }
 
-    public function test_update_setea_fecha_vencimiento(): void
+    /** Los campos generales de la ficha: tipo, legajo, habilitado y notas. */
+    public function test_update_setea_los_datos_generales(): void
     {
         $cliente = Cliente::create(['numero' => '1', 'razon_social' => 'Empresa Test SA']);
         $user = $this->userWith('clientes.view', 'clientes.edit');
 
         $this->actingAs($user)
-            ->put("/clientes/{$cliente->id}", ['fecha_vencimiento' => '2027-01-15'])
+            ->put("/clientes/{$cliente->id}", [
+                'tipo_cliente' => 'importador',
+                'tiene_legajo' => true,
+                'habilitado' => false,
+                'notas' => 'Pidió prórroga por el BPF.',
+            ])
             ->assertRedirect(route('clientes.edit', $cliente));
 
-        $this->assertSame('2027-01-15', $cliente->fresh()->fecha_vencimiento->toDateString());
+        $cliente->refresh();
+
+        $this->assertSame('importador', $cliente->tipo_cliente);
+        $this->assertTrue($cliente->tiene_legajo);
+        $this->assertFalse($cliente->habilitado);
+        $this->assertSame('Pidió prórroga por el BPF.', $cliente->notas);
     }
 
-    public function test_update_setea_categoria(): void
+    public function test_update_rechaza_un_tipo_de_cliente_fuera_del_catalogo(): void
     {
         $cliente = Cliente::create(['numero' => '1', 'razon_social' => 'Empresa Test SA']);
+
+        $this->actingAs($this->userWith('clientes.view', 'clientes.edit'))
+            ->put("/clientes/{$cliente->id}", [
+                'tipo_cliente' => 'kiosco',
+                'tiene_legajo' => false,
+                'habilitado' => true,
+            ])
+            ->assertSessionHasErrors('tipo_cliente');
+    }
+
+    /**
+     * El vencimiento del cliente ya no se carga a mano: sale del documento que
+     * el catálogo marca como `determina_vencimiento` (para importador, el BPF).
+     */
+    public function test_el_vencimiento_del_cliente_sale_del_documento_determinante(): void
+    {
+        $cliente = $this->importadorConDocumentacionCompleta();
+
+        $this->assertSame('2027-03-10', $cliente->fresh()->fecha_vencimiento->toDateString());
+        $this->assertTrue($cliente->fresh()->documentacion_completa);
+    }
+
+    /** Farmacia no tiene ningún documento con vencimiento: nunca vence. */
+    public function test_un_tipo_sin_documento_determinante_deja_el_vencimiento_en_null(): void
+    {
+        $cliente = Cliente::create([
+            'numero' => '1', 'razon_social' => 'Farmacia Test', 'tipo_cliente' => 'farmacia',
+        ]);
         $user = $this->userWith('clientes.view', 'clientes.edit');
 
         $this->actingAs($user)
-            ->put("/clientes/{$cliente->id}", ['categoria' => 'Distribuidor'])
+            ->put("/clientes/{$cliente->id}/documentacion", [
+                'documentos' => [
+                    'constancia_arca' => ['presentado' => true],
+                    'habilitacion_ministerio' => ['presentado' => true],
+                ],
+            ])
             ->assertRedirect(route('clientes.edit', $cliente));
 
-        $this->assertSame('Distribuidor', $cliente->fresh()->categoria);
+        $cliente->refresh();
+
+        $this->assertNull($cliente->fecha_vencimiento);
+        $this->assertTrue($cliente->documentacion_completa);
+    }
+
+    public function test_falta_un_obligatorio_y_la_documentacion_no_esta_completa(): void
+    {
+        $cliente = Cliente::create([
+            'numero' => '1', 'razon_social' => 'Importadora Test', 'tipo_cliente' => 'importador',
+        ]);
+
+        $this->actingAs($this->userWith('clientes.view', 'clientes.edit'))
+            ->put("/clientes/{$cliente->id}/documentacion", [
+                'documentos' => [
+                    'constancia_arca' => ['presentado' => true],
+                    'habilitacion_anmat' => ['presentado' => true, 'fecha_vencimiento' => '2027-05-01'],
+                    'certificado_funcionamiento' => ['presentado' => false],
+                    'bpf' => ['presentado' => true, 'fecha_vencimiento' => '2027-03-10'],
+                ],
+            ]);
+
+        $cliente->refresh();
+
+        $this->assertFalse($cliente->documentacion_completa);
+        $this->assertSame(['Certificado de Funcionamiento'], $cliente->estadoDocumentacion()['faltantes']);
+        // El vencimiento igual sale del BPF, que sí está presentado.
+        $this->assertSame('2027-03-10', $cliente->fecha_vencimiento->toDateString());
+    }
+
+    public function test_un_documento_vencido_no_cuenta_como_documentacion_completa(): void
+    {
+        $cliente = Cliente::create([
+            'numero' => '1', 'razon_social' => 'Importadora Test', 'tipo_cliente' => 'importador',
+        ]);
+
+        $this->actingAs($this->userWith('clientes.view', 'clientes.edit'))
+            ->put("/clientes/{$cliente->id}/documentacion", [
+                'documentos' => [
+                    'constancia_arca' => ['presentado' => true],
+                    'habilitacion_anmat' => ['presentado' => true, 'fecha_vencimiento' => now()->subDay()->toDateString()],
+                    'certificado_funcionamiento' => ['presentado' => true, 'fecha_vencimiento' => '2027-01-01'],
+                    'bpf' => ['presentado' => true, 'fecha_vencimiento' => '2027-03-10'],
+                ],
+            ]);
+
+        $cliente->refresh();
+        $estado = $cliente->estadoDocumentacion();
+
+        $this->assertFalse($cliente->documentacion_completa);
+        $this->assertSame([], $estado['faltantes']);
+        $this->assertSame(['Habilitación ANMAT'], array_column($estado['vencidos'], 'label'));
+        // El próximo vencimiento es el más cercano de todos, no el del BPF.
+        $this->assertSame(now()->subDay()->toDateString(), $estado['proximo_vencimiento']);
+        $this->assertSame(-1, $estado['dias_para_vencer']);
+    }
+
+    /** La fecha de un papel que no entregaron no se guarda. */
+    public function test_destildar_un_documento_le_borra_la_fecha(): void
+    {
+        $cliente = $this->importadorConDocumentacionCompleta();
+
+        $this->actingAs($this->userWith('clientes.view', 'clientes.edit'))
+            ->put("/clientes/{$cliente->id}/documentacion", [
+                'documentos' => [
+                    'constancia_arca' => ['presentado' => true],
+                    'habilitacion_anmat' => ['presentado' => true, 'fecha_vencimiento' => '2027-05-01'],
+                    'certificado_funcionamiento' => ['presentado' => true, 'fecha_vencimiento' => '2027-01-01'],
+                    'bpf' => ['presentado' => false, 'fecha_vencimiento' => '2027-03-10'],
+                ],
+            ]);
+
+        $cliente->refresh();
+
+        $this->assertNull($cliente->documentos->firstWhere('documento', 'bpf')->fecha_vencimiento);
+        // Y el vencimiento del cliente se cae con él.
+        $this->assertNull($cliente->fecha_vencimiento);
+    }
+
+    /**
+     * Reclasificar tiene que recalcular: los documentos del tipo viejo dejan de
+     * contar, y el vencimiento que traían deja de ser el del cliente.
+     */
+    public function test_cambiar_el_tipo_de_cliente_recalcula_el_estado(): void
+    {
+        $cliente = $this->importadorConDocumentacionCompleta();
+
+        $this->actingAs($this->userWith('clientes.view', 'clientes.edit'))
+            ->put("/clientes/{$cliente->id}", [
+                'tipo_cliente' => 'farmacia',
+                'tiene_legajo' => false,
+                'habilitado' => true,
+            ]);
+
+        $cliente->refresh();
+
+        // Farmacia no pide BPF, así que ni vence ni está completa (le falta la
+        // habilitación del Ministerio, que el tipo anterior no pedía).
+        $this->assertNull($cliente->fecha_vencimiento);
+        $this->assertFalse($cliente->documentacion_completa);
+        $this->assertSame(['Habilitación Ministerio'], $cliente->estadoDocumentacion()['faltantes']);
+    }
+
+    public function test_guardar_la_documentacion_borra_los_documentos_del_tipo_anterior(): void
+    {
+        $cliente = $this->importadorConDocumentacionCompleta();
+        $cliente->update(['tipo_cliente' => 'farmacia']);
+
+        $this->actingAs($this->userWith('clientes.view', 'clientes.edit'))
+            ->put("/clientes/{$cliente->id}/documentacion", [
+                'documentos' => [
+                    'constancia_arca' => ['presentado' => true],
+                    'habilitacion_ministerio' => ['presentado' => true],
+                ],
+            ]);
+
+        $this->assertSame(
+            ['constancia_arca', 'habilitacion_ministerio'],
+            $cliente->fresh()->documentos->pluck('documento')->sort()->values()->all()
+        );
+    }
+
+    public function test_rechaza_un_documento_que_el_tipo_no_pide(): void
+    {
+        $cliente = Cliente::create([
+            'numero' => '1', 'razon_social' => 'Farmacia Test', 'tipo_cliente' => 'farmacia',
+        ]);
+
+        $this->actingAs($this->userWith('clientes.view', 'clientes.edit'))
+            ->put("/clientes/{$cliente->id}/documentacion", [
+                'documentos' => [
+                    'constancia_arca' => ['presentado' => true],
+                    'habilitacion_ministerio' => ['presentado' => true],
+                    'bpf' => ['presentado' => true],
+                ],
+            ])
+            ->assertSessionHasErrors('documentos');
+
+        $this->assertCount(0, $cliente->fresh()->documentos);
+    }
+
+    public function test_no_se_puede_cargar_documentacion_sin_tipo_de_cliente(): void
+    {
+        $cliente = Cliente::create(['numero' => '1', 'razon_social' => 'Empresa Test SA']);
+
+        $this->actingAs($this->userWith('clientes.view', 'clientes.edit'))
+            ->put("/clientes/{$cliente->id}/documentacion", ['documentos' => []])
+            ->assertSessionHas('error');
+
+        $this->assertCount(0, $cliente->fresh()->documentos);
+    }
+
+    public function test_el_listado_filtra_por_tipo_y_por_estado_documental(): void
+    {
+        $completo = $this->importadorConDocumentacionCompleta();
+        Cliente::create(['numero' => '2', 'razon_social' => 'Farmacia Beta', 'tipo_cliente' => 'farmacia']);
+        Cliente::create(['numero' => '3', 'razon_social' => 'Sin Clasificar SA']);
+
+        $user = $this->userWith('clientes.view');
+
+        $this->actingAs($user)
+            ->get('/clientes?tipo_cliente=farmacia')
+            ->assertInertia(fn ($page) => $page->has('clientes.data', 1)
+                ->where('clientes.data.0.razon_social', 'Farmacia Beta'));
+
+        $this->actingAs($user)
+            ->get('/clientes?estado_documental=completa')
+            ->assertInertia(fn ($page) => $page->has('clientes.data', 1)
+                ->where('clientes.data.0.id', $completo->id));
+
+        $this->actingAs($user)
+            ->get('/clientes?estado_documental=sin_tipo')
+            ->assertInertia(fn ($page) => $page->has('clientes.data', 1)
+                ->where('clientes.data.0.razon_social', 'Sin Clasificar SA'));
+    }
+
+    /** El filtro `vencida` mira el checklist, no la columna denormalizada. */
+    public function test_el_listado_filtra_por_documentacion_vencida(): void
+    {
+        $vigente = $this->importadorConDocumentacionCompleta();
+
+        $vencido = Cliente::create([
+            'numero' => '2', 'razon_social' => 'Droguería Vencida', 'tipo_cliente' => 'drogueria',
+        ]);
+        $vencido->documentos()->create([
+            'documento' => 'certificado_funcionamiento',
+            'presentado' => true,
+            'fecha_vencimiento' => now()->subMonth(),
+        ]);
+
+        $this->actingAs($this->userWith('clientes.view'))
+            ->get('/clientes?estado_documental=vencida')
+            ->assertInertia(fn ($page) => $page->has('clientes.data', 1)
+                ->where('clientes.data.0.id', $vencido->id)
+                ->where('clientes.data.0.tiene_vencidos', true));
+
+        $this->assertTrue($vigente->fresh()->documentacion_completa);
+    }
+
+    /** Importador con los 4 documentos presentados y vigentes. BPF vence 10/3/2027. */
+    private function importadorConDocumentacionCompleta(): Cliente
+    {
+        $cliente = Cliente::create([
+            'numero' => '1', 'razon_social' => 'Importadora Test SA', 'tipo_cliente' => 'importador',
+        ]);
+
+        $this->actingAs($this->userWith('clientes.view', 'clientes.edit'))
+            ->put("/clientes/{$cliente->id}/documentacion", [
+                'documentos' => [
+                    'constancia_arca' => ['presentado' => true],
+                    'habilitacion_anmat' => ['presentado' => true, 'fecha_vencimiento' => '2027-05-01'],
+                    'certificado_funcionamiento' => ['presentado' => true, 'fecha_vencimiento' => '2027-01-01'],
+                    'bpf' => ['presentado' => true, 'fecha_vencimiento' => '2027-03-10'],
+                ],
+            ])
+            ->assertSessionHasNoErrors();
+
+        return $cliente->fresh();
     }
 
     public function test_los_archivos_van_a_una_carpeta_con_el_numero_de_cliente(): void

@@ -6,9 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Jobs\SyncClientesJob;
 use App\Models\Cliente;
 use App\Models\ClienteAttachment;
+use App\Support\Documentacion;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -19,15 +23,18 @@ class ClienteController extends Controller
         $this->authorize('clientes.view');
 
         $search = $request->string('search')->trim()->value();
+        $tipo = $request->string('tipo_cliente')->trim()->value();
+        $estado = $request->string('estado_documental')->trim()->value();
 
-        $clientes = Cliente::query()
-            ->when($search, function ($q) use ($search) {
-                $q->where('razon_social', 'like', "%{$search}%")
-                    ->orWhere('cuit', 'like', "%{$search}%")
-                    ->orWhere('numero', 'like', "%{$search}%")
-                    ->orWhere('mail', 'like', "%{$search}%");
-            })
-            ->orderBy('razon_social')
+        $clientes = $this->filtrados($request)
+            // El semáforo del listado necesita saber si hay algún documento
+            // vencido. Se resuelve con un `exists` en SQL en vez de traer el
+            // checklist de las 50 filas y recorrerlo en PHP.
+            ->withExists(['documentos as tiene_vencidos' => fn ($q) => $q
+                ->where('presentado', true)
+                ->whereNotNull('fecha_vencimiento')
+                ->whereDate('fecha_vencimiento', '<', now()),
+            ])
             ->paginate(50)
             ->withQueryString();
 
@@ -35,11 +42,66 @@ class ClienteController extends Controller
 
         return inertia('Admin/Clientes/Index', [
             'clientes' => $clientes,
-            'filters' => ['search' => $search],
+            'filters' => [
+                'search' => $search,
+                'tipo_cliente' => $tipo,
+                'estado_documental' => $estado,
+            ],
+            'tipos' => Documentacion::etiquetasTipos(),
             'lastSync' => $lastSync,
             // Sin filtrar: el paginador ya trae el total de la búsqueda vigente.
             'total' => Cliente::count(),
         ]);
+    }
+
+    /**
+     * La query del listado con los filtros de la request aplicados.
+     *
+     * La comparten el listado y la exportación a Excel: lo que ves en pantalla
+     * es exactamente lo que baja en el archivo.
+     */
+    private function filtrados(Request $request): Builder
+    {
+        $search = $request->string('search')->trim()->value();
+        $tipo = $request->string('tipo_cliente')->trim()->value();
+        $estado = $request->string('estado_documental')->trim()->value();
+
+        return Cliente::query()
+            ->when($search, function ($q) use ($search) {
+                // Agrupado: sin el closure, los `orWhere` se escaparían de los
+                // otros filtros y el de tipo/estado dejaría de aplicar.
+                $q->where(function ($q) use ($search) {
+                    $q->where('razon_social', 'like', "%{$search}%")
+                        ->orWhere('cuit', 'like', "%{$search}%")
+                        ->orWhere('numero', 'like', "%{$search}%")
+                        ->orWhere('mail', 'like', "%{$search}%");
+                });
+            })
+            ->when($tipo, fn ($q) => $q->where('tipo_cliente', $tipo))
+            ->when($estado, fn ($q) => $this->filtrarPorEstadoDocumental($q, $estado))
+            ->orderBy('razon_social');
+    }
+
+    /**
+     * Filtro del listado por estado documental.
+     *
+     * `completa` y `incompleta` se apoyan en la columna denormalizada
+     * `documentacion_completa` (el estado sale del catálogo en config, no se
+     * puede expresar en un `where`); `vencida` sí se puede consultar directo
+     * sobre el checklist.
+     */
+    private function filtrarPorEstadoDocumental(Builder $query, string $estado): void
+    {
+        match ($estado) {
+            'completa' => $query->where('documentacion_completa', true),
+            'incompleta' => $query->where('documentacion_completa', false)->whereNotNull('tipo_cliente'),
+            'vencida' => $query->whereHas('documentos', fn ($q) => $q
+                ->where('presentado', true)
+                ->whereNotNull('fecha_vencimiento')
+                ->whereDate('fecha_vencimiento', '<', now())),
+            'sin_tipo' => $query->whereNull('tipo_cliente'),
+            default => null,
+        };
     }
 
     public function sync(Request $request): RedirectResponse
@@ -56,25 +118,128 @@ class ClienteController extends Controller
     {
         $this->authorize('clientes.edit');
 
+        $cliente->load('attachments', 'documentos');
+
         return inertia('Admin/Clientes/Edit', [
-            'cliente' => $cliente->load('attachments'),
+            'cliente' => $cliente,
+            'tipos' => Documentacion::etiquetasTipos(),
+            'documentos' => $this->checklist($cliente),
+            'estado' => $cliente->estadoDocumentacion(),
+            'documentoDeterminante' => Documentacion::documentoDeterminante($cliente->tipo_cliente),
         ]);
+    }
+
+    /**
+     * El checklist que ve la ficha: el catálogo del tipo (que manda) con lo que
+     * el cliente tenga cargado de cada documento. Un documento del catálogo sin
+     * fila todavía sale como no presentado, no como ausente.
+     */
+    private function checklist(Cliente $cliente): array
+    {
+        $cargados = $cliente->documentos->keyBy('documento');
+
+        $items = [];
+
+        foreach (Documentacion::documentos($cliente->tipo_cliente) as $clave => $def) {
+            $doc = $cargados->get($clave);
+
+            $items[] = [
+                'documento' => $clave,
+                'label' => $def['label'],
+                'obligatorio' => (bool) $def['obligatorio'],
+                'vence' => (bool) $def['vence'],
+                'determina_vencimiento' => ! empty($def['determina_vencimiento']),
+                'presentado' => (bool) $doc?->presentado,
+                'fecha_vencimiento' => $doc?->fecha_vencimiento?->toDateString(),
+            ];
+        }
+
+        return $items;
     }
 
     public function update(Request $request, Cliente $cliente): RedirectResponse
     {
         $this->authorize('clientes.edit');
 
+        // `fecha_vencimiento` no está acá a propósito: dejó de cargarse a mano
+        // y ahora sale del documento que lo determina — ver
+        // Cliente::recalcularEstadoDocumental().
         $data = $request->validate([
-            'fecha_vencimiento' => ['nullable', 'date'],
             'mail_nuevo' => ['nullable', 'email', 'max:255'],
-            'categoria' => ['nullable', 'string', 'max:255'],
+            'tipo_cliente' => ['nullable', Rule::in(array_keys(Documentacion::tipos()))],
+            // `sometimes` y no `required`: un request que no los manda deja el
+            // valor que ya estaba, en vez de fallar. El formulario siempre los
+            // envía; esto es para no romper cualquier otro camino que actualice
+            // solo algunos campos.
+            'tiene_legajo' => ['sometimes', 'boolean'],
+            'habilitado' => ['sometimes', 'boolean'],
+            'notas' => ['nullable', 'string', 'max:5000'],
         ]);
 
         $cliente->update($data);
 
+        // Cambiar de tipo cambia qué documentos se exigen y cuál determina el
+        // vencimiento, así que el estado se recalcula también desde acá.
+        $cliente->recalcularEstadoDocumental();
+
         return redirect()->route('clientes.edit', $cliente)
             ->with('success', 'Cliente actualizado correctamente.');
+    }
+
+    /**
+     * Guarda el checklist de documentación completo (Sí/No y vencimiento de
+     * cada documento) y recalcula el estado derivado del cliente.
+     */
+    public function updateDocumentacion(Request $request, Cliente $cliente): RedirectResponse
+    {
+        $this->authorize('clientes.edit');
+
+        if ($cliente->tipo_cliente === null) {
+            return back()->with('error', 'Elegí primero un tipo de cliente: la documentación requerida depende de él.');
+        }
+
+        $data = $request->validate(
+            Documentacion::reglasValidacion($cliente->tipo_cliente),
+            attributes: Documentacion::atributosValidacion($cliente->tipo_cliente),
+        );
+
+        $catalogo = Documentacion::documentos($cliente->tipo_cliente);
+
+        DB::transaction(function () use ($cliente, $catalogo, $data) {
+            foreach ($catalogo as $clave => $def) {
+                $item = $data['documentos'][$clave] ?? null;
+
+                if ($item === null) {
+                    continue;
+                }
+
+                $presentado = (bool) $item['presentado'];
+
+                $cliente->documentos()->updateOrCreate(
+                    ['documento' => $clave],
+                    [
+                        'presentado' => $presentado,
+                        // La fecha solo tiene sentido en un documento que vence
+                        // y que además está presentado: si se destilda, la del
+                        // papel anterior no puede quedar colgada.
+                        'fecha_vencimiento' => empty($def['vence']) || ! $presentado
+                            ? null
+                            : ($item['fecha_vencimiento'] ?? null),
+                    ]
+                );
+            }
+
+            // Los documentos que quedaron de un tipo anterior no se muestran ni
+            // cuentan, así que tampoco se guardan.
+            $cliente->documentos()
+                ->whereNotIn('documento', array_keys($catalogo))
+                ->delete();
+        });
+
+        $cliente->recalcularEstadoDocumental();
+
+        return redirect()->route('clientes.edit', $cliente)
+            ->with('success', 'Documentación actualizada correctamente.');
     }
 
     public function uploadArchivo(Request $request, Cliente $cliente): RedirectResponse
