@@ -114,6 +114,44 @@ return [
             // 'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE', 'false'),
         ],
 
+        /*
+         * RP Sistemas (ERP) — SQL Server, SOLO LECTURA.
+         *
+         * El ERP no expone API para proveedores ni ventas: solo habilita vistas
+         * SQL (`powerbi_proveedores_vista`, `powerbi_ventas_vista`), las mismas
+         * que consumen desde Power BI.
+         *
+         * ⚠️ Variables propias `ERP_DB_*` y no las `DB_*`: el bloque `sqlsrv` de
+         * arriba es scaffold de Laravel y comparte las variables de la base
+         * principal, así que apuntaría al lugar equivocado.
+         *
+         * ⚠️ Nunca correr migraciones ni seeders contra esta conexión, ni
+         * incluirla en los tests: es de un sistema de terceros y solo tenemos
+         * permiso de lectura.
+         *
+         * El host lleva el puerto pegado con coma (`149.78.140.72,55333`), que
+         * es la sintaxis de SQL Server; con el puerto explícito el nombre de
+         * instancia se ignora. `trust_server_certificate` hace falta porque el
+         * certificado del servidor no es de una CA conocida.
+         *
+         * Requiere la extensión `pdo_sqlsrv` + Microsoft ODBC Driver 18, que
+         * NO vienen instalados por defecto (ni en Laragon ni en hosting
+         * compartido).
+         */
+        'erp' => [
+            'driver' => 'sqlsrv',
+            'host' => env('ERP_DB_HOST'),
+            'port' => env('ERP_DB_PORT'),
+            'database' => env('ERP_DB_DATABASE'),
+            'username' => env('ERP_DB_USERNAME'),
+            'password' => env('ERP_DB_PASSWORD'),
+            'charset' => 'utf8',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'encrypt' => env('ERP_DB_ENCRYPT', 'yes'),
+            'trust_server_certificate' => env('ERP_DB_TRUST_SERVER_CERTIFICATE', 'true'),
+        ],
+
     ],
 
     /*
