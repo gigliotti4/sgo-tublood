@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\ProveedorController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\SectorController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Admin\VentaController;
 use App\Http\Controllers\ArticuloController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\DashboardController;
@@ -124,6 +125,15 @@ Route::middleware(['auth'])->group(function () {
     Route::middleware('can:proveedores.edit')->group(function () {
         Route::get('/proveedores/{proveedor}/edit', [ProveedorController::class, 'edit'])->name('proveedores.edit');
         Route::put('/proveedores/{proveedor}', [ProveedorController::class, 'update'])->name('proveedores.update');
+    });
+
+    // Ventas. Espejo de solo lectura de la vista SQL del ERP: no hay alta,
+    // edición ni borrado, la tabla se reemplaza entera en cada sincronización.
+    Route::middleware('can:ventas.view')->group(function () {
+        Route::get('/ventas', [VentaController::class, 'index'])->name('ventas.index');
+    });
+    Route::middleware('can:ventas.sync')->group(function () {
+        Route::post('/ventas/sync', [VentaController::class, 'sync'])->name('ventas.sync');
     });
 
     // Observaciones

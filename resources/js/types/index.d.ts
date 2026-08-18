@@ -116,6 +116,33 @@ export interface Proveedor {
     updated_at: string | null
 }
 
+/** Renglón de venta espejado del ERP. Solo lectura: la tabla se reemplaza en cada sincronización. */
+export interface Venta {
+    id: number
+    compro_nro: string | null
+    cod_comprobante: string | null
+    grupo_compro_descrip: string | null
+    fecha: string | null
+    anio: number | null
+    cliente: number | null
+    razon_social: string | null
+    nombre_fantasia: string | null
+    provincia: string | null
+    articulo: string | null
+    descrip_arti: string | null
+    cantidad: string | null
+    precio_neto: string | null
+    sub_total: string | null
+    /** El ERP usa 0 para "sin remito", no null. */
+    remito_nro: number | null
+    vendedor: string | null
+    codi_vende: string | null
+    deposito: string | null
+    transportista: string | null
+    condi_venta: string | null
+    synced_at: string | null
+}
+
 export interface ClienteVencimiento {
     id: number
     numero: string

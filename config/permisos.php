@@ -27,6 +27,7 @@ return [
         'bitacora' => 'Bitácora',
         'articulos' => 'Artículos',
         'proveedores' => 'Proveedores',
+        'ventas' => 'Ventas',
     ],
 
     'etiquetas' => [
@@ -67,6 +68,9 @@ return [
         'proveedores.edit' => ['grupo' => 'proveedores', 'label' => 'Editar proveedores'],
         'proveedores.import' => ['grupo' => 'proveedores', 'label' => 'Importar Excel de proveedores'],
         'proveedores.sync' => ['grupo' => 'proveedores', 'label' => 'Sincronizar con RP Sistemas'],
+
+        'ventas.view' => ['grupo' => 'ventas', 'label' => 'Ver ventas'],
+        'ventas.sync' => ['grupo' => 'ventas', 'label' => 'Sincronizar con RP Sistemas'],
     ],
 
 ];
