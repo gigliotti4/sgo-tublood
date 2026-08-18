@@ -74,12 +74,18 @@ Route::middleware(['auth'])->group(function () {
 
     // Clientes
     Route::middleware('can:clientes.view')->group(function () {
+        // Antes del index para que /clientes/export no caiga en el listado.
+        Route::get('/clientes/export', [ClienteController::class, 'export'])->name('clientes.export');
         Route::get('/clientes', [ClienteController::class, 'index'])->name('clientes.index');
         Route::get('/clientes/{cliente}/archivos/{attachment}', [ClienteController::class, 'downloadArchivo'])
             ->name('clientes.archivos.download')->scopeBindings();
     });
     Route::middleware('can:clientes.sync')->group(function () {
         Route::post('/clientes/sync', [ClienteController::class, 'sync'])->name('clientes.sync');
+    });
+    // Antes de /clientes/{cliente} para que no haya ambigüedad.
+    Route::middleware('can:clientes.import')->group(function () {
+        Route::post('/clientes/import', [ClienteController::class, 'import'])->name('clientes.import');
     });
     Route::middleware('can:clientes.edit')->group(function () {
         Route::get('/clientes/{cliente}/edit', [ClienteController::class, 'edit'])->name('clientes.edit');

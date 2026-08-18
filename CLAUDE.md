@@ -110,7 +110,23 @@ HTTP → Route (middleware: auth, can:permiso) → Controller (authorize) → El
 - `clientes.notas` es el "Observaciones" de la planilla. **No se llama `observaciones`**: en este dominio una observación es un reclamo y el cliente ya tiene relación con ellos.
 - Hasta el 18/8/2026 el campo de cliente se llamaba `categoria` y era texto libre "hasta que hubiera un catálogo real" (así lo decía su migración). Una migración lo renombra a `tipo_cliente`; no reusar el nombre viejo.
 - **El nombre de cada documento se declara una sola vez**, en la clave `documentos` de arriba del config (el "canónico"). Un tipo puede mostrarlo con otra etiqueta (`label` propio: la habilitación del laboratorio de análisis, el certificado del distribuidor), pero la columna del Excel es una sola. Sin esa separación, la misma clave tenía dos nombres y el import no podía saber a cuál corresponde una columna.
+- **El nombre de cada documento se declara una sola vez**, en la clave `documentos` de arriba del config (el "canónico"). Un tipo puede mostrarlo con otra etiqueta (`label` propio: la habilitación del laboratorio de análisis, el certificado del distribuidor), pero la columna del Excel es una sola. Sin esa separación, la misma clave tenía dos nombres y el import no podía saber a cuál corresponde una columna.
 - ⚠️ **El mismo documento vence en un tipo y no en otro** (la Habilitación Ministerio vence en Droguería pero no en Farmacia), por eso `vence` es del tipo y no del documento.
+
+### Export e import de clientes por Excel
+- `ClienteExportService` / `ClienteImportService` — mismo molde que los de proveedores (PhpSpreadsheet a mano, no hay `laravel-excel`), y el mapeo del import va **por nombre de columna, no por posición**.
+- ⚠️ **El archivo que baja el export ES la plantilla del import**: los encabezados son exactamente los que busca el import, así que el circuito exportar → editar en Excel → volver a subir cierra solo, sin plantilla aparte. Cambiar un encabezado de `ClienteExportService` rompe ese circuito.
+- El libro tiene **dos hojas**: `Clientes` (los datos) e `Instructivo` (cómo se completa cada columna y la tabla de tipos con su documentación). ⚠️ La de datos tiene que quedar **primera y activa** (`setActiveSheetIndex(0)`): el import lee `getActiveSheet()`, así que si el instructivo quedara activo el import leería el instructivo. Hay un test que sube el archivo exportado tal cual para cubrirlo.
+- **El instructivo se genera desde el catálogo, nunca a mano**: un tipo o un documento nuevo aparece ahí solo. Escribirlo como texto fijo garantizaba que se desincronizara del config.
+- La hoja de datos lleva **listas desplegables** (tipo de cliente, y SÍ/NO en legajo, habilitado y cada documento). No son cosmética: el import ignora en silencio un valor que no entiende, así que es mejor que Excel no deje escribirlo. `allowBlank` queda en `true` porque la celda vacía es un valor válido — significa "no cambiar".
+- El formato es **ancho**: dos columnas por documento del catálogo (el nombre canónico para el SÍ/NO y `"<nombre> - Vto"` para la fecha), no una fila por documento. Es como venían las planillas de Tublood y la única forma de completarlo a mano sin agregar filas.
+- **Nunca crea clientes**: la tabla se espeja de RP Sistemas, así que un `numero` que no existe es un error del archivo (advertencia), no un cliente nuevo — un alta acá crearía un registro que la sync no reconocería. Es la diferencia con `ProveedorImportService`, que sí crea porque el Excel es la única fuente del padrón.
+- **Una celda vacía no pisa lo cargado** (tipo, notas, y cada documento): es lo que permite subir una planilla parcial y lo que protege lo hecho a mano al reimportar un archivo viejo. Para dar de baja un documento hay que escribir `NO` explícito.
+- El tipo se resuelve **antes** que los documentos y en el mismo guardado: una fila que reclasifica y carga papeles del tipo nuevo funciona de una. Los documentos que quedan fuera del tipo nuevo se borran, igual que al guardar el checklist desde la ficha.
+- Las columnas calculadas del export (completa / faltante / vencida / próximo vto / días) el import **las ignora**: se recalculan solas.
+- Fechas en **dd/mm/aaaa** (o el serial numérico de Excel). `Carbon::parse` leería `03/04/2027` como el 4 de marzo, así que el formato local se prueba primero.
+- Advertencias cortadas en 20 con contador del resto, mismo criterio que `ArticuloImportService`: la planilla real tiene miles de filas.
+- Permiso propio `clientes.import` (el export usa `clientes.view`), igual que `proveedores.import`.
 
 ### Artículos y proveedores — dos catálogos con dueños distintos
 - **`articulos`** se espeja del ERP con `ArticuloSyncService` (`upsert` por `codigo`, diario a las 03:00, más el botón "Sincronizar"). Los campos `fecha_vencimiento`, `pm`, `legajo`, `observaciones`, `link_registro` y `proveedor_id` son **propios del panel** y **no están en la lista de columnas del `upsert()`** — mismo contrato que `clientes.fecha_vencimiento` / `mail_nuevo`. Agregar una columna editable a mano y meterla en esa lista es el error que hay que no cometer.
@@ -198,7 +214,7 @@ Los dos últimos salen de `config('incidencias.roles_por_tipo')` — son el repa
 Nota: tener el permiso `observaciones.edit` (roles `admin`, `usuario_interno`, `garantia_calidad`, `calidad_producto`, `calidad_servicio`) ya **no** alcanza para editar cualquier observación — ver autorización por objeto (`ObservacionPolicy`) más arriba.
 
 ### Permisos existentes (notación de punto)
-`users.view`, `users.create`, `users.edit`, `users.delete`, `roles.view`, `roles.create`, `roles.edit`, `roles.delete`, `permissions.view`, `clientes.view`, `clientes.sync`, `clientes.edit`, `clientes.vencimientos`, `observaciones.view`, `observaciones.edit`, `observaciones.delete`, `bitacora.view`, `articulos.view`, `articulos.edit`, `articulos.sync`, `articulos.import`, `proveedores.view`, `proveedores.edit`, `proveedores.import`
+`users.view`, `users.create`, `users.edit`, `users.delete`, `roles.view`, `roles.create`, `roles.edit`, `roles.delete`, `permissions.view`, `clientes.view`, `clientes.sync`, `clientes.edit`, `clientes.vencimientos`, `clientes.import`, `observaciones.view`, `observaciones.edit`, `observaciones.delete`, `bitacora.view`, `articulos.view`, `articulos.edit`, `articulos.sync`, `articulos.import`, `proveedores.view`, `proveedores.edit`, `proveedores.import`
 
 Los **sectores** no tienen permisos propios: reusan `users.view`/`users.edit`.
 

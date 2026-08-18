@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Jobs\SyncClientesJob;
 use App\Models\Cliente;
 use App\Models\ClienteAttachment;
+use App\Services\ClienteExportService;
+use App\Services\ClienteImportService;
 use App\Support\Documentacion;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -80,6 +82,47 @@ class ClienteController extends Controller
             ->when($tipo, fn ($q) => $q->where('tipo_cliente', $tipo))
             ->when($estado, fn ($q) => $this->filtrarPorEstadoDocumental($q, $estado))
             ->orderBy('razon_social');
+    }
+
+    /**
+     * Exporta a Excel lo que muestra el listado, con el mismo filtro.
+     *
+     * El archivo que sale es además la plantilla del import — ver
+     * ClienteExportService.
+     */
+    public function export(Request $request): StreamedResponse
+    {
+        $this->authorize('clientes.view');
+
+        $clientes = $this->filtrados($request)->with('documentos')->get();
+
+        return (new ClienteExportService)->exportar($clientes);
+    }
+
+    public function import(Request $request, ClienteImportService $service): RedirectResponse
+    {
+        $this->authorize('clientes.import');
+
+        $data = $request->validate([
+            'archivo' => ['required', 'file', 'mimes:xlsx,xls,csv'],
+        ]);
+
+        try {
+            $resultado = $service->import($data['archivo']);
+        } catch (\InvalidArgumentException $e) {
+            return redirect()->route('clientes.index')->with('error', $e->getMessage());
+        }
+
+        $redirect = redirect()->route('clientes.index')->with(
+            'success',
+            "Importación completa: {$resultado['actualizados']} clientes actualizados, {$resultado['documentos']} documentos cargados."
+        );
+
+        if ($resultado['advertencias'] !== []) {
+            $redirect->with('error', implode(' | ', $resultado['advertencias']));
+        }
+
+        return $redirect;
     }
 
     /**

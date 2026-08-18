@@ -46,6 +46,7 @@ return [
         'clientes.sync' => ['grupo' => 'clientes', 'label' => 'Sincronizar con RP Sistemas'],
         'clientes.edit' => ['grupo' => 'clientes', 'label' => 'Editar clientes'],
         'clientes.vencimientos' => ['grupo' => 'clientes', 'label' => 'Ver avisos de clientes por vencer'],
+        'clientes.import' => ['grupo' => 'clientes', 'label' => 'Importar Excel de clientes'],
 
         'observaciones.view' => ['grupo' => 'observaciones', 'label' => 'Ver observaciones'],
         // Ojo: este permiso ya no gatea la edición de una observación puntual

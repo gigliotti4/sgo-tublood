@@ -18,7 +18,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'users.view', 'users.create', 'users.edit', 'users.delete',
             'roles.view', 'roles.create', 'roles.edit', 'roles.delete',
             'permissions.view',
-            'clientes.view', 'clientes.sync', 'clientes.edit', 'clientes.vencimientos',
+            'clientes.view', 'clientes.sync', 'clientes.edit', 'clientes.vencimientos', 'clientes.import',
             'observaciones.view', 'observaciones.edit', 'observaciones.delete',
             'bitacora.view',
             'articulos.view', 'articulos.edit', 'articulos.sync', 'articulos.import',
@@ -37,7 +37,7 @@ class RolesAndPermissionsSeeder extends Seeder
         $admin->syncPermissions([
             'users.view', 'users.create', 'users.edit',
             'roles.view',
-            'clientes.view', 'clientes.sync', 'clientes.edit',
+            'clientes.view', 'clientes.sync', 'clientes.edit', 'clientes.import',
             'observaciones.view', 'observaciones.edit', 'observaciones.delete',
             'bitacora.view',
             'articulos.view', 'articulos.edit', 'articulos.sync', 'articulos.import',
@@ -53,7 +53,8 @@ class RolesAndPermissionsSeeder extends Seeder
 
         $usuarioInterno = Role::firstOrCreate(['name' => 'usuario_interno']);
         $usuarioInterno->syncPermissions([
-            'clientes.view', 'clientes.sync', 'clientes.edit', 'observaciones.view', 'observaciones.edit',
+            'clientes.view', 'clientes.sync', 'clientes.edit', 'clientes.import',
+            'observaciones.view', 'observaciones.edit',
             'articulos.view', 'articulos.edit', 'articulos.sync', 'articulos.import',
             'proveedores.view', 'proveedores.edit', 'proveedores.import', 'proveedores.sync',
             'ventas.view', 'ventas.sync',

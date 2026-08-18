@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import { Head, Link, router } from '@inertiajs/vue3'
+import { computed, ref, watch } from 'vue'
+import { Head, Link, router, useForm } from '@inertiajs/vue3'
 import { route } from 'ziggy-js'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { usePermissions } from '@/composables/usePermissions'
 import Input from '@/Components/Input.vue'
 import Select from '@/Components/Select.vue'
 import Badge from '@/Components/Badge.vue'
+import Modal from '@/Components/Modal.vue'
 import Icon from '@/Components/Icon.vue'
 import Button from '@/Components/Button.vue'
 import Pagination from '@/Components/Pagination.vue'
@@ -66,6 +67,34 @@ const semaforoDocumental = (c: Cliente) => {
     return { label: 'Incompleta', variant: 'amber' as const }
 }
 
+// Descarga directa (no navegación de Inertia): con los mismos filtros que el
+// listado, así lo que ves es lo que baja. El archivo que sale es además la
+// plantilla del import — ver ClienteExportService.
+const urlExportar = computed(() => route('clientes.export', {
+    search: search.value || undefined,
+    tipo_cliente: tipoCliente.value || undefined,
+    estado_documental: filtroEstado.value || undefined,
+}))
+
+const showImportModal = ref(false)
+const importForm = useForm({
+    archivo: null as File | null,
+})
+
+const onArchivoChange = (e: Event) => {
+    importForm.archivo = (e.target as HTMLInputElement).files?.[0] ?? null
+}
+
+const submitImport = () => {
+    importForm.post(route('clientes.import'), {
+        forceFormData: true,
+        onSuccess: () => {
+            showImportModal.value = false
+            importForm.reset()
+        },
+    })
+}
+
 const syncing = ref(false)
 
 const triggerSync = () => {
@@ -109,6 +138,16 @@ const formatFechaVencimiento = (d: string | null) => {
                 </div>
 
                 <div class="flex flex-wrap items-center gap-3">
+                    <!-- Descarga directa, no navegación de Inertia: por eso <a> y no <Link>. -->
+                    <a
+                        :href="urlExportar"
+                        class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-white/[0.05]"
+                    >
+                        Exportar a Excel
+                    </a>
+                    <Button v-if="hasPermission('clientes.import')" variant="outline" @click="showImportModal = true">
+                        Importar Excel
+                    </Button>
                     <Button v-if="hasPermission('clientes.sync')" variant="brand" :disabled="syncing" @click="triggerSync">
                         <svg
                             class="w-4 h-4"
@@ -267,5 +306,53 @@ const formatFechaVencimiento = (d: string | null) => {
             </div>
 
         </div>
+
+        <!-- Carga masiva por Excel. La plantilla es el propio archivo que baja
+             "Exportar a Excel": mismos encabezados. -->
+        <Modal :show="showImportModal" title="Importar Excel de clientes" @close="showImportModal = false">
+            <form @submit.prevent="submitImport" class="space-y-4">
+                <div>
+                    <label class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Archivo (.xlsx, .xls o .csv)
+                    </label>
+                    <input
+                        type="file"
+                        accept=".xlsx,.xls,.csv"
+                        class="w-full cursor-pointer rounded-lg border border-gray-300 text-sm text-gray-700 shadow-theme-xs file:mr-4 file:cursor-pointer file:border-0 file:bg-gray-100 file:px-4 file:py-2.5 file:text-sm file:font-medium file:text-gray-700 dark:border-gray-700 dark:text-gray-300 dark:file:bg-white/[0.05] dark:file:text-gray-300"
+                        @change="onArchivoChange"
+                    />
+                    <p v-if="importForm.errors.archivo" class="mt-1.5 text-xs text-error-500 dark:text-error-400">
+                        {{ importForm.errors.archivo }}
+                    </p>
+                    <div class="mt-2 space-y-1.5 text-xs text-gray-500 dark:text-gray-400">
+                        <p>
+                            La forma más simple es <strong>exportar, editar el archivo y volver a subirlo</strong>:
+                            los encabezados son los mismos y las columnas se buscan por nombre, así que no importa
+                            el orden ni si faltan. El archivo que baja trae una hoja
+                            <strong>“Instructivo”</strong> con cómo se completa cada columna y qué documentación
+                            pide cada tipo de cliente.
+                        </p>
+                        <p>
+                            Se identifica cada fila por el <strong>N°</strong> de cliente. Se actualizan
+                            <strong>Tipo de cliente</strong>, <strong>Tiene legajo</strong>,
+                            <strong>Habilitado</strong>, <strong>Observaciones</strong> y cada documento
+                            (<strong>SÍ</strong>/<strong>NO</strong> y su columna <strong>“- Vto”</strong> en dd/mm/aaaa).
+                        </p>
+                        <p>
+                            Los clientes vienen de RP Sistemas: un N° que no exista <strong>no se crea</strong>, se avisa.
+                            Las celdas vacías <strong>no borran</strong> lo ya cargado — para dar de baja un documento
+                            hay que escribir “NO”. Las columnas calculadas se ignoran: se recalculan solas.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="flex gap-3 pt-2">
+                    <Button type="submit" variant="primary" :disabled="importForm.processing">
+                        {{ importForm.processing ? 'Importando...' : 'Importar' }}
+                    </Button>
+                    <Button variant="outline" @click="showImportModal = false">Cancelar</Button>
+                </div>
+            </form>
+        </Modal>
     </AppLayout>
 </template>

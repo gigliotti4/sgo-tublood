@@ -2,6 +2,8 @@
 
 namespace App\Support;
 
+use Illuminate\Support\Str;
+
 /**
  * Lee config/documentacion.php y expone el catálogo de clasificación
  * documental: qué documentos requiere cada tipo, cuáles son obligatorios,
@@ -138,5 +140,46 @@ class Documentacion
         }
 
         return $atributos;
+    }
+
+    /**
+     * Resuelve el tipo de cliente que escribieron en el Excel: acepta el slug
+     * (`laboratorio_analisis_clinicos`) o la etiqueta (`Laboratorio de Análisis
+     * Clínicos`), sin distinguir acentos, mayúsculas ni espacios de más.
+     *
+     * Devuelve null si no matchea ninguno — el import lo reporta como
+     * advertencia y deja el tipo que el cliente ya tenía.
+     */
+    public static function tipoDesdeEtiqueta(string $valor): ?string
+    {
+        $buscado = static::normalizar($valor);
+
+        if ($buscado === '') {
+            return null;
+        }
+
+        foreach (static::tipos() as $slug => $tipo) {
+            if ($buscado === static::normalizar($slug) || $buscado === static::normalizar($tipo['label'])) {
+                return $slug;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Forma comparable de un nombre de tipo o de documento: sin acentos, en
+     * minúscula y sin nada que no sea letra o número. Es lo que permite que el
+     * Excel diga "Habilitación ANMAT", "habilitacion anmat" o
+     * "HABILITACION_ANMAT" y las tres caigan en la misma clave.
+     *
+     * Mismo criterio que Proveedor::normalizarRazonSocial(), y por la misma
+     * razón: es matcheo exacto sobre la forma normalizada, nunca aproximado.
+     */
+    public static function normalizar(string $valor): string
+    {
+        return preg_replace('/[^a-z0-9]/', '', mb_strtolower(
+            Str::ascii($valor)
+        ));
     }
 }
