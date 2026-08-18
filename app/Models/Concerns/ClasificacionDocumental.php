@@ -11,9 +11,9 @@ use Illuminate\Support\Carbon;
  * config/documentacion.php), el checklist de documentos que ese tipo exige, y
  * los dos campos derivados que salen de cruzarlos.
  *
- * Vive en un trait y no en el modelo porque es la misma lógica para cualquier
- * registro que se clasifique: lo único propio de cada uno es de qué columna
- * sale el tipo y qué modelo guarda su checklist.
+ * Lo usan Cliente y Proveedor. Son las mismas figuras reguladas y los mismos
+ * papeles de ANMAT, así que la lógica es una sola: lo único propio de cada uno
+ * es de qué columna sale el tipo y qué modelo guarda su checklist.
  *
  * Quien lo use tiene que declarar además, en su tabla:
  *   fecha_vencimiento       (date, nullable)  — derivado
@@ -25,8 +25,11 @@ trait ClasificacionDocumental
     /** Modelo de la tabla hija que guarda el checklist. */
     abstract protected function modeloDocumento(): string;
 
-    /** Columna donde vive el tipo (ej. `tipo_cliente`). */
+    /** Columna donde vive el tipo (`tipo_cliente` / `tipo_proveedor`). */
     abstract public function tipoDocumental(): ?string;
+
+    /** Clave de `config('documentacion.entidades')` para recortar el catálogo. */
+    abstract public function entidadDocumental(): string;
 
     /** Checklist de documentación. Ver App\Support\Documentacion. */
     public function documentos(): HasMany

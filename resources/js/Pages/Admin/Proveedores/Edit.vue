@@ -1,12 +1,24 @@
 <script setup lang="ts">
 import AppLayout from '@/Layouts/AppLayout.vue'
+import { computed } from 'vue'
 import { Head, Link, useForm } from '@inertiajs/vue3'
 import Input from '@/Components/Input.vue'
 import Textarea from '@/Components/Textarea.vue'
+import Select from '@/Components/Select.vue'
+import RadioGroup from '@/Components/RadioGroup.vue'
 import Button from '@/Components/Button.vue'
-import type { Proveedor } from '@/types'
+import ControlDocumental from '@/Components/ControlDocumental.vue'
+import ChecklistDocumentos from '@/Components/ChecklistDocumentos.vue'
+import type { DocumentoChecklist, EstadoDocumentacion, Proveedor } from '@/types'
 
-const props = defineProps<{ proveedor: Proveedor }>()
+const props = defineProps<{
+    proveedor: Proveedor
+    tipos: Record<string, string>
+    documentos: DocumentoChecklist[]
+    estado: EstadoDocumentacion
+    /** Clave del documento del que sale el vencimiento del proveedor, si el tipo tiene uno. */
+    documentoDeterminante: string | null
+}>()
 
 const form = useForm({
     razon_social: props.proveedor.razon_social ?? '',
@@ -16,9 +28,22 @@ const form = useForm({
     mail: props.proveedor.mail ?? '',
     localidad: props.proveedor.localidad ?? '',
     observaciones: props.proveedor.observaciones ?? '',
+    tipo_proveedor: props.proveedor.tipo_proveedor ?? '',
+    // El RadioGroup trabaja con strings; el backend los valida como boolean.
+    tiene_legajo: props.proveedor.tiene_legajo ? '1' : '0',
+    habilitado: props.proveedor.habilitado ? '1' : '0',
 })
 
 const submit = () => form.put(route('proveedores.update', props.proveedor.id))
+
+const opcionesSiNo = [
+    { value: '1', label: 'Sí' },
+    { value: '0', label: 'No' },
+]
+
+const etiquetaDeterminante = computed(() =>
+    props.documentos.find(d => d.documento === props.documentoDeterminante)?.label ?? null,
+)
 </script>
 
 <template>
@@ -47,18 +72,21 @@ const submit = () => form.put(route('proveedores.update', props.proveedor.id))
 
             <div class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
                 <p class="mb-3 text-theme-xs font-medium uppercase tracking-wide text-gray-400">Datos del proveedor</p>
+                <p class="mb-4 text-theme-xs text-warning-600 dark:text-warning-400">
+                    Razón social, domicilio, localidad, CUIT, teléfono y mail se pisan en cada sincronización
+                    con RP Sistemas: si hay que corregir algo permanente, corregilo en el ERP. La clasificación
+                    de más abajo y Observaciones son propias del panel y no las toca la sincronización.
+                </p>
                 <form @submit.prevent="submit" class="space-y-4">
                     <Input
                         v-model="form.razon_social"
                         label="Razón social"
                         required
-                        hint="Se actualiza con cada importación del Excel."
                         :error="form.errors.razon_social"
                     />
                     <Input
                         v-model="form.domicilio"
                         label="Domicilio"
-                        hint="Se actualiza con cada importación del Excel."
                         :error="form.errors.domicilio"
                     />
                     <Input
@@ -85,13 +113,57 @@ const submit = () => form.put(route('proveedores.update', props.proveedor.id))
                     <Textarea
                         v-model="form.observaciones"
                         label="Observaciones"
+                        hint="Campo propio del panel: la sincronización no lo toca."
                         :error="form.errors.observaciones"
                     />
+
+                    <div class="border-t border-gray-100 pt-4 dark:border-gray-800">
+                        <p class="mb-4 text-theme-xs font-medium uppercase tracking-wide text-gray-400">Clasificación</p>
+                        <div class="space-y-4">
+                            <Select
+                                v-model="form.tipo_proveedor"
+                                label="Tipo de proveedor"
+                                hint="Define qué documentación se le exige."
+                                :error="form.errors.tipo_proveedor"
+                            >
+                                <option value="">— Sin clasificar —</option>
+                                <option v-for="(label, slug) in tipos" :key="slug" :value="slug">{{ label }}</option>
+                            </Select>
+                            <RadioGroup
+                                v-model="form.tiene_legajo"
+                                label="Tiene legajo"
+                                :opciones="opcionesSiNo"
+                                :error="form.errors.tiene_legajo"
+                            />
+                            <RadioGroup
+                                v-model="form.habilitado"
+                                label="Habilitado"
+                                :opciones="opcionesSiNo"
+                                hint="Habilitación documental del panel. No es el estado (A/S/I) que trae el ERP."
+                                :error="form.errors.habilitado"
+                            />
+                        </div>
+                    </div>
+
                     <div class="flex gap-3 pt-2">
                         <Button type="submit" variant="primary" :disabled="form.processing">Guardar cambios</Button>
                     </div>
                 </form>
             </div>
+
+            <ControlDocumental
+                :estado="estado"
+                :tipo="proveedor.tipo_proveedor"
+                :fecha-vencimiento="proveedor.fecha_vencimiento"
+                :etiqueta-determinante="etiquetaDeterminante"
+                entidad="proveedor"
+            />
+
+            <ChecklistDocumentos
+                :documentos="documentos"
+                :url="route('proveedores.documentacion.update', proveedor.id)"
+                entidad="proveedor"
+            />
         </div>
     </AppLayout>
 </template>

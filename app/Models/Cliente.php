@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\ClasificacionDocumental;
 use App\Models\Concerns\GuardaAdjuntos;
+use App\Support\Documentacion;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -75,6 +76,11 @@ class Cliente extends Model
     public function tipoDocumental(): ?string
     {
         return $this->tipo_cliente;
+    }
+
+    public function entidadDocumental(): string
+    {
+        return Documentacion::CLIENTES;
     }
 
     /** Los adjuntos van a `clientes/{numero}/` — ver GuardaAdjuntos. */

@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\ClasificacionDocumental;
+use App\Support\Documentacion;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -17,9 +19,19 @@ use Illuminate\Support\Str;
  * `numero` es opcional porque hay una segunda puerta de entrada: el Excel de
  * artículos, que trae la razón social pero no el NUM_PROV. Los que entran por
  * ahí quedan sin número hasta que el sync los adopte por razón social.
+ *
+ * La clasificación documental (`tipo_proveedor`, el checklist de documentos y
+ * los derivados `fecha_vencimiento` / `documentacion_completa`) es la misma que
+ * la de Cliente y vive en el trait ClasificacionDocumental, sobre el catálogo
+ * compartido de config/documentacion.php.
+ *
+ * ⚠️ `habilitado` (Sí/No del panel) **no es** `estado` (A/S/I del ERP, que la
+ * sincronización pisa). Son dos cosas distintas que en pantalla se parecen.
  */
 class Proveedor extends Model
 {
+    use ClasificacionDocumental;
+
     /** Laravel pluralizaría a `proveedors`. */
     protected $table = 'proveedores';
 
@@ -38,11 +50,20 @@ class Proveedor extends Model
         'contacto',
         'observaciones',
         'estado',
+        'tipo_proveedor',
+        'tiene_legajo',
+        'habilitado',
+        'fecha_vencimiento',
+        'documentacion_completa',
         'modificado_en',
         'synced_at',
     ];
 
     protected $casts = [
+        'tiene_legajo' => 'boolean',
+        'habilitado' => 'boolean',
+        'documentacion_completa' => 'boolean',
+        'fecha_vencimiento' => 'date',
         'modificado_en' => 'datetime',
         'synced_at' => 'datetime',
     ];
@@ -50,6 +71,21 @@ class Proveedor extends Model
     public function articulos(): HasMany
     {
         return $this->hasMany(Articulo::class);
+    }
+
+    protected function modeloDocumento(): string
+    {
+        return ProveedorDocumento::class;
+    }
+
+    public function tipoDocumental(): ?string
+    {
+        return $this->tipo_proveedor;
+    }
+
+    public function entidadDocumental(): string
+    {
+        return Documentacion::PROVEEDORES;
     }
 
     /**

@@ -9,6 +9,12 @@
 | presentar cada uno. Sale de las planillas de Tublood ("Catálogo de
 | documentos" / "Requisitos por tipo de cliente").
 |
+| **Lo comparten clientes y proveedores**: son las mismas figuras reguladas (un
+| importador es un importador esté de un lado o del otro del mostrador) y los
+| mismos papeles de ANMAT. Duplicar el catálogo garantizaba que las dos copias
+| se desincronizaran. Lo único que cambia por entidad es qué tipos se ofrecen
+| — ver `entidades` al final.
+|
 | Agregar un tipo o un documento es agregar una entrada acá, sin tocar código:
 | lo lee App\Support\Documentacion y de ahí salen el select del panel,
 | el checklist de la ficha, las reglas de validación y las columnas del Excel.
@@ -155,6 +161,31 @@ return [
             ],
         ],
 
+    ],
+
+    /*
+    | Qué tipos se ofrecen en cada entidad. La estructura de arriba es común;
+    | esto es lo único que las diferencia.
+    |
+    | Un cliente puede ser cualquiera de los diez. Un **proveedor solo puede ser
+    | uno de seis**: las otras cuatro figuras (profesional independiente, centro
+    | médico, veterinaria e institución) le compran a Tublood, no le venden.
+    |
+    | Sacar un tipo de una lista no rompe lo ya cargado: un registro clasificado
+    | con un tipo que dejó de estar disponible sigue mostrando su nombre y su
+    | checklist —`Documentacion::etiqueta()` y `::documentos()` buscan en el
+    | catálogo completo a propósito— pero no se lo puede volver a elegir.
+    */
+    'entidades' => [
+        'clientes' => [
+            'profesional_independiente', 'laboratorio_analisis_clinicos', 'drogueria',
+            'centro_medico', 'farmacia', 'distribuidor', 'importador',
+            'laboratorio_fabricante', 'veterinaria', 'institucion',
+        ],
+        'proveedores' => [
+            'laboratorio_analisis_clinicos', 'drogueria', 'farmacia',
+            'distribuidor', 'importador', 'laboratorio_fabricante',
+        ],
     ],
 
 ];

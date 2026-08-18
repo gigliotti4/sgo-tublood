@@ -133,6 +133,8 @@ Route::middleware(['auth'])->group(function () {
     Route::middleware('can:proveedores.edit')->group(function () {
         Route::get('/proveedores/{proveedor}/edit', [ProveedorController::class, 'edit'])->name('proveedores.edit');
         Route::put('/proveedores/{proveedor}', [ProveedorController::class, 'update'])->name('proveedores.update');
+        Route::put('/proveedores/{proveedor}/documentacion', [ProveedorController::class, 'updateDocumentacion'])
+            ->name('proveedores.documentacion.update');
     });
 
     // Ventas. Espejo de solo lectura de la vista SQL del ERP: no hay alta,

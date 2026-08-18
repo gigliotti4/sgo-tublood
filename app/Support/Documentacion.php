@@ -12,25 +12,66 @@ use Illuminate\Support\Str;
  * Mismo rol que TaxonomiaIncidencias para las incidencias internas: el
  * catálogo vive en config y de acá salen el select, el checklist de la ficha y
  * las reglas de validación, sin que ninguna de esas tres duplique la lista.
+ *
+ * **Lo comparten clientes y proveedores.** El parámetro `$entidad` solo recorta
+ * qué tipos se ofrecen en cada uno (`config('documentacion.entidades')`); la
+ * definición de cada tipo y de cada documento es una sola para los dos.
  */
 class Documentacion
 {
-    /** Todos los tipos del catálogo con sus documentos. */
-    public static function tipos(): array
+    public const CLIENTES = 'clientes';
+
+    public const PROVEEDORES = 'proveedores';
+
+    /** Todos los tipos del catálogo con sus documentos, sin recortar. */
+    public static function todosLosTipos(): array
     {
         return config('documentacion.tipos', []);
     }
 
-    /** Mapa [slug => label] para los selects y para mostrar en listados. */
-    public static function etiquetasTipos(): array
+    /**
+     * Los tipos que se ofrecen en una entidad, en el orden en que los declara
+     * `config('documentacion.entidades')`.
+     *
+     * Una entidad sin entrada en ese mapa ofrece el catálogo completo: es un
+     * default seguro, no esconde tipos por olvidar configurarla.
+     */
+    public static function tipos(string $entidad = self::CLIENTES): array
     {
-        return array_map(fn ($tipo) => $tipo['label'], static::tipos());
+        $todos = static::todosLosTipos();
+        $permitidos = config("documentacion.entidades.{$entidad}");
+
+        if ($permitidos === null) {
+            return $todos;
+        }
+
+        $tipos = [];
+
+        foreach ($permitidos as $slug) {
+            if (isset($todos[$slug])) {
+                $tipos[$slug] = $todos[$slug];
+            }
+        }
+
+        return $tipos;
     }
 
-    /** Etiqueta legible de un tipo, o null si no está en el catálogo. */
+    /** Mapa [slug => label] para los selects y para mostrar en listados. */
+    public static function etiquetasTipos(string $entidad = self::CLIENTES): array
+    {
+        return array_map(fn ($tipo) => $tipo['label'], static::tipos($entidad));
+    }
+
+    /**
+     * Etiqueta legible de un tipo, o null si no está en el catálogo.
+     *
+     * Busca en el catálogo completo y no en el de una entidad: un registro
+     * clasificado con un tipo que después se sacó de su lista tiene que
+     * seguir mostrando su nombre, no un hueco.
+     */
     public static function etiqueta(?string $tipo): ?string
     {
-        return $tipo === null ? null : (static::tipos()[$tipo]['label'] ?? null);
+        return $tipo === null ? null : (static::todosLosTipos()[$tipo]['label'] ?? null);
     }
 
     /**
@@ -63,7 +104,7 @@ class Documentacion
         $canonicos = static::documentosCanonicos();
         $documentos = [];
 
-        foreach (static::tipos()[$tipo]['documentos'] ?? [] as $clave => $def) {
+        foreach (static::todosLosTipos()[$tipo]['documentos'] ?? [] as $clave => $def) {
             $documentos[$clave] = ['label' => $canonicos[$clave] ?? $clave] + $def;
         }
 
@@ -150,7 +191,7 @@ class Documentacion
      * Devuelve null si no matchea ninguno — el import lo reporta como
      * advertencia y deja el tipo que el cliente ya tenía.
      */
-    public static function tipoDesdeEtiqueta(string $valor): ?string
+    public static function tipoDesdeEtiqueta(string $valor, string $entidad = self::CLIENTES): ?string
     {
         $buscado = static::normalizar($valor);
 
@@ -158,7 +199,7 @@ class Documentacion
             return null;
         }
 
-        foreach (static::tipos() as $slug => $tipo) {
+        foreach (static::tipos($entidad) as $slug => $tipo) {
             if ($buscado === static::normalizar($slug) || $buscado === static::normalizar($tipo['label'])) {
                 return $slug;
             }

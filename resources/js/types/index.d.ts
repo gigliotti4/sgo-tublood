@@ -108,8 +108,20 @@ export interface Proveedor {
     contacto: string | null
     /** Único campo propio del panel: la sincronización con el ERP no lo toca. */
     observaciones: string | null
-    /** Estado en el ERP (A / S / I). */
+    /** Estado en el ERP (A / S / I). No confundir con `habilitado`, que es del panel. */
     estado: string | null
+    /** Slug del catálogo compartido de config/documentacion.php. Campo propio del panel. */
+    tipo_proveedor: string | null
+    tiene_legajo: boolean
+    /** Habilitación documental del panel. Distinto de `estado` (ERP). */
+    habilitado: boolean
+    /** Derivado: sale del documento que determina el VTO final de su tipo. */
+    fecha_vencimiento: string | null
+    /** Derivado, denormalizado para poder filtrar el listado. */
+    documentacion_completa: boolean
+    /** Solo en el listado (`withExists`): tiene algún documento vencido. */
+    tiene_vencidos?: boolean
+    documentos?: ClienteDocumento[]
     modificado_en: string | null
     synced_at: string | null
     created_at: string | null
@@ -215,20 +227,20 @@ export interface ClienteDocumento {
     fecha_vencimiento: string | null
 }
 /**
- * Un documento del catálogo del tipo, ya cruzado con lo que el registro tenga
- * cargado. Lo arma ClienteController::checklist().
+ * Un documento del catálogo del tipo de cliente, ya cruzado con lo que el
+ * cliente tenga cargado. Lo arma ClienteController::checklist().
  */
 export interface DocumentoChecklist {
     documento: string
     label: string
     obligatorio: boolean
     vence: boolean
-    /** Su vencimiento es el del registro ("lo que determina el VTO final"). */
+    /** Su vencimiento es el del cliente ("lo que determina el VTO final"). */
     determina_vencimiento: boolean
     presentado: boolean
     fecha_vencimiento: string | null
 }
-/** El "control automático" de la planilla — ver ClasificacionDocumental. */
+/** El "control automático" de la planilla — ver Cliente::estadoDocumentacion(). */
 export interface EstadoDocumentacion {
     completa: boolean
     faltantes: string[]

@@ -7,9 +7,13 @@ use App\Jobs\SyncProveedoresJob;
 use App\Models\Proveedor;
 use App\Services\ProveedorExportService;
 use App\Services\ProveedorImportService;
+use App\Support\Documentacion;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -25,21 +29,68 @@ class ProveedorController extends Controller
     {
         $this->authorize('proveedores.view');
 
-        $search = $request->string('search')->trim()->value();
-
-        $proveedores = Proveedor::query()
-            ->when($search, fn ($q) => $q->buscar($search))
-            ->orderBy('razon_social')
+        $proveedores = $this->filtrados($request)
+            // El semáforo del listado necesita saber si hay algún documento
+            // vencido. Se resuelve con un `exists` en SQL en vez de traer el
+            // checklist de las 50 filas y recorrerlo en PHP.
+            ->withExists(['documentos as tiene_vencidos' => fn ($q) => $q
+                ->where('presentado', true)
+                ->whereNotNull('fecha_vencimiento')
+                ->whereDate('fecha_vencimiento', '<', now()),
+            ])
             ->paginate(50)
             ->withQueryString();
 
         return inertia('Admin/Proveedores/Index', [
             'proveedores' => $proveedores,
-            'filters' => ['search' => $search],
+            'filters' => [
+                'search' => $request->string('search')->trim()->value(),
+                'tipo_proveedor' => $request->string('tipo_proveedor')->trim()->value(),
+                'estado_documental' => $request->string('estado_documental')->trim()->value(),
+            ],
+            'tipos' => Documentacion::etiquetasTipos(Documentacion::PROVEEDORES),
             // Sin filtrar: el paginador ya trae el total de la búsqueda vigente.
             'total' => Proveedor::count(),
             'lastSync' => Proveedor::max('synced_at'),
         ]);
+    }
+
+    /**
+     * La query del listado con los filtros de la request aplicados. La
+     * comparten el listado y la exportación a Excel: lo que ves es lo que baja.
+     */
+    private function filtrados(Request $request): Builder
+    {
+        $search = $request->string('search')->trim()->value();
+        $tipo = $request->string('tipo_proveedor')->trim()->value();
+        $estado = $request->string('estado_documental')->trim()->value();
+
+        return Proveedor::query()
+            ->when($search, fn ($q) => $q->buscar($search))
+            ->when($tipo, fn ($q) => $q->where('tipo_proveedor', $tipo))
+            ->when($estado, fn ($q) => $this->filtrarPorEstadoDocumental($q, $estado))
+            ->orderBy('razon_social');
+    }
+
+    /**
+     * Filtro del listado por estado documental.
+     *
+     * `completa` e `incompleta` se apoyan en la columna denormalizada
+     * `documentacion_completa` (el estado sale del catálogo en config, no se
+     * puede expresar en un `where`); `vencida` sí se consulta sobre el checklist.
+     */
+    private function filtrarPorEstadoDocumental(Builder $query, string $estado): void
+    {
+        match ($estado) {
+            'completa' => $query->where('documentacion_completa', true),
+            'incompleta' => $query->where('documentacion_completa', false)->whereNotNull('tipo_proveedor'),
+            'vencida' => $query->whereHas('documentos', fn ($q) => $q
+                ->where('presentado', true)
+                ->whereNotNull('fecha_vencimiento')
+                ->whereDate('fecha_vencimiento', '<', now())),
+            'sin_tipo' => $query->whereNull('tipo_proveedor'),
+            default => null,
+        };
     }
 
     /**
@@ -50,12 +101,7 @@ class ProveedorController extends Controller
     {
         $this->authorize('proveedores.view');
 
-        $search = $request->string('search')->trim()->value();
-
-        $proveedores = Proveedor::query()
-            ->when($search, fn ($q) => $q->buscar($search))
-            ->orderBy('razon_social')
-            ->get();
+        $proveedores = $this->filtrados($request)->with('documentos')->get();
 
         return (new ProveedorExportService)->exportar($proveedores);
     }
@@ -102,9 +148,43 @@ class ProveedorController extends Controller
     {
         $this->authorize('proveedores.edit');
 
+        $proveedor->load('documentos');
+
         return inertia('Admin/Proveedores/Edit', [
             'proveedor' => $proveedor,
+            'tipos' => Documentacion::etiquetasTipos(Documentacion::PROVEEDORES),
+            'documentos' => $this->checklist($proveedor),
+            'estado' => $proveedor->estadoDocumentacion(),
+            'documentoDeterminante' => Documentacion::documentoDeterminante($proveedor->tipo_proveedor),
         ]);
+    }
+
+    /**
+     * El checklist que ve la ficha: el catálogo del tipo (que manda) con lo que
+     * el proveedor tenga cargado de cada documento. Un documento del catálogo
+     * sin fila todavía sale como no presentado, no como ausente.
+     */
+    private function checklist(Proveedor $proveedor): array
+    {
+        $cargados = $proveedor->documentos->keyBy('documento');
+
+        $items = [];
+
+        foreach (Documentacion::documentos($proveedor->tipo_proveedor) as $clave => $def) {
+            $doc = $cargados->get($clave);
+
+            $items[] = [
+                'documento' => $clave,
+                'label' => $def['label'],
+                'obligatorio' => (bool) $def['obligatorio'],
+                'vence' => (bool) $def['vence'],
+                'determina_vencimiento' => ! empty($def['determina_vencimiento']),
+                'presentado' => (bool) $doc?->presentado,
+                'fecha_vencimiento' => $doc?->fecha_vencimiento?->toDateString(),
+            ];
+        }
+
+        return $items;
     }
 
     public function update(Request $request, Proveedor $proveedor): RedirectResponse
@@ -122,12 +202,81 @@ class ProveedorController extends Controller
             'mail' => ['nullable', 'email', 'max:255'],
             'localidad' => ['nullable', 'string', 'max:255'],
             'observaciones' => ['nullable', 'string'],
+            // `fecha_vencimiento` no está acá a propósito: es derivado, sale
+            // del documento que lo determina. Ver recalcularEstadoDocumental().
+            'tipo_proveedor' => ['nullable', Rule::in(array_keys(Documentacion::tipos(Documentacion::PROVEEDORES)))],
+            // `sometimes` y no `required`: un request que no los manda deja el
+            // valor que ya estaba, en vez de fallar. El formulario siempre los
+            // envía; esto es para no romper cualquier otro camino que actualice
+            // solo algunos campos.
+            'tiene_legajo' => ['sometimes', 'boolean'],
+            'habilitado' => ['sometimes', 'boolean'],
         ]);
 
         $proveedor->update($data);
 
+        // Cambiar de tipo cambia qué documentos se exigen y cuál determina el
+        // vencimiento, así que el estado se recalcula también desde acá.
+        $proveedor->recalcularEstadoDocumental();
+
         return redirect()->route('proveedores.edit', $proveedor)
             ->with('success', 'Proveedor actualizado correctamente.');
+    }
+
+    /**
+     * Guarda el checklist de documentación completo (Sí/No y vencimiento de
+     * cada documento) y recalcula el estado derivado del proveedor.
+     */
+    public function updateDocumentacion(Request $request, Proveedor $proveedor): RedirectResponse
+    {
+        $this->authorize('proveedores.edit');
+
+        if ($proveedor->tipo_proveedor === null) {
+            return back()->with('error', 'Elegí primero un tipo de proveedor: la documentación requerida depende de él.');
+        }
+
+        $data = $request->validate(
+            Documentacion::reglasValidacion($proveedor->tipo_proveedor),
+            attributes: Documentacion::atributosValidacion($proveedor->tipo_proveedor),
+        );
+
+        $catalogo = Documentacion::documentos($proveedor->tipo_proveedor);
+
+        DB::transaction(function () use ($proveedor, $catalogo, $data) {
+            foreach ($catalogo as $clave => $def) {
+                $item = $data['documentos'][$clave] ?? null;
+
+                if ($item === null) {
+                    continue;
+                }
+
+                $presentado = (bool) $item['presentado'];
+
+                $proveedor->documentos()->updateOrCreate(
+                    ['documento' => $clave],
+                    [
+                        'presentado' => $presentado,
+                        // La fecha solo tiene sentido en un documento que vence
+                        // y que además está presentado: si se destilda, la del
+                        // papel anterior no puede quedar colgada.
+                        'fecha_vencimiento' => empty($def['vence']) || ! $presentado
+                            ? null
+                            : ($item['fecha_vencimiento'] ?? null),
+                    ]
+                );
+            }
+
+            // Los documentos que quedaron de un tipo anterior no se muestran ni
+            // cuentan, así que tampoco se guardan.
+            $proveedor->documentos()
+                ->whereNotIn('documento', array_keys($catalogo))
+                ->delete();
+        });
+
+        $proveedor->recalcularEstadoDocumental();
+
+        return redirect()->route('proveedores.edit', $proveedor)
+            ->with('success', 'Documentación actualizada correctamente.');
     }
 
     public function import(Request $request, ProveedorImportService $service): RedirectResponse

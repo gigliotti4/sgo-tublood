@@ -5,6 +5,8 @@ import { route } from 'ziggy-js'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { usePermissions } from '@/composables/usePermissions'
 import Input from '@/Components/Input.vue'
+import Select from '@/Components/Select.vue'
+import Badge from '@/Components/Badge.vue'
 import Icon from '@/Components/Icon.vue'
 import Button from '@/Components/Button.vue'
 import Modal from '@/Components/Modal.vue'
@@ -16,7 +18,8 @@ import type { PaginatedData, Proveedor } from '@/types'
 
 const props = defineProps<{
     proveedores: PaginatedData<Proveedor>
-    filters: { search: string }
+    filters: { search: string; tipo_proveedor: string; estado_documental: string }
+    tipos: Record<string, string>
     total: number
     lastSync: string | null
 }>()
@@ -41,20 +44,51 @@ const formatDate = (d: string | null) => {
 const { hasPermission } = usePermissions()
 
 const search = ref(props.filters.search ?? '')
+const tipoProveedor = ref(props.filters.tipo_proveedor ?? '')
+const filtroEstado = ref(props.filters.estado_documental ?? '')
+
+const recargar = () => {
+    router.get(route('proveedores.index'), {
+        search: search.value,
+        tipo_proveedor: tipoProveedor.value,
+        estado_documental: filtroEstado.value,
+    }, {
+        preserveState: true,
+        preserveScroll: true,
+        replace: true,
+    })
+}
+
 let debounce: ReturnType<typeof setTimeout>
 
-watch(search, (val) => {
+// Solo el buscador necesita debounce: los selects cambian de a un valor.
+watch(search, () => {
     clearTimeout(debounce)
-    debounce = setTimeout(() => {
-        router.get(route('proveedores.index'), { search: val }, {
-            preserveState: true,
-            preserveScroll: true,
-            replace: true,
-        })
-    }, 350)
+    debounce = setTimeout(recargar, 350)
 })
 
-const urlExportar = computed(() => route('proveedores.export', search.value ? { search: search.value } : {}))
+watch([tipoProveedor, filtroEstado], recargar)
+
+const ESTADOS_DOCUMENTALES: Record<string, string> = {
+    completa: 'Documentación completa',
+    incompleta: 'Documentación incompleta',
+    vencida: 'Con documentación vencida',
+    sin_tipo: 'Sin tipo de proveedor',
+}
+
+/** Mismo criterio que estadoDocumentacion(): vencida gana sobre completa. */
+const semaforoDocumental = (p: Proveedor) => {
+    if (!p.tipo_proveedor) return { label: 'Sin tipo', variant: 'slate' as const }
+    if (p.tiene_vencidos) return { label: 'Vencida', variant: 'red' as const }
+    if (p.documentacion_completa) return { label: 'Completa', variant: 'emerald' as const }
+    return { label: 'Incompleta', variant: 'amber' as const }
+}
+
+const urlExportar = computed(() => route('proveedores.export', {
+    search: search.value || undefined,
+    tipo_proveedor: tipoProveedor.value || undefined,
+    estado_documental: filtroEstado.value || undefined,
+}))
 
 const showImportModal = ref(false)
 const importForm = useForm({
@@ -119,8 +153,8 @@ const submitImport = () => {
                 </div>
             </div>
 
-            <!-- Buscador -->
-            <div class="max-w-sm">
+            <!-- Buscador y filtros -->
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <Input v-model="search" type="text" placeholder="Buscar por número, razón social, domicilio...">
                     <template #icon>
                         <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -128,6 +162,14 @@ const submitImport = () => {
                         </svg>
                     </template>
                 </Input>
+                <Select v-model="tipoProveedor">
+                    <option value="">Todos los tipos</option>
+                    <option v-for="(label, slug) in tipos" :key="slug" :value="slug">{{ label }}</option>
+                </Select>
+                <Select v-model="filtroEstado">
+                    <option value="">Toda la documentación</option>
+                    <option v-for="(label, valor) in ESTADOS_DOCUMENTALES" :key="valor" :value="valor">{{ label }}</option>
+                </Select>
             </div>
 
             <!-- Tabla -->
@@ -142,12 +184,14 @@ const submitImport = () => {
                                 <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Localidad</th>
                                 <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Teléfono</th>
                                 <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Mail</th>
+                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Tipo</th>
+                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Documentación</th>
                                 <th v-if="hasPermission('proveedores.edit')" class="px-4 py-3" />
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
                             <tr v-if="proveedores.data.length === 0">
-                                <td colspan="7" class="px-4 py-12 text-center text-sm text-gray-400">
+                                <td colspan="9" class="px-4 py-12 text-center text-sm text-gray-400">
                                     <template v-if="search">
                                         No se encontraron proveedores para "<span class="font-medium">{{ search }}</span>".
                                     </template>
@@ -175,6 +219,12 @@ const submitImport = () => {
                                 <td class="px-4 py-3.5 text-theme-xs text-gray-600 dark:text-gray-300">{{ proveedor.localidad ?? '—' }}</td>
                                 <td class="px-4 py-3.5 text-theme-xs text-gray-500 dark:text-gray-400">{{ proveedor.telefono ?? '—' }}</td>
                                 <td class="px-4 py-3.5 text-theme-xs text-gray-500 dark:text-gray-400">{{ proveedor.mail ?? '—' }}</td>
+                                <td class="px-4 py-3.5 text-theme-xs text-gray-500 dark:text-gray-400">
+                                    {{ proveedor.tipo_proveedor ? tipos[proveedor.tipo_proveedor] : '—' }}
+                                </td>
+                                <td class="px-4 py-3.5">
+                                    <Badge :variant="semaforoDocumental(proveedor).variant">{{ semaforoDocumental(proveedor).label }}</Badge>
+                                </td>
                                 <td v-if="hasPermission('proveedores.edit')" class="px-4 py-3.5 text-right">
                                     <Link
                                         :href="route('proveedores.edit', proveedor.id)"
@@ -213,6 +263,10 @@ const submitImport = () => {
                             <DataRow label="CUIT">{{ proveedor.cuit ?? '—' }}</DataRow>
                             <DataRow label="Teléfono">{{ proveedor.telefono ?? '—' }}</DataRow>
                             <DataRow label="Mail">{{ proveedor.mail ?? '—' }}</DataRow>
+                            <DataRow label="Tipo">{{ proveedor.tipo_proveedor ? tipos[proveedor.tipo_proveedor] : '—' }}</DataRow>
+                            <DataRow label="Documentación">
+                                <Badge :variant="semaforoDocumental(proveedor).variant">{{ semaforoDocumental(proveedor).label }}</Badge>
+                            </DataRow>
                         </template>
                     </TableCard>
                 </div>
