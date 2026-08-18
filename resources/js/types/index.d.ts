@@ -96,12 +96,22 @@ export interface Proveedor {
     /** `null` en los que creó el import de artículos: esa planilla no trae el NUM_PROV. */
     numero: string | null
     razon_social: string
+    nombre_fantasia: string | null
     domicilio: string | null
     cuit: string | null
     telefono: string | null
+    celular: string | null
     mail: string | null
     localidad: string | null
+    provincia: string | null
+    codigo_postal: string | null
+    contacto: string | null
+    /** Único campo propio del panel: la sincronización con el ERP no lo toca. */
     observaciones: string | null
+    /** Estado en el ERP (A / S / I). */
+    estado: string | null
+    modificado_en: string | null
+    synced_at: string | null
     created_at: string | null
     updated_at: string | null
 }

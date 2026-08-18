@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Proveedor;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
@@ -86,6 +87,67 @@ class ProveedorControllerTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->where('total', 2)
                 ->where('proveedores.total', 1));
+    }
+
+    // ── Exportación a Excel ──────────────────────────────────────────────────
+
+    public function test_exportar_requiere_permiso_proveedores_view(): void
+    {
+        $this->actingAs(User::factory()->create())
+            ->get('/proveedores/export')
+            ->assertStatus(403);
+    }
+
+    public function test_exportar_devuelve_un_xlsx(): void
+    {
+        $this->proveedor();
+        $user = $this->userWith('proveedores.view');
+
+        $response = $this->actingAs($user)->get('/proveedores/export');
+
+        $response->assertOk();
+        $response->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        $this->assertStringContainsString(
+            'proveedores-'.now()->format('Y-m-d').'.xlsx',
+            $response->headers->get('content-disposition')
+        );
+    }
+
+    /** Lo que ves es lo que baja: el archivo respeta el buscador. */
+    public function test_exportar_respeta_el_filtro_del_listado(): void
+    {
+        $this->proveedor();
+        $this->proveedor(['numero' => '1246', 'razon_social' => 'CRONOINK SRL']);
+        $user = $this->userWith('proveedores.view');
+
+        $filas = $this->filasDelExcel(
+            $this->actingAs($user)->get('/proveedores/export?search=CRONO')
+        );
+
+        // Encabezado + una sola fila de datos.
+        $this->assertCount(2, $filas);
+        $this->assertSame('CRONOINK SRL', $filas[1][1]);
+    }
+
+    /** Un proveedor sin número (los creó el Excel de artículos) no rompe el archivo. */
+    public function test_exportar_tolera_un_proveedor_sin_numero(): void
+    {
+        Proveedor::create(['razon_social' => 'SIN NUMERO SRL']);
+        $user = $this->userWith('proveedores.view');
+
+        $filas = $this->filasDelExcel($this->actingAs($user)->get('/proveedores/export'));
+
+        $this->assertSame('sin número', $filas[1][0]);
+        $this->assertSame('SIN NUMERO SRL', $filas[1][1]);
+    }
+
+    /** Abre el xlsx que devolvió la respuesta y lo lee como array de filas. */
+    private function filasDelExcel($response): array
+    {
+        $path = tempnam(sys_get_temp_dir(), 'export').'.xlsx';
+        file_put_contents($path, $response->streamedContent());
+
+        return IOFactory::load($path)->getActiveSheet()->toArray();
     }
 
     public function test_editar_requiere_permiso_proveedores_edit(): void

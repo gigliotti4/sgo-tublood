@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\SyncProveedoresJob;
 use App\Models\Proveedor;
+use App\Services\ProveedorExportService;
 use App\Services\ProveedorImportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ProveedorController extends Controller
 {
@@ -35,7 +38,36 @@ class ProveedorController extends Controller
             'filters' => ['search' => $search],
             // Sin filtrar: el paginador ya trae el total de la búsqueda vigente.
             'total' => Proveedor::count(),
+            'lastSync' => Proveedor::max('synced_at'),
         ]);
+    }
+
+    /**
+     * Exporta el padrón a Excel, con el mismo filtro que el listado: lo que ves
+     * es lo que baja.
+     */
+    public function export(Request $request): StreamedResponse
+    {
+        $this->authorize('proveedores.view');
+
+        $search = $request->string('search')->trim()->value();
+
+        $proveedores = Proveedor::query()
+            ->when($search, fn ($q) => $q->buscar($search))
+            ->orderBy('razon_social')
+            ->get();
+
+        return (new ProveedorExportService)->exportar($proveedores);
+    }
+
+    public function sync(): RedirectResponse
+    {
+        $this->authorize('proveedores.sync');
+
+        SyncProveedoresJob::dispatch();
+
+        return redirect()->route('proveedores.index')
+            ->with('success', 'Sincronización iniciada. Los datos se actualizarán en breve.');
     }
 
     /**

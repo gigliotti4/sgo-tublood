@@ -111,11 +111,15 @@ Route::middleware(['auth'])->group(function () {
         // Antes de /proveedores/{proveedor}/edit y del index paginado: es el
         // autocompletado del selector de proveedor de un artículo.
         Route::get('/proveedores/buscar', [ProveedorController::class, 'buscar'])->name('proveedores.buscar');
+        Route::get('/proveedores/export', [ProveedorController::class, 'export'])->name('proveedores.export');
         Route::get('/proveedores', [ProveedorController::class, 'index'])->name('proveedores.index');
     });
     // Antes de /proveedores/{proveedor}/edit para que no haya ambigüedad.
     Route::middleware('can:proveedores.import')->group(function () {
         Route::post('/proveedores/import', [ProveedorController::class, 'import'])->name('proveedores.import');
+    });
+    Route::middleware('can:proveedores.sync')->group(function () {
+        Route::post('/proveedores/sync', [ProveedorController::class, 'sync'])->name('proveedores.sync');
     });
     Route::middleware('can:proveedores.edit')->group(function () {
         Route::get('/proveedores/{proveedor}/edit', [ProveedorController::class, 'edit'])->name('proveedores.edit');

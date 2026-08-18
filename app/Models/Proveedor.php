@@ -8,15 +8,15 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
 /**
- * Proveedor del padrón.
+ * Proveedor del padrón, espejado de `powerbi_proveedores_vista` del ERP.
  *
- * `numero`, `razon_social` y `domicilio` son lo que trae la planilla Excel y se
- * actualizan en cada importación; el resto son campos propios del panel que el
- * import no toca (ver `ProveedorImportService`).
+ * Todo lo que llena `ProveedorSyncService` se pisa en cada sincronización. La
+ * única excepción es `observaciones`: es propio del panel y queda fuera de la
+ * lista de columnas del `upsert()` a propósito.
  *
- * `numero` es opcional porque hay dos puertas de entrada: el padrón (que lo
- * trae) y el Excel de artículos (que solo trae la razón social). Los que entran
- * por la segunda quedan sin número hasta que el padrón los adopte.
+ * `numero` es opcional porque hay una segunda puerta de entrada: el Excel de
+ * artículos, que trae la razón social pero no el NUM_PROV. Los que entran por
+ * ahí quedan sin número hasta que el sync los adopte por razón social.
  */
 class Proveedor extends Model
 {
@@ -26,12 +26,25 @@ class Proveedor extends Model
     protected $fillable = [
         'numero',
         'razon_social',
+        'nombre_fantasia',
         'domicilio',
         'cuit',
         'telefono',
+        'celular',
         'mail',
         'localidad',
+        'provincia',
+        'codigo_postal',
+        'contacto',
         'observaciones',
+        'estado',
+        'modificado_en',
+        'synced_at',
+    ];
+
+    protected $casts = [
+        'modificado_en' => 'datetime',
+        'synced_at' => 'datetime',
     ];
 
     public function articulos(): HasMany

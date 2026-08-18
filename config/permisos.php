@@ -66,6 +66,7 @@ return [
         'proveedores.view' => ['grupo' => 'proveedores', 'label' => 'Ver proveedores'],
         'proveedores.edit' => ['grupo' => 'proveedores', 'label' => 'Editar proveedores'],
         'proveedores.import' => ['grupo' => 'proveedores', 'label' => 'Importar Excel de proveedores'],
+        'proveedores.sync' => ['grupo' => 'proveedores', 'label' => 'Sincronizar con RP Sistemas'],
     ],
 
 ];

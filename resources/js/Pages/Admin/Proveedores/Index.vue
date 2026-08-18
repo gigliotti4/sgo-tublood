@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Head, Link, router, useForm } from '@inertiajs/vue3'
 import { route } from 'ziggy-js'
 import AppLayout from '@/Layouts/AppLayout.vue'
@@ -18,7 +18,25 @@ const props = defineProps<{
     proveedores: PaginatedData<Proveedor>
     filters: { search: string }
     total: number
+    lastSync: string | null
 }>()
+
+const syncing = ref(false)
+
+const triggerSync = () => {
+    syncing.value = true
+    router.post(route('proveedores.sync'), {}, {
+        onFinish: () => { syncing.value = false },
+    })
+}
+
+const formatDate = (d: string | null) => {
+    if (!d) return 'Nunca'
+    return new Date(d).toLocaleString('es-AR', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+    })
+}
 
 const { hasPermission } = usePermissions()
 
@@ -35,6 +53,8 @@ watch(search, (val) => {
         })
     }, 350)
 })
+
+const urlExportar = computed(() => route('proveedores.export', search.value ? { search: search.value } : {}))
 
 const showImportModal = ref(false)
 const importForm = useForm({
@@ -69,13 +89,32 @@ const submitImport = () => {
                         <ContadorRegistros :total="total" :filtrados="proveedores.total" />
                     </div>
                     <p class="mt-0.5 text-theme-sm text-gray-500 dark:text-gray-400">
-                        El padrón se carga desde la planilla Excel.
+                        Última sincronización: {{ formatDate(lastSync) }}
                     </p>
                 </div>
 
                 <div class="flex flex-wrap items-center gap-3">
-                    <Button v-if="hasPermission('proveedores.import')" variant="primary" @click="showImportModal = true">
+                    <!-- Descarga directa, no navegación de Inertia: por eso <a> y no <Link>. -->
+                    <a
+                        :href="urlExportar"
+                        class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-white/[0.05]"
+                    >
+                        Exportar a Excel
+                    </a>
+                    <Button v-if="hasPermission('proveedores.import')" variant="outline" @click="showImportModal = true">
                         Importar Excel
+                    </Button>
+                    <Button v-if="hasPermission('proveedores.sync')" variant="brand" :disabled="syncing" @click="triggerSync">
+                        <svg
+                            class="w-4 h-4"
+                            :class="{ 'animate-spin': syncing }"
+                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        >
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
+                            />
+                        </svg>
+                        {{ syncing ? 'Sincronizando...' : 'Sincronizar' }}
                     </Button>
                 </div>
             </div>
@@ -113,7 +152,7 @@ const submitImport = () => {
                                         No se encontraron proveedores para "<span class="font-medium">{{ search }}</span>".
                                     </template>
                                     <template v-else>
-                                        No hay proveedores. Usá el botón <strong>Importar Excel</strong> para cargar el padrón.
+                                        No hay proveedores. Usá el botón <strong>Sincronizar</strong> para traer el padrón desde RP Sistemas.
                                     </template>
                                 </td>
                             </tr>
@@ -179,7 +218,7 @@ const submitImport = () => {
                 </div>
                 <p v-else class="p-4 text-center text-sm text-gray-400 md:hidden">
                     <template v-if="search">No se encontraron proveedores para "<span class="font-medium">{{ search }}</span>".</template>
-                    <template v-else>No hay proveedores. Usá el botón <strong>Importar Excel</strong> para cargar el padrón.</template>
+                    <template v-else>No hay proveedores. Usá el botón <strong>Sincronizar</strong> para traer el padrón desde RP Sistemas.</template>
                 </p>
 
                 <!-- Footer: total + paginación -->
