@@ -43,8 +43,10 @@ echo "==> Driver de SQL Server (proveedores y ventas del ERP)"
 # agendadas se auto-apagan si falta (ver el guard en routes/console.php).
 curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
     | gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
+# El prod.list de Microsoft ya viene con su propio `signed-by` apuntando a este
+# mismo keyring, así que se usa tal cual. Agregarle un segundo grupo de opciones
+# entre corchetes hace que apt lo rechace con "Malformed entry (URI parse)".
 curl -fsSL https://packages.microsoft.com/config/ubuntu/24.04/prod.list \
-    | sed 's|^deb |deb [signed-by=/usr/share/keyrings/microsoft-prod.gpg] |' \
     > /etc/apt/sources.list.d/mssql-release.list
 apt-get update
 ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc-dev
