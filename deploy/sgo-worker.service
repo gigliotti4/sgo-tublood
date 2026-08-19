@@ -1,0 +1,46 @@
+# Worker de colas de SGO Tublood.
+#
+#   sudo cp deploy/sgo-worker.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now sgo-worker
+#
+# Es la pieza que faltaba en el hosting compartido: sin un worker corriendo, el
+# botón "Sincronizar" y los comandos agendados despachan un job que se queda en
+# la tabla `jobs` para siempre (había 4 SyncVentasJob esperando desde agosto).
+#
+# systemd alcanza y sobra acá; no hace falta supervisor.
+
+[Unit]
+Description=SGO Tublood — worker de colas
+After=network.target mysql.service
+
+[Service]
+User=deploy
+Group=www-data
+Restart=always
+RestartSec=5
+WorkingDirectory=/var/www/sgo
+
+# --timeout: la sincronización de ventas mueve ~60.000 filas contra el SQL
+# Server del ERP, que además está del otro lado del continente. 900s (15 min) es
+# holgado; medir `time php artisan ventas:sync --sync` y ajustar si hiciera falta.
+#
+# --tries=3: un corte de red contra el ERP se reintenta en vez de morir.
+#
+# --max-time=3600: el worker se recicla cada hora. Laravel es de proceso largo y
+# un job pesado puede dejar memoria colgada; systemd lo vuelve a levantar.
+ExecStart=/usr/bin/php /var/www/sgo/artisan queue:work \
+    --queue=default \
+    --tries=3 \
+    --timeout=900 \
+    --max-time=3600 \
+    --sleep=3
+
+# `queue:restart` (que corre el deploy) le pide al worker que salga limpio.
+# Salir con código 0 es lo esperado, no un fallo.
+SuccessExitStatus=0
+
+StandardOutput=append:/var/log/sgo-worker.log
+StandardError=append:/var/log/sgo-worker.log
+
+[Install]
+WantedBy=multi-user.target
