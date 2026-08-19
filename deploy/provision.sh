@@ -41,8 +41,10 @@ echo "==> Driver de SQL Server (proveedores y ventas del ERP)"
 # Esto es lo que el hosting compartido no permitía instalar, y por lo que
 # proveedores y ventas nunca se sincronizaron en producción. Las dos tareas
 # agendadas se auto-apagan si falta (ver el guard en routes/console.php).
+# --batch --yes: sin esto, al volver a correr el script gpg pregunta si pisa el
+# keyring que ya existe y muere buscando una terminal que no hay.
 curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
-    | gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
+    | gpg --batch --yes --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
 # El prod.list de Microsoft ya viene con su propio `signed-by` apuntando a este
 # mismo keyring, así que se usa tal cual. Agregarle un segundo grupo de opciones
 # entre corchetes hace que apt lo rechace con "Malformed entry (URI parse)".
