@@ -42,3 +42,10 @@ Thumbs.db
 /PREGUNTAS-*.md
 /PROMPT-*.md
 /Reunion.md
+
+# Planillas con datos de personas o de clientes: el repo es publico y estos
+# archivos se generan/descargan a mano, no son parte del codigo.
+/usuarios-*.xlsx
+/clientes-*.xlsx
+/proveedores-*.xlsx
+/observaciones-*.xlsx

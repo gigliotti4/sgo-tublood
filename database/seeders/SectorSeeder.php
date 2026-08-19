@@ -17,6 +17,7 @@ class SectorSeeder extends Seeder
             'deposito' => ['nombre' => 'Depósito', 'dias_gestion' => 3],
             'comercial' => ['nombre' => 'Comercial', 'dias_gestion' => 2],
             'comex' => ['nombre' => 'Compras', 'dias_gestion' => null],
+            'finanzas' => ['nombre' => 'Finanzas', 'dias_gestion' => null],
             'asuntos_regulatorios' => ['nombre' => 'Asuntos Regulatorios', 'dias_gestion' => 5],
             'garantia_calidad' => ['nombre' => 'Calidad', 'dias_gestion' => 3],
             'direccion_tecnica' => ['nombre' => 'Dirección Técnica', 'dias_gestion' => null],

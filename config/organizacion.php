@@ -21,6 +21,9 @@ return [
         'calidad' => 'garantia_calidad',
         'ventas' => 'comercial',
         'asuntos-regulatorios-gestion-de-calidad' => 'asuntos_regulatorios',
+        // El sector se llama "Compras" pero su slug quedó como `comex` de
+        // cuando ese era su nombre; el Excel trae COMPRAS.
+        'compras' => 'comex',
     ],
 
 ];
