@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { Head, Link, router, useForm } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { usePermissions } from '@/composables/usePermissions'
@@ -219,6 +219,25 @@ const abrirEdicion = (o: Observacion) => {
 }
 
 const cerrarEdicion = () => { idEnEdicion.value = null }
+
+/**
+ * Abre el modal directo cuando se llega con `?editar=<id>`.
+ *
+ * Es lo que usa el boton "Editar" del Dashboard: en vez de duplicar ahi este
+ * modal (responsable, sector, clasificacion, bitacora y adjuntos), manda al
+ * listado con `q=<numero>` para que la fila entre en los resultados, y el
+ * editor de verdad se abre solo.
+ *
+ * `puedeEditar` se chequea igual que si hubieran hecho clic en el lapiz: el
+ * parametro viene de la URL y no autoriza nada por si mismo.
+ */
+onMounted(() => {
+    const id = Number(new URLSearchParams(window.location.search).get('editar'))
+    if (!id) return
+
+    const o = props.observaciones.data.find(x => x.id === id)
+    if (o && puedeEditar(o)) abrirEdicion(o)
+})
 
 // ── Borrado (soft delete, con motivo obligatorio) ───────────────────────────
 

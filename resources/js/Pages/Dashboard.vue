@@ -6,6 +6,7 @@ import { route } from 'ziggy-js'
 import VueApexCharts from 'vue3-apexcharts'
 import type { ApexOptions } from 'apexcharts'
 import Badge from '@/Components/Badge.vue'
+import Icon from '@/Components/Icon.vue'
 import { useDarkMode } from '@/composables/useDarkMode'
 
 const { isDark } = useDarkMode()
@@ -14,6 +15,19 @@ interface EstadoCount {
     estado: string
     label: string
     count: number
+}
+
+/** Una fila del panel que se despliega al pasar el mouse por una tarjeta. */
+interface ItemTarjeta {
+    id: number
+    numero: string
+    titulo: string
+    estado: string
+}
+
+interface ListaTarjeta {
+    items: ItemTarjeta[]
+    total: number
 }
 
 interface UltimaObservacion {
@@ -39,7 +53,17 @@ const props = defineProps<{
         critica: number
         sinClasificar: number
     }
+    /**
+     * Lo que lista el hover de "Abiertas" y "Asignadas a mí". Recortado en el
+     * backend: `total` es cuántas hay de verdad, para el "y N más".
+     */
+    listas: {
+        abiertas: ListaTarjeta
+        asignadasAMi: ListaTarjeta
+    }
     porEstado: EstadoCount[]
+    /** Todos los estados, incluida `cancelada` (que `porEstado` excluye). */
+    estadoLabels: Record<string, string>
     porSector: { sector: string; count: number }[]
     asignadas: UltimaObservacion[]
     ultimas: UltimaObservacion[]
@@ -64,8 +88,7 @@ const estadoColor: Record<string, string> = {
     cancelada: '#f04438',
 }
 
-const estadoLabel = (estado: string) =>
-    props.porEstado.find(e => e.estado === estado)?.label ?? estado
+const estadoLabel = (estado: string) => props.estadoLabels[estado] ?? estado
 
 const formatFecha = (d: string) =>
     new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -156,13 +179,19 @@ interface StatCard {
     iconClass: string
     iconBg: string
     sub?: string
+    /**
+     * Solo las tarjetas que la traen despliegan el panel al pasar el mouse.
+     * Las otras tres no: "Observaciones" y "Cerradas" listarían prácticamente
+     * todo el sistema, y No Conformidades todavía no existe.
+     */
+    lista?: ListaTarjeta
 }
 
 const statCards = computed<StatCard[]>(() => [
     { label: 'Observaciones', value: props.stats.total, icon: 'document', iconClass: 'text-brand-500 dark:text-brand-300', iconBg: 'bg-brand-50 dark:bg-brand-500/[0.12]' },
-    { label: 'Abiertas', value: props.stats.abiertas, icon: 'inbox', iconClass: 'text-warning-600 dark:text-warning-400', iconBg: 'bg-warning-50 dark:bg-warning-500/15' },
+    { label: 'Abiertas', value: props.stats.abiertas, icon: 'inbox', iconClass: 'text-warning-600 dark:text-warning-400', iconBg: 'bg-warning-50 dark:bg-warning-500/15', lista: props.listas.abiertas },
     { label: 'Cerradas', value: props.stats.cerradas, icon: 'check', iconClass: 'text-success-600 dark:text-success-400', iconBg: 'bg-success-50 dark:bg-success-500/15' },
-    { label: 'Asignadas a mí', value: props.stats.asignadasAMi, icon: 'user', iconClass: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-50 dark:bg-blue-500/15' },
+    { label: 'Asignadas a mí', value: props.stats.asignadasAMi, icon: 'user', iconClass: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-50 dark:bg-blue-500/15', lista: props.listas.asignadasAMi },
     { label: 'No Conformidades', value: props.stats.nc, icon: 'flag', iconClass: 'text-purple-600 dark:text-purple-400', iconBg: 'bg-purple-50 dark:bg-purple-500/15', sub: `${props.stats.ncAbiertas} abiertas` },
 ])
 </script>
@@ -179,10 +208,14 @@ const statCards = computed<StatCard[]>(() => [
 
         <!-- Stat cards -->
         <div class="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5 md:gap-6">
+            <!-- `group` + `relative`: el panel de abajo se despliega al pasar el
+                 mouse por la tarjeta. `focus-within` lo abre tambien con el
+                 teclado, que de otra forma no llegaria nunca. -->
             <div
                 v-for="card in statCards"
                 :key="card.label"
-                class="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03]"
+                class="group relative rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03]"
+                :class="card.lista ? 'focus-within:z-30 hover:z-30' : ''"
             >
                 <div class="flex h-12 w-12 items-center justify-center rounded-xl" :class="card.iconBg">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" class="h-6 w-6" :class="card.iconClass">
@@ -194,6 +227,36 @@ const statCards = computed<StatCard[]>(() => [
                     <div class="flex items-end justify-between">
                         <p class="mt-1 text-2xl font-bold text-gray-800 dark:text-white/90">{{ card.value }}</p>
                         <span v-if="card.sub" class="text-theme-xs text-gray-400">{{ card.sub }}</span>
+                    </div>
+                </div>
+
+                <!-- Panel del hover. Sin separacion real con la tarjeta (el aire
+                     lo pone el `pt-2` de adentro) para que el mouse pueda
+                     entrar a la lista sin que se cierre en el camino. -->
+                <div
+                    v-if="card.lista"
+                    class="pointer-events-none absolute left-0 top-full z-30 hidden w-full min-w-72 pt-2 group-focus-within:block group-hover:block sm:w-80"
+                >
+                    <div class="pointer-events-auto max-h-80 overflow-y-auto rounded-xl border border-gray-200 bg-white p-2 shadow-theme-lg dark:border-gray-700 dark:bg-gray-900">
+                        <p v-if="card.lista.items.length === 0" class="px-2 py-3 text-center text-theme-xs text-gray-400">
+                            No hay observaciones {{ card.label.toLowerCase() }}.
+                        </p>
+                        <Link
+                            v-for="o in card.lista.items"
+                            :key="o.id"
+                            :href="route('observaciones.show', o.id)"
+                            class="flex items-start gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.05]"
+                        >
+                            <span class="mt-0.5 shrink-0 font-mono text-theme-xs text-gray-400">{{ o.numero }}</span>
+                            <span class="min-w-0 flex-1 truncate text-theme-xs text-gray-700 dark:text-gray-200">{{ o.titulo }}</span>
+                            <Badge :variant="estadoVariant[o.estado] ?? 'slate'">{{ estadoLabel(o.estado) }}</Badge>
+                        </Link>
+                        <p
+                            v-if="card.lista.total > card.lista.items.length"
+                            class="px-2 pb-1 pt-2 text-theme-xs text-gray-400"
+                        >
+                            y {{ card.lista.total - card.lista.items.length }} más…
+                        </p>
                     </div>
                 </div>
             </div>
@@ -266,11 +329,12 @@ const statCards = computed<StatCard[]>(() => [
                             <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Título</th>
                             <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Estado</th>
                             <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Fecha</th>
+                            <th class="px-6 py-3" />
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
                         <tr v-if="asignadas.length === 0">
-                            <td colspan="5" class="px-6 py-10 text-center text-sm text-gray-400">
+                            <td colspan="6" class="px-6 py-10 text-center text-sm text-gray-400">
                                 No tenés observaciones asignadas.
                             </td>
                         </tr>
@@ -282,6 +346,29 @@ const statCards = computed<StatCard[]>(() => [
                                 <Badge :variant="estadoVariant[o.estado] ?? 'slate'">{{ estadoLabel(o.estado) }}</Badge>
                             </td>
                             <td class="px-6 py-3.5 text-theme-sm text-gray-500 dark:text-gray-400">{{ formatFecha(o.created_at) }}</td>
+                            <td class="px-6 py-3.5">
+                                <div class="flex items-center justify-end gap-1">
+                                    <Link
+                                        :href="route('observaciones.show', o.id)"
+                                        class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-brand-500 dark:hover:bg-white/[0.05] dark:hover:text-brand-300"
+                                        title="Ver detalle"
+                                    >
+                                        <Icon name="eye" class="h-4.5 w-4.5" />
+                                        <span class="sr-only">Ver detalle de {{ o.numero }}</span>
+                                    </Link>
+                                    <!-- El editor es el modal del listado de
+                                         observaciones: se abre alla en vez de
+                                         duplicarlo (ver `editar` en su Index). -->
+                                    <Link
+                                        :href="route('observaciones.index', { q: o.numero, editar: o.id })"
+                                        class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-brand-500 dark:hover:bg-white/[0.05] dark:hover:text-brand-300"
+                                        title="Editar"
+                                    >
+                                        <Icon name="pencil" class="h-4.5 w-4.5" />
+                                        <span class="sr-only">Editar {{ o.numero }}</span>
+                                    </Link>
+                                </div>
+                            </td>
                         </tr>
                     </tbody>
                 </table>

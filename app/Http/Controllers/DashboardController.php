@@ -4,10 +4,21 @@ namespace App\Http\Controllers;
 
 use App\Models\Observacion;
 use App\Support\TaxonomiaIncidencias;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 
 class DashboardController extends Controller
 {
     private const ESTADOS_ABIERTOS = Observacion::ESTADOS_ABIERTOS;
+
+    /**
+     * Cuántas observaciones lista el hover de una tarjeta.
+     *
+     * "Todas" no es viable: el numerito puede ser de miles y el panel tiene que
+     * entrar en pantalla y viajar en las props de cada carga del panel. Se
+     * muestran las más nuevas y el resto se resume en "y N más".
+     */
+    private const TOPE_HOVER = 15;
 
     public function index()
     {
@@ -45,12 +56,43 @@ class DashboardController extends Controller
                 ->values(),
             // TODO: requiere tabla sectors (pendiente).
             'porSector' => [],
+            // Lo que muestra el hover de las tarjetas "Abiertas" y "Asignadas a
+            // mí". Cada lista usa **el mismo criterio que el numero de su
+            // tarjeta**: si no, el panel contradiria al contador que abre.
+            'listas' => [
+                'abiertas' => $this->listaDeTarjeta(
+                    Observacion::whereIn('estado', self::ESTADOS_ABIERTOS)
+                ),
+                'asignadasAMi' => $this->listaDeTarjeta(
+                    Observacion::where('responsable_id', auth()->id())
+                ),
+            ],
             'asignadas' => $asignadasAMi,
             'ultimas' => Observacion::query()
                 ->latest()
                 ->limit(8)
                 ->get(['id', 'numero', 'tipo', 'estado', 'titulo', 'created_at']),
             'tipoLabels' => TaxonomiaIncidencias::etiquetasTipos(),
+            // Todos los estados, incluida `cancelada`. `porEstado` la excluye
+            // (no va en el gráfico), así que usarlo de diccionario dejaba a las
+            // canceladas mostrando el slug crudo en las tablas.
+            'estadoLabels' => Observacion::ESTADOS,
         ]);
+    }
+
+    /**
+     * Las primeras TOPE_HOVER de una consulta, con cuántas quedaron afuera.
+     *
+     * @return array{items: Collection<int, Observacion>, total: int}
+     */
+    private function listaDeTarjeta(Builder $query): array
+    {
+        return [
+            'items' => (clone $query)
+                ->latest()
+                ->limit(self::TOPE_HOVER)
+                ->get(['id', 'numero', 'titulo', 'estado']),
+            'total' => $query->count(),
+        ];
     }
 }
