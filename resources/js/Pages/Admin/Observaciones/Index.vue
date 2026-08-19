@@ -21,6 +21,7 @@ import SelectorMultiple from '@/Components/SelectorMultiple.vue'
 import SelectorMultipleAsync, { type OpcionAsync } from '@/Components/SelectorMultipleAsync.vue'
 import Textarea from '@/Components/Textarea.vue'
 import type { Observacion, PaginatedData } from '@/types'
+import { proveedorDeProducto } from '@/lib/productos'
 
 interface UsuarioOption {
     id: number
@@ -39,6 +40,7 @@ interface Filtros {
     responsable_id?: number[]
     creado_por?: number[]
     articulo_codigo?: string[]
+    proveedor_id?: number[]
     apertura?: string
     desde?: string
     hasta?: string
@@ -82,6 +84,7 @@ const filtros = reactive({
     responsable_id: Array.isArray(props.filters.responsable_id) ? props.filters.responsable_id : [] as number[],
     creado_por: Array.isArray(props.filters.creado_por) ? props.filters.creado_por : [] as number[],
     articulo_codigo: Array.isArray(props.filters.articulo_codigo) ? props.filters.articulo_codigo : [] as string[],
+    proveedor_id: Array.isArray(props.filters.proveedor_id) ? props.filters.proveedor_id : [] as number[],
     apertura: props.filters.apertura ?? '',
     desde: props.filters.desde ?? '',
     hasta: props.filters.hasta ?? '',
@@ -121,7 +124,7 @@ watch(filtros, () => {
 const limpiarFiltros = () => {
     Object.assign(filtros, {
         q: '', origen: '', prioridad: '', tipo_caso: '',
-        responsable_id: [], creado_por: [], articulo_codigo: [], apertura: '', desde: '', hasta: '', anio: [],
+        responsable_id: [], creado_por: [], articulo_codigo: [], proveedor_id: [], apertura: '', desde: '', hasta: '', anio: [],
     })
 }
 
@@ -266,6 +269,23 @@ const confirmarBorrado = () => {
 
 const nombreCompleto = (u: UsuarioOption) => [u.name, u.apellido].filter(Boolean).join(' ')
 
+interface ProveedorSugerido { id: number; numero: string | null; razon_social: string }
+/** `proveedores.buscar` devuelve {id, numero, razon_social}; el filtro va por id. */
+const mapearProveedor = (item: unknown): OpcionAsync => {
+    const p = item as ProveedorSugerido
+
+    return { id: String(p.id), label: p.razon_social }
+}
+
+/**
+ * Puente entre el selector (trabaja con `string[]`, porque los ids de artículo
+ * son códigos) y el filtro, que manda ids numéricos al backend.
+ */
+const filtrosProveedor = computed<string[]>({
+    get: () => filtros.proveedor_id.map(String),
+    set: v => { filtros.proveedor_id = v.map(Number) },
+})
+
 interface ArticuloSugerido { codigo: string; descripcion: string }
 const mapearArticulo = (item: unknown): OpcionAsync => {
     const a = item as ArticuloSugerido
@@ -386,6 +406,20 @@ const guardar = () => {
                                 label="Producto/Artículo"
                                 placeholder="Todos"
                                 :mapear="mapearArticulo"
+                            />
+                        </div>
+
+                        <!-- Solo con `proveedores.view`: el endpoint del
+                             autocompletado lo exige. Quien no lo tenga y llegue
+                             desde el ranking del Dashboard igual ve el listado
+                             filtrado, solo que no puede elegir otro proveedor. -->
+                        <div v-if="hasPermission('proveedores.view')" class="xl:col-span-3">
+                            <SelectorMultipleAsync
+                                v-model="filtrosProveedor"
+                                route="proveedores.buscar"
+                                label="Proveedor del artículo"
+                                placeholder="Todos"
+                                :mapear="mapearProveedor"
                             />
                         </div>
 
@@ -648,6 +682,7 @@ const guardar = () => {
                                         <tr class="text-left text-gray-400">
                                             <th class="py-1.5 pr-4 font-medium">Código</th>
                                             <th class="py-1.5 pr-4 font-medium">Producto</th>
+                                            <th class="py-1.5 pr-4 font-medium">Proveedor</th>
                                             <th class="py-1.5 pr-4 font-medium">Cantidad</th>
                                             <th class="py-1.5 pr-4 font-medium">Presentación</th>
                                             <th class="py-1.5 pr-4 font-medium">Lote</th>
@@ -660,6 +695,11 @@ const guardar = () => {
                                         <tr v-for="p in observacionEnEdicion.productos" :key="p.id" class="text-gray-600 dark:text-gray-300">
                                             <td class="py-2 pr-4">{{ p.codigo ?? '—' }}</td>
                                             <td class="py-2 pr-4">{{ p.producto }}</td>
+                                            <td class="py-2 pr-4">
+                                                <span :class="proveedorDeProducto(p).atribuido ? '' : 'italic text-gray-400'">
+                                                    {{ proveedorDeProducto(p).texto }}
+                                                </span>
+                                            </td>
                                             <td class="py-2 pr-4">{{ p.cantidad_afectada }}</td>
                                             <td class="py-2 pr-4">{{ p.tipo_presentacion ? (presentaciones[p.tipo_presentacion] ?? p.tipo_presentacion) : '—' }}</td>
                                             <td class="py-2 pr-4">{{ p.lote }}</td>

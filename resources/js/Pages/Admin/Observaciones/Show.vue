@@ -6,6 +6,7 @@ import BitacoraObservacion from '@/Components/BitacoraObservacion.vue'
 import Badge from '@/Components/Badge.vue'
 import Icon from '@/Components/Icon.vue'
 import type { Observacion } from '@/types'
+import { proveedorDeProducto } from '@/lib/productos'
 
 const props = defineProps<{
     observacion: Observacion
@@ -152,6 +153,7 @@ const humanizar = (clave: string) =>
                                     <th class="py-1.5 pr-4 font-medium">Producto</th>
                                     <th class="py-1.5 pr-4 font-medium">Artículo</th>
                                     <th class="py-1.5 pr-4 font-medium">PM</th>
+                                    <th class="py-1.5 pr-4 font-medium">Proveedor</th>
                                     <th class="py-1.5 pr-4 font-medium">Cantidad</th>
                                     <th class="py-1.5 pr-4 font-medium">Presentación</th>
                                     <th class="py-1.5 pr-4 font-medium">Lote</th>
@@ -166,6 +168,11 @@ const humanizar = (clave: string) =>
                                     <td class="py-2 pr-4">{{ p.producto }}</td>
                                     <td class="py-2 pr-4">{{ p.articulo?.descripcion ?? '—' }}</td>
                                     <td class="py-2 pr-4">{{ p.articulo?.pm ?? '—' }}</td>
+                                    <td class="py-2 pr-4">
+                                        <span :class="proveedorDeProducto(p).atribuido ? '' : 'italic text-gray-400'">
+                                            {{ proveedorDeProducto(p).texto }}
+                                        </span>
+                                    </td>
                                     <td class="py-2 pr-4">{{ p.cantidad_afectada }}</td>
                                     <td class="py-2 pr-4">{{ p.tipo_presentacion ? (presentaciones[p.tipo_presentacion] ?? p.tipo_presentacion) : '—' }}</td>
                                     <td class="py-2 pr-4">{{ p.lote }}</td>

@@ -19,6 +19,7 @@ class ObservacionExportService
     private const COLUMNAS = [
         'N°', 'Tipo', 'Origen', 'Título', 'Cliente', 'Sector',
         'Responsable', 'Creado por', 'Prioridad', 'Estado', 'Creada', 'Vence',
+        'Proveedores',
     ];
 
     /** @param  Collection<int, Observacion>  $observaciones */
@@ -46,11 +47,12 @@ class ObservacionExportService
                 Observacion::ESTADOS[$observacion->estado] ?? $observacion->estado,
                 $observacion->created_at?->format('d/m/Y'),
                 $observacion->vence_at?->format('d/m/Y'),
+                $this->proveedores($observacion),
             ], null, "A{$fila}");
             $fila++;
         }
 
-        foreach (range('A', 'L') as $columna) {
+        foreach (range('A', 'M') as $columna) {
             $hoja->getColumnDimension($columna)->setAutoSize(true);
         }
 
@@ -62,5 +64,22 @@ class ObservacionExportService
         }, $nombreArchivo, [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ]);
+    }
+
+    /**
+     * Los proveedores de los productos afectados, sin repetir.
+     *
+     * El Excel es una fila por observación y no por renglón, así que un caso
+     * con varios productos del mismo proveedor lo nombra una sola vez. Un
+     * producto cuyo código no matchea ningún artículo, o cuyo artículo todavía
+     * no tiene proveedor cargado, simplemente no aporta nada.
+     */
+    private function proveedores(Observacion $observacion): string
+    {
+        return $observacion->productos
+            ->map(fn ($producto) => $producto->articulo?->proveedor?->razon_social)
+            ->filter()
+            ->unique()
+            ->implode(', ');
     }
 }

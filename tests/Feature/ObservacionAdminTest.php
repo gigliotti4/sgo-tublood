@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Articulo;
 use App\Models\Cliente;
 use App\Models\Observacion;
+use App\Models\Proveedor;
 use App\Models\Sector;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -959,5 +960,71 @@ class ObservacionAdminTest extends TestCase
         $this->actingAs($user)
             ->get("/observaciones?creado_por[]={$creadorA->id}&creado_por[]={$creadorB->id}")
             ->assertInertia(fn ($page) => $page->has('observaciones.data', 2));
+    }
+
+    /**
+     * De quién es el producto que falló. Sale del padrón en vivo
+     * (`articulos.proveedor_id`), no de una copia guardada en la observación.
+     */
+    public function test_show_trae_el_proveedor_del_articulo(): void
+    {
+        $proveedor = Proveedor::create(['numero' => '1', 'razon_social' => 'PROPATO HNOS SAIC']);
+        Articulo::create(['codigo' => 'GUIA-123', 'descripcion' => 'Guía', 'proveedor_id' => $proveedor->id]);
+
+        $observacion = $this->observacion();
+        $this->producto($observacion, 'GUIA-123');
+
+        $this->actingAs($this->userWith('observaciones.view'))
+            ->get("/observaciones/{$observacion->id}")
+            ->assertInertia(fn ($page) => $page
+                ->where('observacion.productos.0.articulo.proveedor.razon_social', 'PROPATO HNOS SAIC'));
+    }
+
+    /** El artículo existe pero todavía no tiene proveedor cargado: no rompe. */
+    public function test_show_deja_el_proveedor_en_null_si_el_articulo_no_lo_tiene(): void
+    {
+        Articulo::create(['codigo' => 'GUIA-123', 'descripcion' => 'Guía']);
+
+        $observacion = $this->observacion();
+        $this->producto($observacion, 'GUIA-123');
+
+        $this->actingAs($this->userWith('observaciones.view'))
+            ->get("/observaciones/{$observacion->id}")
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('observacion.productos.0.articulo.proveedor', null));
+    }
+
+    /** Es el filtro al que lleva el ranking de proveedores del Dashboard. */
+    public function test_el_listado_filtra_por_proveedor_del_articulo(): void
+    {
+        $proveedor = Proveedor::create(['numero' => '1', 'razon_social' => 'PROPATO HNOS SAIC']);
+        $otro = Proveedor::create(['numero' => '2', 'razon_social' => 'BETA SRL']);
+
+        Articulo::create(['codigo' => 'A-1', 'descripcion' => 'Aguja', 'proveedor_id' => $proveedor->id]);
+        Articulo::create(['codigo' => 'B-1', 'descripcion' => 'Gasa', 'proveedor_id' => $otro->id]);
+
+        $suya = $this->observacion(['titulo' => 'La de PROPATO']);
+        $this->producto($suya, 'A-1');
+        $this->producto($this->observacion(['titulo' => 'La otra']), 'B-1');
+
+        $this->actingAs($this->userWith('observaciones.view'))
+            ->get('/observaciones?proveedor_id[]='.$proveedor->id)
+            ->assertInertia(fn ($page) => $page
+                ->has('observaciones.data', 1)
+                ->where('observaciones.data.0.titulo', 'La de PROPATO'));
+    }
+
+    private function producto(Observacion $observacion, string $codigo): void
+    {
+        $observacion->productos()->create([
+            'producto' => 'Producto '.$codigo,
+            'codigo' => $codigo,
+            'cantidad_afectada' => 1,
+            'lote' => 'L-1',
+            'fecha_vencimiento' => '2027-01-01',
+            'numero_remito' => 'R-1',
+            'tipo_comprobante' => 'remito',
+        ]);
     }
 }

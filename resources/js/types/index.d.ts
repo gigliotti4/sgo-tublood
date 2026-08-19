@@ -299,7 +299,12 @@ export interface ObservationProduct {
     numero_remito: string
     tipo_comprobante: string
     /** Solo si `codigo` matchea un artículo del catálogo sincronizado. */
-    articulo?: { descripcion: string; pm: string | null } | null
+    articulo?: {
+        descripcion: string
+        pm: string | null
+        /** De quién es el producto. Sale del padrón en vivo, no de una copia. */
+        proveedor?: { id: number; razon_social: string } | null
+    } | null
 }
 
 export interface Observacion {

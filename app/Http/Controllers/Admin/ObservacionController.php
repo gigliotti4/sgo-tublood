@@ -35,6 +35,22 @@ class ObservacionController extends Controller
         'Santa Fe', 'Santiago del Estero', 'Tierra del Fuego', 'Tucumán',
     ];
 
+    /**
+     * Los productos afectados con su artículo del catálogo y el proveedor de
+     * ese artículo. Lo comparten el listado (alimenta el modal), el detalle, el
+     * PDF y el Excel: las cuatro pantallas muestran de quién es el producto que
+     * falló, y tenerlo en un solo lugar evita que a una se le olvide.
+     *
+     * ⚠️ `proveedor_id` **tiene que estar** en la lista de columnas del
+     * artículo: sin la FK, Eloquent no puede resolver el `belongsTo` anidado y
+     * el proveedor llega siempre `null`, sin error.
+     */
+    private const EAGER_PRODUCTOS = [
+        'productos',
+        'productos.articulo:codigo,descripcion,pm,proveedor_id',
+        'productos.articulo.proveedor:id,razon_social',
+    ];
+
     /** @return array<string, array<int, mixed>> */
     private function reglasDeFiltros(): array
     {
@@ -49,6 +65,8 @@ class ObservacionController extends Controller
             'creado_por.*' => ['integer', 'exists:users,id'],
             'articulo_codigo' => ['nullable', 'array'],
             'articulo_codigo.*' => ['string'],
+            'proveedor_id' => ['nullable', 'array'],
+            'proveedor_id.*' => ['integer', 'exists:proveedores,id'],
             'apertura' => ['nullable', 'in:abierta,cerrada'],
             'desde' => ['nullable', 'date'],
             'hasta' => ['nullable', 'date', 'after_or_equal:desde'],
@@ -85,6 +103,13 @@ class ObservacionController extends Controller
             ->when($filters['responsable_id'] ?? null, fn ($query, $v) => $query->whereIn('responsable_id', $v))
             ->when($filters['creado_por'] ?? null, fn ($query, $v) => $query->whereIn('created_by', $v))
             ->when($filters['articulo_codigo'] ?? null, fn ($query, $v) => $query->whereHas('productos', fn ($p) => $p->whereIn('codigo', $v)))
+            // De quién es el producto que falló. Sale del padrón en vivo
+            // (`articulos.proveedor_id`) y no de una copia guardada en la
+            // observación: corregirle el proveedor a un artículo reencuadra
+            // también los casos viejos. Es el filtro al que lleva el ranking
+            // de "Proveedores con más fallas" del Dashboard.
+            ->when($filters['proveedor_id'] ?? null, fn ($query, $v) => $query
+                ->whereHas('productos.articulo', fn ($a) => $a->whereIn('proveedor_id', $v)))
             ->when($filters['apertura'] ?? null, fn ($query, $v) => $v === 'abierta'
                 ? $query->whereIn('estado', Observacion::ESTADOS_ABIERTOS)
                 : $query->whereNotIn('estado', Observacion::ESTADOS_ABIERTOS))
@@ -102,7 +127,8 @@ class ObservacionController extends Controller
         return inertia('Admin/Observaciones/Index', [
             'observaciones' => $this->filtrarObservaciones($filters)
                 ->with([
-                    'responsable:id,name', 'sector:id,nombre', 'cliente:id,numero,razon_social,mail,telefono', 'productos',
+                    'responsable:id,name', 'sector:id,nombre', 'cliente:id,numero,razon_social,mail,telefono',
+                    ...self::EAGER_PRODUCTOS,
                     ...$this->eagerLoadsDeGestion(),
                 ])
                 ->latest()
@@ -129,7 +155,10 @@ class ObservacionController extends Controller
         $filters = $request->validate($this->reglasDeFiltros());
 
         $observaciones = $this->filtrarObservaciones($filters)
-            ->with(['responsable:id,name', 'sector:id,nombre', 'cliente:id,razon_social', 'creador:id,name'])
+            ->with([
+                'responsable:id,name', 'sector:id,nombre', 'cliente:id,razon_social', 'creador:id,name',
+                ...self::EAGER_PRODUCTOS,
+            ])
             ->latest()
             ->get();
 
@@ -152,8 +181,7 @@ class ObservacionController extends Controller
                 'responsable:id,name,apellido',
                 'sector:id,nombre,dias_gestion',
                 'cliente:id,numero,razon_social,mail,telefono',
-                'productos',
-                'productos.articulo:codigo,descripcion,pm',
+                ...self::EAGER_PRODUCTOS,
                 'baja.user:id,name,apellido',
                 ...$this->eagerLoadsDeGestion(),
             ]),
@@ -182,7 +210,7 @@ class ObservacionController extends Controller
             'responsable:id,name,apellido',
             'sector:id,nombre',
             'cliente:id,numero,razon_social,mail,telefono',
-            'productos',
+            ...self::EAGER_PRODUCTOS,
             'attachments:id,observation_id,original_name,size',
         ]);
 

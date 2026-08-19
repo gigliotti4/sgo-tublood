@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import AppLayout from '@/Layouts/AppLayout.vue'
-import { Head, Link } from '@inertiajs/vue3'
+import { Head, Link, router } from '@inertiajs/vue3'
 import { computed } from 'vue'
 import { route } from 'ziggy-js'
 import VueApexCharts from 'vue3-apexcharts'
@@ -28,6 +28,13 @@ interface ItemTarjeta {
 interface ListaTarjeta {
     items: ItemTarjeta[]
     total: number
+}
+
+/** Una fila del ranking de proveedores con más fallas. */
+interface ProveedorFallas {
+    proveedor_id: number
+    razon_social: string
+    fallas: number
 }
 
 interface UltimaObservacion {
@@ -65,6 +72,12 @@ const props = defineProps<{
     /** Todos los estados, incluida `cancelada` (que `porEstado` excluye). */
     estadoLabels: Record<string, string>
     porSector: { sector: string; count: number }[]
+    /**
+     * Ranking de proveedores por productos fallados. `sinProveedor` son los
+     * renglones que no se le pueden atribuir a nadie (código sin artículo, o
+     * artículo sin proveedor cargado).
+     */
+    porProveedor: { items: ProveedorFallas[]; sinProveedor: number }
     asignadas: UltimaObservacion[]
     ultimas: UltimaObservacion[]
     tipoLabels: Record<string, string>
@@ -126,6 +139,52 @@ const sectorChartOptions = computed<ApexOptions>(() => ({
 
 const sectorChartSeries = computed(() => [
     { name: 'Observaciones', data: props.porSector.map(s => s.count) },
+])
+
+// Barras horizontales: proveedores con más fallas. Horizontal y no vertical
+// porque las razones sociales no entran como etiquetas del eje X.
+const proveedorChartOptions = computed<ApexOptions>(() => ({
+    chart: {
+        type: 'bar',
+        fontFamily: 'Outfit, sans-serif',
+        foreColor: '#98a2b3',
+        toolbar: { show: false },
+        events: {
+            // Clic en una barra → el listado filtrado por ese proveedor.
+            dataPointSelection: (_e: MouseEvent, _ctx?: unknown, opciones?: { dataPointIndex?: number }) => {
+                const proveedor = props.porProveedor.items[opciones?.dataPointIndex ?? -1]
+                if (proveedor) router.get(route('observaciones.index', { 'proveedor_id[]': proveedor.proveedor_id }))
+            },
+        },
+    },
+    colors: ['#f79009'],
+    plotOptions: {
+        bar: { horizontal: true, barHeight: '55%', borderRadius: 4, borderRadiusApplication: 'end' },
+    },
+    dataLabels: { enabled: false },
+    grid: {
+        borderColor: isDark.value ? 'rgba(255,255,255,0.08)' : '#f2f4f7',
+        xaxis: { lines: { show: true } },
+    },
+    xaxis: {
+        categories: props.porProveedor.items.map(p => p.razon_social),
+        axisBorder: { show: false },
+        axisTicks: { show: false },
+        // Son productos contados: sin esto Apex reparte el eje en decimales y,
+        // al redondearlos, repite el mismo número varias veces (0 0 0 1 1 1...).
+        tickAmount: Math.min(Math.max(...props.porProveedor.items.map(p => p.fallas), 1), 6),
+        labels: { style: { fontSize: '12px' }, formatter: (v: string) => String(Math.round(Number(v))) },
+    },
+    yaxis: { labels: { style: { fontSize: '12px' }, maxWidth: 220 } },
+    tooltip: {
+        theme: isDark.value ? 'dark' : 'light',
+        y: { formatter: (v: number) => `${v} producto${v === 1 ? '' : 's'} con falla` },
+    },
+    states: { hover: { filter: { type: 'darken', value: 0.9 } } },
+}))
+
+const proveedorChartSeries = computed(() => [
+    { name: 'Productos con falla', data: props.porProveedor.items.map(p => p.fallas) },
 ])
 
 // Donut: observaciones por estado
@@ -310,6 +369,34 @@ const statCards = computed<StatCard[]>(() => [
                     :series="estadoChartSeries"
                 />
             </div>
+        </div>
+
+        <!-- Proveedores con más fallas -->
+        <div class="mb-6 rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6">
+            <div class="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+                <h2 class="text-lg font-semibold text-gray-800 dark:text-white/90">Proveedores con más fallas</h2>
+                <p class="text-theme-xs text-gray-400">
+                    Se cuenta cada producto afectado: un caso con varios artículos del mismo proveedor suma uno por artículo.
+                </p>
+            </div>
+
+            <div v-if="porProveedor.items.length === 0" class="flex h-48 items-center justify-center text-sm text-gray-400">
+                Sin datos
+            </div>
+            <VueApexCharts
+                v-else
+                type="bar"
+                height="320"
+                :options="proveedorChartOptions"
+                :series="proveedorChartSeries"
+            />
+
+            <!-- Sin esta línea el ranking mentiría por omisión: un proveedor
+                 puede figurar bajo solo porque a sus artículos les falta el dato. -->
+            <p v-if="porProveedor.sinProveedor > 0" class="mt-2 text-theme-xs text-gray-400">
+                {{ porProveedor.sinProveedor }} producto{{ porProveedor.sinProveedor === 1 ? '' : 's' }}
+                sin proveedor atribuible (el código no coincide con ningún artículo, o el artículo todavía no tiene proveedor cargado).
+            </p>
         </div>
 
         <!-- Asignadas a mí -->

@@ -164,6 +164,7 @@
             <tr>
                 <th>Código</th>
                 <th>Producto</th>
+                <th>Proveedor</th>
                 <th>Cant.</th>
                 <th>Presentación</th>
                 <th>Lote</th>
@@ -176,6 +177,9 @@
                 <tr>
                     <td class="mono">{{ $producto->codigo ?? '—' }}</td>
                     <td>{{ $producto->producto }}</td>
+                    {{-- Del padrón en vivo: articulos.proveedor_id. Vacío si el
+                         código no matchea un artículo o el artículo no lo tiene. --}}
+                    <td>{{ $producto->articulo?->proveedor?->razon_social ?? '—' }}</td>
                     <td>{{ $producto->cantidad_afectada }}</td>
                     <td>{{ $producto->tipo_presentacion ? ($presentaciones[$producto->tipo_presentacion] ?? $producto->tipo_presentacion) : '—' }}</td>
                     <td class="mono">{{ $producto->lote }}</td>
