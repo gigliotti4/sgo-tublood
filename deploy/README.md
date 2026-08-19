@@ -1,7 +1,14 @@
 # Desplegar SGO Tublood en el droplet
 
 Guía del armado inicial. Para los deploys del día a día, una vez que esto está
-hecho, alcanza con `cd /var/www/sgo && ./deploy.sh`.
+hecho, alcanza con:
+
+```bash
+sudo -u deploy /var/www/sgo/deploy.sh
+```
+
+⚠️ **Como `deploy`, no como root.** El repo es de ese usuario y git aborta con
+"dubious ownership" si lo corre otro.
 
 ## Por qué se mudó
 
@@ -135,6 +142,15 @@ Después, desde el panel (`Artículos → Importar`):
 vencimiento) y el de proveedores (`proveedor_principal`). Esos campos **no vienen
 del ERP**, y sin ellos `articulos.proveedor_id` queda vacío y el ranking de
 "Proveedores con más fallas" del Dashboard no muestra nada.
+
+⚠️ **El catálogo de artículos de la API se achicó.** El 12/08/2026 devolvía
+~3.950 artículos; el 19/08/2026 devuelve **584**. No es un problema del deploy:
+la API misma reporta `total_registros: 584`, y ninguna de las cinco listas de
+precios (`CAT-A` 584, `CAT-B` 577, `CAT-C` 570, `PACO` 570, `MANTE` 96) se
+acerca a los 4.000. Hay que preguntarle a RP Sistemas / Tublood si el catálogo
+se depuró o si cambió la lista que corresponde usar (`RPSISTEMAS_LISTA_PRECIOS`,
+hoy `CAT-A`). Mientras tanto, el import del Excel con "crear faltantes" tildado
+recupera los que la API ya no trae.
 
 La clasificación documental de clientes y proveedores también se carga a mano y
 no vuelve de ningún lado.
