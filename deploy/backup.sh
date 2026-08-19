@@ -28,11 +28,18 @@ sello=$(date +%Y-%m-%d_%H%M)
 echo "[$(date '+%F %T')] backup ${sello}"
 
 # --single-transaction: dump consistente sin trabar la app mientras corre.
+#
+# --no-tablespaces: el usuario `sgo` tiene permisos solo sobre su base, no el
+# PROCESS global que mysqldump pide para volcar los tablespaces. Sin este flag
+# el dump igual sale completo, pero escupe un "Access denied" en cada corrida
+# que ensucia el log y taparía un error de verdad. Darle PROCESS al usuario de
+# la app sería peor: es un permiso sobre todo el servidor.
 MYSQL_PWD="$DB_PASSWORD" mysqldump \
     --user="$DB_USERNAME" \
     --single-transaction \
     --quick \
     --routines \
+    --no-tablespaces \
     "$DB_DATABASE" | gzip > "${DESTINO}/db-${sello}.sql.gz"
 
 tar -czf "${DESTINO}/adjuntos-${sello}.tar.gz" \
