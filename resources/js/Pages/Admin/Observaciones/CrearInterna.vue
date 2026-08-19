@@ -21,7 +21,15 @@ interface UsuarioOption {
     sector_id: number | null
     sector: { nombre: string; dias_gestion: number | null } | null
 }
-interface TipoDef { codigo: string; label: string; campos?: CampoDef[]; especial?: boolean; requiere_cliente?: boolean }
+interface TipoDef {
+    codigo: string
+    label: string
+    campos?: CampoDef[]
+    especial?: boolean
+    requiere_cliente?: boolean
+    /** Subgrupo dentro del sector, para el <optgroup> del select de tipo. */
+    grupo?: string
+}
 type Taxonomia = Record<string, Record<string, TipoDef>>
 
 interface ProductoForm {
@@ -82,19 +90,40 @@ const form = useForm({
 const sectorSlug = computed(() => props.sectores.find(s => s.id === form.sector_id)?.slug ?? null)
 
 /**
- * Los tipos del sector, separados en dos grupos: los "especiales" son reclamos
- * de cliente (el canal externo del portal público, que también se puede cargar a
- * mano acá) y el resto son incidencias propias del sector. Se muestran como dos
- * <optgroup> para que se lea qué se está cargando.
+ * Los tipos del sector, en <optgroup> para que se lea qué se está cargando.
+ *
+ * Los "especiales" son reclamos de cliente (el canal externo del portal
+ * público, que también se puede cargar a mano acá) y van siempre primero,
+ * aparte del resto.
+ *
+ * Las demás se agrupan por el `grupo` que declare cada tipo en
+ * config/incidencias.php, y las que no declaran ninguno caen juntas en
+ * "Incidencias del sector" — que es el caso de todos los sectores salvo
+ * Producción, donde el grupo separa las dos líneas de planta (Tubos y
+ * Apósitos) sin que sean sectores distintos.
  */
 const gruposDeTipos = computed(() => {
     const tipos = Object.entries(props.taxonomia[sectorSlug.value ?? ''] ?? {})
-        .map(([key, def]) => ({ key, label: `${def.codigo} ${def.label}`, especial: def.especial === true }))
+        .map(([key, def]) => ({
+            key,
+            label: `${def.codigo} ${def.label}`,
+            especial: def.especial === true,
+            grupo: def.grupo ?? 'Incidencias del sector',
+        }))
 
-    return [
-        { titulo: 'Reclamos de cliente', tipos: tipos.filter(t => t.especial) },
-        { titulo: 'Incidencias del sector', tipos: tipos.filter(t => !t.especial) },
-    ].filter(g => g.tipos.length > 0)
+    const grupos = [{ titulo: 'Reclamos de cliente', tipos: tipos.filter(t => t.especial) }]
+
+    // Un Map preserva el orden en que los grupos aparecen en el config, así el
+    // orden de las líneas lo decide quien edita la taxonomía y no el código.
+    const porGrupo = new Map<string, typeof tipos>()
+    for (const tipo of tipos.filter(t => !t.especial)) {
+        if (!porGrupo.has(tipo.grupo)) porGrupo.set(tipo.grupo, [])
+        porGrupo.get(tipo.grupo)!.push(tipo)
+    }
+
+    for (const [titulo, sus] of porGrupo) grupos.push({ titulo, tipos: sus })
+
+    return grupos.filter(g => g.tipos.length > 0)
 })
 
 const tipoEspecial = computed(() =>

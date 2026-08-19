@@ -20,6 +20,14 @@ class SectorSeeder extends Seeder
             'asuntos_regulatorios' => ['nombre' => 'Asuntos Regulatorios', 'dias_gestion' => 5],
             'garantia_calidad' => ['nombre' => 'Calidad', 'dias_gestion' => 3],
             'direccion_tecnica' => ['nombre' => 'Dirección Técnica', 'dias_gestion' => null],
+            // Producción es **un solo sector**; adentro se divide en dos líneas
+            // (Tubos y Apósitos), que son subgrupos de tipos de incidencia y no
+            // sectores aparte — ver `grupo` en config/incidencias.php.
+            //
+            // Como el slug es `produccion`, el Excel de usuarios que trae
+            // `PRODUCCIÓN` ahora matchea solo: esa gente dejaba de quedar sin
+            // sector, que era un agujero conocido del import.
+            'produccion' => ['nombre' => 'Producción', 'dias_gestion' => null],
         ];
 
         foreach ($sectores as $slug => $datos) {

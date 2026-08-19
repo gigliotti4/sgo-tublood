@@ -1027,4 +1027,83 @@ class ObservacionAdminTest extends TestCase
             'tipo_comprobante' => 'remito',
         ]);
     }
+
+    /**
+     * Producción de Apósitos: el tipo de campo `time` es nuevo, así que se
+     * cubre de punta a punta — que guarde y que rechace una hora inexistente.
+     */
+    public function test_store_interna_guarda_las_horas_de_una_falla_de_maquina_de_apositos(): void
+    {
+        $sector = Sector::create(['nombre' => 'Producción', 'slug' => 'produccion']);
+
+        $this->actingAs($this->userWith('observaciones.edit'))
+            ->post('/observaciones', [
+                'origen' => 'interna',
+                'sector_id' => $sector->id,
+                'tipo' => 'falla_maquina_apositos',
+                'titulo' => 'Paró la máquina de apósitos',
+                'descripcion' => 'Se detuvo la línea.',
+                'prioridad' => 'alta',
+                'tipo_caso' => 'Desarrollo habitual de actividades',
+                'datos_especificos' => [
+                    'motivo' => 'Rotura de la cinta',
+                    'fecha' => '2026-08-19',
+                    'hora_desde' => '07:30',
+                    'hora_hasta' => '11:45',
+                ],
+            ])
+            ->assertRedirect(route('observaciones.index'));
+
+        $datos = Observacion::first()->datos_especificos;
+
+        $this->assertSame('07:30', $datos['hora_desde']);
+        $this->assertSame('11:45', $datos['hora_hasta']);
+        $this->assertSame('Rotura de la cinta', $datos['motivo']);
+    }
+
+    public function test_store_interna_rechaza_una_hora_inexistente(): void
+    {
+        $sector = Sector::create(['nombre' => 'Producción', 'slug' => 'produccion']);
+
+        $this->actingAs($this->userWith('observaciones.edit'))
+            ->post('/observaciones', [
+                'origen' => 'interna',
+                'sector_id' => $sector->id,
+                'tipo' => 'falla_maquina_apositos',
+                'titulo' => 'Paró la máquina',
+                'descripcion' => 'Se detuvo la línea.',
+                'prioridad' => 'alta',
+                'tipo_caso' => 'Desarrollo habitual de actividades',
+                'datos_especificos' => [
+                    'motivo' => 'Rotura de la cinta',
+                    'fecha' => '2026-08-19',
+                    'hora_desde' => '25:00',
+                ],
+            ])
+            ->assertSessionHasErrors('datos_especificos.hora_desde');
+
+        $this->assertSame(0, Observacion::count());
+    }
+
+    /** Producción de Tubos: el Sí/No de falla de máquina es obligatorio. */
+    public function test_store_interna_exige_el_si_no_de_falla_de_maquina_en_doble_etiquetado(): void
+    {
+        $sector = Sector::create(['nombre' => 'Producción', 'slug' => 'produccion']);
+
+        $this->actingAs($this->userWith('observaciones.edit'))
+            ->post('/observaciones', [
+                'origen' => 'interna',
+                'sector_id' => $sector->id,
+                'tipo' => 'doble_etiquetado',
+                'titulo' => 'Doble etiquetado en la OP 1234',
+                'descripcion' => 'Salieron tubos con dos etiquetas.',
+                'prioridad' => 'media',
+                'tipo_caso' => 'Desarrollo habitual de actividades',
+                'datos_especificos' => [
+                    'op' => 'OP-1234',
+                    'fecha' => '2026-08-19',
+                ],
+            ])
+            ->assertSessionHasErrors('datos_especificos.falla_maquina');
+    }
 }

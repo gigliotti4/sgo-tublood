@@ -313,5 +313,112 @@ return [
                 ],
             ],
         ],
+
+        /*
+        | Producción es **un solo sector**; adentro se divide en dos líneas.
+        |
+        | Las líneas son subgrupos de tipos (`grupo`) y no sectores aparte: es
+        | un solo equipo, con un solo plazo y una sola bandeja de derivación, y
+        | además así el `PRODUCCIÓN` del Excel de usuarios matchea el slug
+        | `produccion` sin necesidad de un alias.
+        |
+        | `grupo` es opcional y lo usa el <optgroup> del select de tipo. Los
+        | sectores que no lo declaran (todos los demás) no cambian en nada.
+        |
+        | El campo `motivo` va como texto libre a propósito: Producción todavía
+        | no definió la lista cerrada ("Motivo: a desarrollar" en el pedido).
+        | Cuando la defina, pasa a `'tipo' => 'select'` con sus `opciones` y no
+        | hay que tocar código ni migrar lo ya cargado.
+        |
+        | ⚠️ Los dos "Otros" tienen claves distintas (`otros_tubos` /
+        | `otros_apositos`) porque conviven en el mismo array — y además las
+        | claves de tipo son únicas en toda la taxonomía.
+        */
+        'produccion' => [
+
+            // ── Producción de Tubos ──────────────────────────────────────
+            'legibilidad_codigo_barras' => [
+                'codigo' => '10.1',
+                'grupo' => 'Producción de Tubos',
+                'label' => 'Legibilidad de código de barras',
+                'campos' => [
+                    ['id' => 'motivo', 'label' => 'Motivo', 'tipo' => 'textarea'],
+                    ['id' => 'op', 'label' => 'OP (orden de producción)', 'tipo' => 'text', 'required' => true],
+                    ['id' => 'fecha', 'label' => 'Fecha', 'tipo' => 'date', 'required' => true],
+                    ['id' => 'cantidad_afectada', 'label' => 'Cantidad afectada', 'tipo' => 'number'],
+                ],
+            ],
+            'duplicidad' => [
+                'codigo' => '10.2',
+                'grupo' => 'Producción de Tubos',
+                'label' => 'Duplicidad',
+                'campos' => [
+                    ['id' => 'motivo', 'label' => 'Motivo', 'tipo' => 'textarea'],
+                    ['id' => 'op', 'label' => 'OP (orden de producción)', 'tipo' => 'text', 'required' => true],
+                    ['id' => 'fecha', 'label' => 'Fecha', 'tipo' => 'date', 'required' => true],
+                    ['id' => 'cantidad_afectada', 'label' => 'Cantidad afectada', 'tipo' => 'number'],
+                ],
+            ],
+            'doble_etiquetado' => [
+                'codigo' => '10.3',
+                'grupo' => 'Producción de Tubos',
+                'label' => 'Doble etiquetado',
+                'campos' => [
+                    // Sí/No además del detalle: sin el flag no se puede sacar
+                    // después cuántos dobles etiquetados fueron por máquina.
+                    ['id' => 'falla_maquina', 'label' => '¿Se debió a una falla de máquina?', 'tipo' => 'radio', 'opciones' => ['Sí', 'No'], 'required' => true],
+                    ['id' => 'detalle_falla_maquina', 'label' => 'Detalle de la falla', 'tipo' => 'textarea'],
+                    ['id' => 'op', 'label' => 'OP (orden de producción)', 'tipo' => 'text', 'required' => true],
+                    ['id' => 'fecha', 'label' => 'Fecha', 'tipo' => 'date', 'required' => true],
+                    ['id' => 'cantidad_afectada', 'label' => 'Cantidad afectada', 'tipo' => 'number'],
+                ],
+            ],
+            'incumplimiento_produccion_diaria' => [
+                'codigo' => '10.4',
+                'grupo' => 'Producción de Tubos',
+                'label' => 'Incumplimientos en producción diaria',
+                'campos' => [
+                    ['id' => 'motivo', 'label' => 'Motivo', 'tipo' => 'textarea'],
+                    ['id' => 'op', 'label' => 'OP (orden de producción)', 'tipo' => 'text', 'required' => true],
+                    ['id' => 'fecha_corte', 'label' => 'Fecha de corte', 'tipo' => 'date', 'required' => true],
+                    // La fecha y la hora de retoma van separadas: así la fecha
+                    // se carga con el mismo campo enmascarado que el resto del
+                    // sistema en vez de con un datetime nativo.
+                    ['id' => 'fecha_retoma', 'label' => 'Fecha en que se retoma la producción', 'tipo' => 'date'],
+                    ['id' => 'hora_retoma', 'label' => 'Hora en que se retoma la producción', 'tipo' => 'time'],
+                    // "Cantidad afectada, si corresponde": opcional a propósito.
+                    ['id' => 'cantidad_afectada', 'label' => 'Cantidad afectada (si corresponde)', 'tipo' => 'number'],
+                ],
+            ],
+            'otros_tubos' => [
+                'codigo' => '10.5',
+                'grupo' => 'Producción de Tubos',
+                'label' => 'Otros',
+                'campos' => [
+                    ['id' => 'motivo', 'label' => 'Motivo / descripción', 'tipo' => 'textarea', 'required' => true],
+                ],
+            ],
+
+            // ── Producción de Apósitos ───────────────────────────────────
+            'falla_maquina_apositos' => [
+                'codigo' => '10.6',
+                'grupo' => 'Producción de Apósitos',
+                'label' => 'Falla de máquina',
+                'campos' => [
+                    ['id' => 'motivo', 'label' => 'Motivo', 'tipo' => 'textarea', 'required' => true],
+                    ['id' => 'fecha', 'label' => 'Fecha', 'tipo' => 'date', 'required' => true],
+                    ['id' => 'hora_desde', 'label' => 'Hora desde', 'tipo' => 'time'],
+                    ['id' => 'hora_hasta', 'label' => 'Hora hasta', 'tipo' => 'time'],
+                ],
+            ],
+            'otros_apositos' => [
+                'codigo' => '10.7',
+                'grupo' => 'Producción de Apósitos',
+                'label' => 'Otros',
+                'campos' => [
+                    ['id' => 'motivo', 'label' => 'Motivo / descripción', 'tipo' => 'textarea', 'required' => true],
+                ],
+            ],
+        ],
     ],
 ];

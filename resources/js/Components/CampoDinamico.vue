@@ -8,7 +8,7 @@ import Textarea from '@/Components/Textarea.vue'
 export interface CampoDef {
     id: string
     label: string
-    tipo: 'text' | 'textarea' | 'number' | 'date' | 'select' | 'radio'
+    tipo: 'text' | 'textarea' | 'number' | 'date' | 'time' | 'select' | 'radio'
     required?: boolean
     opciones?: string[]
 }
@@ -65,10 +65,15 @@ const model = defineModel<string | number | null>()
         :error="error"
     />
 
+    <!--
+        `time` sí usa el widget nativo, a diferencia de las fechas (que van con
+        el texto enmascarado de InputFecha): no hay un equivalente propio para
+        horas, y el nativo ya devuelve HH:MM, que es lo que valida el backend.
+    -->
     <Input
         v-else
         v-model="model"
-        :type="campo.tipo === 'number' ? 'number' : 'text'"
+        :type="campo.tipo === 'number' || campo.tipo === 'time' ? campo.tipo : 'text'"
         :label="campo.label"
         :required="campo.required"
         :error="error"

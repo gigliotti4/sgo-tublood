@@ -48,6 +48,14 @@ echo "==> Migraciones"
 echo "==> Roles y permisos"
 "$PHP" artisan db:seed --class=RolesAndPermissionsSeeder --force
 
+# Mismo motivo que los permisos: el catálogo de sectores es fijo y vive en el
+# seeder, así que un sector nuevo (ej. las dos líneas de Producción) queda
+# invisible en producción hasta que alguien lo corra a mano. Idempotente:
+# usa firstOrCreate, y `dias_gestion` se edita desde el ABM de Sectores sin
+# que este paso lo pise.
+echo "==> Sectores"
+"$PHP" artisan db:seed --class=SectorSeeder --force
+
 echo "==> Regenerando cachés"
 "$PHP" artisan config:cache
 "$PHP" artisan route:cache

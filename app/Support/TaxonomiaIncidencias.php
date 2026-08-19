@@ -136,6 +136,10 @@ class TaxonomiaIncidencias
             $item[] = match ($campo['tipo'] ?? 'text') {
                 'number' => 'numeric',
                 'date' => 'date',
+                // `<input type="time">` manda HH:MM. Se valida el formato y no
+                // `date`, que aceptaría cualquier cosa que PHP sepa parsear
+                // (incluso una fecha entera) en un campo que es solo hora.
+                'time' => 'date_format:H:i',
                 default => 'string',
             };
 
