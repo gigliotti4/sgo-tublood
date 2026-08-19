@@ -143,8 +143,9 @@ export interface Venta {
     articulo: string | null
     descrip_arti: string | null
     cantidad: string | null
-    precio_neto: string | null
-    sub_total: string | null
+    /** Solo viajan si el usuario tiene `ventas.montos`; si no, el backend los saca. */
+    precio_neto?: string | null
+    sub_total?: string | null
     /** El ERP usa 0 para "sin remito", no null. */
     remito_nro: number | null
     vendedor: string | null

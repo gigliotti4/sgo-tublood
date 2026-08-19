@@ -26,6 +26,12 @@ class VentaController extends Controller
         $hasta = $request->string('hasta')->trim()->value();
         $vendedor = $request->string('vendedor')->trim()->value();
 
+        // Los importes son de la Direccion: cualquiera con `ventas.view` puede
+        // consultar qué se vendió, pero no por cuánta plata. Se decide acá y no
+        // en la pantalla — si solo lo escondiera el template, los montos
+        // seguirían viajando en las props de Inertia y se leerían del HTML.
+        $puedeVerMontos = $request->user()->can('ventas.montos');
+
         $ventas = Venta::query()
             ->when($search, fn ($q) => $q->buscar($search))
             ->when($desde, fn ($q, $desde) => $q->whereDate('fecha', '>=', $desde))
@@ -35,6 +41,10 @@ class VentaController extends Controller
             ->orderByDesc('id')
             ->paginate(50)
             ->withQueryString();
+
+        if (! $puedeVerMontos) {
+            $ventas->through(fn (Venta $venta) => $venta->makeHidden(Venta::COLUMNAS_DE_IMPORTE));
+        }
 
         return inertia('Admin/Ventas/Index', [
             'ventas' => $ventas,
@@ -51,6 +61,9 @@ class VentaController extends Controller
                 ->distinct()
                 ->orderBy('vendedor')
                 ->pluck('vendedor'),
+            // La decisión la toma el servidor y la pantalla solo la respeta, en
+            // vez de repetir la regla con hasPermission() del lado del cliente.
+            'puedeVerMontos' => $puedeVerMontos,
             'lastSync' => Venta::max('synced_at'),
             // Sin filtrar: el paginador ya trae el total de la búsqueda vigente.
             'total' => Venta::count(),

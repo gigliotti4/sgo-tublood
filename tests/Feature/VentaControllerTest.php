@@ -10,6 +10,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Queue;
 use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class VentaControllerTest extends TestCase
@@ -253,5 +254,68 @@ class VentaControllerTest extends TestCase
         $fila = (new VentaSyncService)->mapear(['remito_nro' => 0], Carbon::now());
 
         $this->assertSame(0, $fila['remito_nro']);
+    }
+
+    /**
+     * Los importes son de la Dirección. Cualquiera con `ventas.view` puede
+     * consultar qué se vendió, pero no por cuánta plata.
+     */
+    public function test_sin_permiso_de_montos_los_importes_no_viajan_en_las_props(): void
+    {
+        $this->venta(['precio_neto' => 150.05, 'sub_total' => 1500.50]);
+
+        $this->actingAs($this->userWith('ventas.view'))
+            ->get('/ventas')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('puedeVerMontos', false)
+                ->has('ventas.data.0', fn ($venta) => $venta
+                    ->missing('sub_total')
+                    // `precio_neto` no se muestra en ninguna pantalla, pero con
+                    // la cantidad al lado despeja el subtotal: se oculta igual.
+                    ->missing('precio_neto')
+                    ->where('compro_nro', 'A-0001')
+                    ->etc()));
+    }
+
+    /**
+     * No alcanza con que la pantalla no lo dibuje: el valor no puede estar en
+     * el HTML que se manda al navegador.
+     */
+    public function test_sin_permiso_de_montos_el_importe_no_aparece_en_la_respuesta(): void
+    {
+        $this->venta(['sub_total' => 1500.50]);
+
+        $html = $this->actingAs($this->userWith('ventas.view'))->get('/ventas')->getContent();
+
+        $this->assertStringNotContainsString('1500.50', $html);
+    }
+
+    public function test_con_el_permiso_de_montos_los_importes_si_viajan(): void
+    {
+        $this->venta(['precio_neto' => 150.05, 'sub_total' => 1500.50]);
+
+        $this->actingAs($this->userWith('ventas.view', 'ventas.montos'))
+            ->get('/ventas')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('puedeVerMontos', true)
+                ->where('ventas.data.0.sub_total', '1500.5000'));
+    }
+
+    /** super-admin saltea el Gate, así que ve los importes sin permiso explícito. */
+    public function test_super_admin_ve_los_importes(): void
+    {
+        $this->venta(['sub_total' => 1500.50]);
+
+        $user = User::factory()->create();
+        $user->assignRole(Role::firstOrCreate(['name' => 'super-admin', 'guard_name' => 'web']));
+
+        $this->actingAs($user)
+            ->get('/ventas')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('puedeVerMontos', true)
+                ->where('ventas.data.0.sub_total', '1500.5000'));
     }
 }

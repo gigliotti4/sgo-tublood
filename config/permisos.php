@@ -72,6 +72,7 @@ return [
 
         'ventas.view' => ['grupo' => 'ventas', 'label' => 'Ver ventas'],
         'ventas.sync' => ['grupo' => 'ventas', 'label' => 'Sincronizar con RP Sistemas'],
+        'ventas.montos' => ['grupo' => 'ventas', 'label' => 'Ver los importes de las ventas'],
     ],
 
 ];

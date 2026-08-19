@@ -18,6 +18,8 @@ const props = defineProps<{
     ventas: PaginatedData<Venta>
     filters: { search: string; desde: string; hasta: string; vendedor: string }
     vendedores: string[]
+    /** El backend ya sacó los importes de las props si es false: acá solo se ocultan las columnas. */
+    puedeVerMontos: boolean
     lastSync: string | null
     total: number
 }>()
@@ -79,8 +81,10 @@ const formatFecha = (d: string | null) => {
     return new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-const formatMoneda = (v: string | null) => {
-    if (v === null) return '—'
+// Acepta `undefined` porque el importe no viaja cuando el usuario no tiene
+// `ventas.montos`: la columna no se dibuja, pero el tipo lo refleja igual.
+const formatMoneda = (v: string | null | undefined) => {
+    if (v === null || v === undefined) return '—'
     return Number(v).toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 2 })
 }
 
@@ -163,13 +167,13 @@ const remito = (v: number | null) => (v ? String(v) : '—')
                                 <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Cliente</th>
                                 <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Artículo</th>
                                 <th class="px-4 py-3 text-right text-theme-xs font-medium text-gray-500 dark:text-gray-400">Cant.</th>
-                                <th class="px-4 py-3 text-right text-theme-xs font-medium text-gray-500 dark:text-gray-400">Subtotal</th>
+                                <th v-if="puedeVerMontos" class="px-4 py-3 text-right text-theme-xs font-medium text-gray-500 dark:text-gray-400">Subtotal</th>
                                 <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Vendedor</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
                             <tr v-if="ventas.data.length === 0">
-                                <td colspan="8" class="px-4 py-12 text-center text-sm text-gray-400">
+                                <td :colspan="puedeVerMontos ? 8 : 7" class="px-4 py-12 text-center text-sm text-gray-400">
                                     <template v-if="search || filtros.desde || filtros.hasta || filtros.vendedor">
                                         No se encontraron ventas con esos filtros.
                                         <span class="mt-1 block text-theme-xs">
@@ -204,7 +208,7 @@ const remito = (v: number | null) => (v ? String(v) : '—')
                                     <span class="block font-mono text-theme-xs text-gray-400">{{ venta.articulo ?? '—' }}</span>
                                 </td>
                                 <td class="whitespace-nowrap px-4 py-3.5 text-right text-theme-xs text-gray-600 dark:text-gray-300">{{ formatCantidad(venta.cantidad) }}</td>
-                                <td class="whitespace-nowrap px-4 py-3.5 text-right text-theme-xs text-gray-800 dark:text-white/90">{{ formatMoneda(venta.sub_total) }}</td>
+                                <td v-if="puedeVerMontos" class="whitespace-nowrap px-4 py-3.5 text-right text-theme-xs text-gray-800 dark:text-white/90">{{ formatMoneda(venta.sub_total) }}</td>
                                 <td class="px-4 py-3.5 text-theme-xs text-gray-500 dark:text-gray-400">{{ venta.vendedor ?? '—' }}</td>
                             </tr>
                         </tbody>
@@ -223,7 +227,7 @@ const remito = (v: number | null) => (v ? String(v) : '—')
                             <DataRow label="Código">{{ venta.articulo ?? '—' }}</DataRow>
                             <DataRow label="Remito">{{ remito(venta.remito_nro) }}</DataRow>
                             <DataRow label="Cantidad">{{ formatCantidad(venta.cantidad) }}</DataRow>
-                            <DataRow label="Subtotal">{{ formatMoneda(venta.sub_total) }}</DataRow>
+                            <DataRow v-if="puedeVerMontos" label="Subtotal">{{ formatMoneda(venta.sub_total) }}</DataRow>
                             <DataRow label="Vendedor">{{ venta.vendedor ?? '—' }}</DataRow>
                         </template>
                     </TableCard>

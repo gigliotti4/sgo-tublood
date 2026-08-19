@@ -54,6 +54,18 @@ class Venta extends Model
         'synced_at' => 'datetime',
     ];
 
+    /**
+     * Columnas con plata, que no todo el mundo puede ver.
+     *
+     * `precio_neto` está acá aunque hoy no se muestre en ninguna pantalla: viaja
+     * igual en las props de Inertia, y con la cantidad al lado se despeja el
+     * subtotal. Ocultar solo `sub_total` no habría escondido nada.
+     *
+     * Las oculta VentaController::index() cuando el usuario no tiene el permiso
+     * `ventas.montos`.
+     */
+    public const COLUMNAS_DE_IMPORTE = ['precio_neto', 'sub_total'];
+
     /** Campos que mira el buscador, en el orden en que se los suele usar. */
     private const CAMPOS_BUSCABLES = [
         'compro_nro',

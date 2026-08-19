@@ -23,13 +23,19 @@ class RolesAndPermissionsSeeder extends Seeder
             'bitacora.view',
             'articulos.view', 'articulos.edit', 'articulos.sync', 'articulos.import',
             'proveedores.view', 'proveedores.edit', 'proveedores.import', 'proveedores.sync',
-            'ventas.view', 'ventas.sync',
+            'ventas.view', 'ventas.sync', 'ventas.montos',
         ];
 
         foreach ($permissions as $permission) {
             Permission::firstOrCreate(['name' => $permission]);
         }
 
+        // Ojo: `ventas.montos` (los importes del listado de ventas) queda
+        // deliberadamente **sin asignar a ningún rol**. Solo lo tiene
+        // `super-admin`, que abajo recibe todos. Es el mismo criterio que
+        // `clientes.vencimientos`: un permiso propio para algo que mira una
+        // sola persona. Para delegarlo alcanza con dárselo a un rol acá, sin
+        // tocar código.
         $superAdmin = Role::firstOrCreate(['name' => 'super-admin']);
         $superAdmin->syncPermissions(Permission::all());
 
