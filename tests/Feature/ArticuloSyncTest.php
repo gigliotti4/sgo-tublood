@@ -54,7 +54,8 @@ class ArticuloSyncTest extends TestCase
         ];
     }
 
-    private function sincronizar(): int
+    /** @return array{procesados: int, activos: int, desactivados: int} */
+    private function sincronizar(): array
     {
         return (new ArticuloSyncService(new RpSistemasClient))->sync();
     }
@@ -63,7 +64,7 @@ class ArticuloSyncTest extends TestCase
     {
         Http::fake(['*articulos.php' => Http::response($this->respuesta([$this->articulo()]))]);
 
-        $this->assertSame(1, $this->sincronizar());
+        $this->assertSame(1, $this->sincronizar()['procesados']);
 
         $a = Articulo::first();
         $this->assertSame('RE-1631', $a->codigo);
@@ -199,5 +200,114 @@ class ArticuloSyncTest extends TestCase
         $this->assertSame(['RE-1631'], Articulo::buscar('RE-1631')->pluck('codigo')->all());
         $this->assertSame(['RE-999'], Articulo::buscar('gasa')->pluck('codigo')->all());
         $this->assertSame([], Articulo::buscar('inexistente')->pluck('codigo')->all());
+    }
+
+    /** Todo lo que vino en el feed de esta corrida queda activo. */
+    public function test_lo_que_viene_en_el_feed_queda_activo(): void
+    {
+        Http::fake(['*articulos.php' => Http::response($this->respuesta([$this->articulo()]))]);
+
+        $resultado = $this->sincronizar();
+
+        $this->assertTrue(Articulo::first()->activo);
+        $this->assertSame(1, $resultado['activos']);
+        $this->assertSame(0, $resultado['desactivados']);
+    }
+
+    /** Un artículo que estaba y deja de venir en la corrida siguiente queda desactivado. */
+    public function test_un_articulo_que_deja_de_venir_se_desactiva(): void
+    {
+        Http::fake(['*articulos.php' => Http::sequence()
+            ->push($this->respuesta([
+                $this->articulo(['codigo_articulo' => 'RE-1631']),
+                $this->articulo(['codigo_articulo' => 'RE-999']),
+            ]))
+            ->push($this->respuesta([
+                $this->articulo(['codigo_articulo' => 'RE-1631']),
+            ])),
+        ]);
+
+        $this->sincronizar();
+        $resultado = $this->sincronizar();
+
+        $this->assertTrue(Articulo::where('codigo', 'RE-1631')->first()->activo);
+        $this->assertFalse(Articulo::where('codigo', 'RE-999')->first()->activo);
+        $this->assertSame(1, $resultado['desactivados']);
+    }
+
+    /**
+     * Los artículos que solo cargó el Excel de Calidad ("crear faltantes",
+     * synced_at null) no vienen de ningún feed, así que no pueden "dejar de
+     * venir": tienen que seguir activos aunque RP no los mencione.
+     */
+    public function test_un_articulo_creado_solo_por_excel_sigue_activo(): void
+    {
+        Articulo::create([
+            'codigo' => 'EXCEL-1',
+            'descripcion' => 'Cargado a mano por Calidad',
+            'synced_at' => null,
+        ]);
+
+        Http::fake(['*articulos.php' => Http::response($this->respuesta([$this->articulo()]))]);
+
+        $this->sincronizar();
+
+        $this->assertTrue(Articulo::where('codigo', 'EXCEL-1')->first()->activo);
+    }
+
+    /** Un feed vacío no puede dejar el selector de productos sin nada: no desactiva nada. */
+    public function test_un_feed_vacio_no_desactiva_nada(): void
+    {
+        // Secuencia, no dos Http::fake(): con el mismo patrón, Laravel se
+        // queda con el primer stub registrado y la segunda corrida vería lo viejo.
+        Http::fake(['*articulos.php' => Http::sequence()
+            ->push($this->respuesta([$this->articulo()]))
+            ->push($this->respuesta([])),
+        ]);
+
+        $this->sincronizar();
+        $resultado = $this->sincronizar();
+
+        $this->assertTrue(Articulo::first()->activo);
+        $this->assertSame(0, $resultado['procesados']);
+        $this->assertSame(0, $resultado['desactivados']);
+    }
+
+    /** Un artículo desactivado que vuelve a aparecer en el feed se reactiva solo. */
+    public function test_un_articulo_desactivado_que_vuelve_al_feed_se_reactiva(): void
+    {
+        Http::fake(['*articulos.php' => Http::sequence()
+            ->push($this->respuesta([
+                $this->articulo(['codigo_articulo' => 'RE-1631']),
+                $this->articulo(['codigo_articulo' => 'RE-999']),
+            ]))
+            ->push($this->respuesta([
+                $this->articulo(['codigo_articulo' => 'RE-1631']),
+            ]))
+            ->push($this->respuesta([
+                $this->articulo(['codigo_articulo' => 'RE-1631']),
+                $this->articulo(['codigo_articulo' => 'RE-999']),
+            ])),
+        ]);
+
+        $this->sincronizar();
+        $this->sincronizar();
+        $this->sincronizar();
+
+        $this->assertTrue(Articulo::where('codigo', 'RE-999')->first()->activo);
+    }
+
+    /** El buscador público (articulos.buscar) no puede ofrecer un artículo discontinuado. */
+    public function test_el_buscador_publico_no_devuelve_articulos_inactivos(): void
+    {
+        Articulo::create(['codigo' => 'RE-1631', 'descripcion' => 'AGUJA 40/12 TERUMO', 'activo' => true]);
+        Articulo::create(['codigo' => 'RE-999', 'descripcion' => 'AGUJA DESCARTABLE', 'activo' => false]);
+
+        $response = $this->getJson('/articulos/buscar?q=aguja');
+
+        $response->assertOk();
+        $response->assertJsonCount(1);
+        $response->assertJsonFragment(['codigo' => 'RE-1631']);
+        $response->assertJsonMissing(['codigo' => 'RE-999']);
     }
 }

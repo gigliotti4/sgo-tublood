@@ -5,6 +5,8 @@ import { route } from 'ziggy-js'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { usePermissions } from '@/composables/usePermissions'
 import Input from '@/Components/Input.vue'
+import Select from '@/Components/Select.vue'
+import Badge from '@/Components/Badge.vue'
 import Icon from '@/Components/Icon.vue'
 import Button from '@/Components/Button.vue'
 import Modal from '@/Components/Modal.vue'
@@ -16,26 +18,34 @@ import type { Articulo, PaginatedData } from '@/types'
 
 const props = defineProps<{
     articulos: PaginatedData<Articulo>
-    filters: { search: string }
+    filters: { search: string; estado: string }
     lastSync: string | null
     total: number
+    totalInactivos: number
 }>()
 
 const { hasPermission } = usePermissions()
 
 const search = ref(props.filters.search ?? '')
+const estado = ref(props.filters.estado ?? '')
+
+const recargar = () => {
+    router.get(route('articulos.index'), { search: search.value, estado: estado.value }, {
+        preserveState: true,
+        preserveScroll: true,
+        replace: true,
+    })
+}
+
 let debounce: ReturnType<typeof setTimeout>
 
-watch(search, (val) => {
+// Solo el buscador necesita debounce: el select cambia de a un valor.
+watch(search, () => {
     clearTimeout(debounce)
-    debounce = setTimeout(() => {
-        router.get(route('articulos.index'), { search: val }, {
-            preserveState: true,
-            preserveScroll: true,
-            replace: true,
-        })
-    }, 350)
+    debounce = setTimeout(recargar, 350)
 })
+
+watch(estado, recargar)
 
 const syncing = ref(false)
 
@@ -96,6 +106,7 @@ const submitImport = () => {
                     </div>
                     <p class="mt-0.5 text-theme-sm text-gray-500 dark:text-gray-400">
                         Última sincronización: {{ formatDate(lastSync) }}
+                        <span v-if="totalInactivos > 0">· {{ totalInactivos }} discontinuado{{ totalInactivos !== 1 ? 's' : '' }}</span>
                     </p>
                 </div>
 
@@ -118,15 +129,24 @@ const submitImport = () => {
                 </div>
             </div>
 
-            <!-- Buscador -->
-            <div class="max-w-sm">
-                <Input v-model="search" type="text" placeholder="Buscar por código, descripción, PM, legajo...">
-                    <template #icon>
-                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-                        </svg>
-                    </template>
-                </Input>
+            <!-- Buscador y filtro -->
+            <div class="flex flex-wrap items-end gap-3">
+                <div class="max-w-sm flex-1">
+                    <Input v-model="search" type="text" placeholder="Buscar por código, descripción, PM, legajo...">
+                        <template #icon>
+                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                            </svg>
+                        </template>
+                    </Input>
+                </div>
+                <div class="w-48">
+                    <Select v-model="estado">
+                        <option value="">Todos los estados</option>
+                        <option value="activos">Activos</option>
+                        <option value="inactivos">Discontinuados</option>
+                    </Select>
+                </div>
             </div>
 
             <!-- Tabla -->
@@ -137,6 +157,7 @@ const submitImport = () => {
                             <tr class="border-b border-gray-100 dark:border-gray-800">
                                 <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Código</th>
                                 <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Descripción</th>
+                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Estado</th>
                                 <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Proveedor</th>
                                 <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">PM</th>
                                 <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Legajo</th>
@@ -147,7 +168,7 @@ const submitImport = () => {
                         </thead>
                         <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
                             <tr v-if="articulos.data.length === 0">
-                                <td colspan="8" class="px-4 py-12 text-center text-sm text-gray-400">
+                                <td colspan="9" class="px-4 py-12 text-center text-sm text-gray-400">
                                     <template v-if="search">
                                         No se encontraron artículos para "<span class="font-medium">{{ search }}</span>".
                                     </template>
@@ -167,6 +188,11 @@ const submitImport = () => {
                                     <span v-if="articulo.descripcion_adicional" class="block text-theme-xs font-normal text-gray-400">
                                         {{ articulo.descripcion_adicional }}
                                     </span>
+                                </td>
+                                <td class="px-4 py-3.5">
+                                    <Badge :variant="articulo.activo ? 'emerald' : 'slate'">
+                                        {{ articulo.activo ? 'Activo' : 'Discontinuado' }}
+                                    </Badge>
                                 </td>
                                 <td class="max-w-52 truncate px-4 py-3.5 text-theme-xs text-gray-600 dark:text-gray-300">{{ articulo.proveedor?.razon_social ?? '—' }}</td>
                                 <td class="px-4 py-3.5 text-theme-xs text-gray-600 dark:text-gray-300">{{ articulo.pm ?? '—' }}</td>
@@ -207,6 +233,11 @@ const submitImport = () => {
                             </Link>
                         </template>
                         <template #body>
+                            <DataRow label="Estado">
+                                <Badge :variant="articulo.activo ? 'emerald' : 'slate'">
+                                    {{ articulo.activo ? 'Activo' : 'Discontinuado' }}
+                                </Badge>
+                            </DataRow>
                             <DataRow label="Proveedor">{{ articulo.proveedor?.razon_social ?? '—' }}</DataRow>
                             <DataRow label="PM">{{ articulo.pm ?? '—' }}</DataRow>
                             <DataRow label="Legajo">{{ articulo.legajo ?? '—' }}</DataRow>

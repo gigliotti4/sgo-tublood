@@ -14,14 +14,31 @@ class ArticuloSyncService
      * Sincroniza el catálogo de artículos de RP Sistemas a la tabla local.
      * Upsert por `codigo` (idempotente).
      *
-     * @return int Total de registros sincronizados
+     * `articulos.php` no expone ningún campo de estado, y la conexión `erp`
+     * tampoco tiene una vista de artículos (a diferencia de proveedores). La
+     * única señal disponible es estar o no en el feed: lo que llega en esta
+     * corrida queda `activo`, y lo que dejó de venir se marca `activo = false`
+     * comparando `synced_at` contra el timestamp de esta corrida — sin
+     * necesidad de un `whereNotIn` con miles de códigos.
+     *
+     * `synced_at IS NULL` (los artículos que creó el Excel de Calidad con
+     * "crear faltantes" porque RP no los tenía) queda afuera del
+     * `whereNotNull` y por lo tanto nunca se desactiva por esta vía: no
+     * vinieron de un feed del que puedan "dejar de venir".
+     *
+     * @return array{procesados: int, activos: int, desactivados: int}
      */
-    public function sync(): int
+    public function sync(): array
     {
         $pagina = 1;
         $tamano = (int) config('services.rpsistemas.page_size', 100);
         $total = 0;
         $syncedAt = Carbon::now();
+        // Con microsegundos: la comparación de más abajo distingue dos
+        // corridas seguidas (dos clics en "Sincronizar") aunque caigan dentro
+        // del mismo segundo — con precisión de segundo compartirían el mismo
+        // valor y la desactivación no detectaría nada.
+        $syncedAtValor = $syncedAt->format('Y-m-d H:i:s.u');
 
         Log::info('RpSistemas: iniciando sincronización de artículos');
 
@@ -37,7 +54,7 @@ class ArticuloSyncService
             // De a 500 para no armar un INSERT gigante: hoy el ERP devuelve las
             // ~4000 filas de una sola vez, no en páginas.
             foreach (array_chunk($datos, 500) as $bloque) {
-                $lote = array_map(fn ($a) => $this->mapear($a, $syncedAt), $bloque);
+                $lote = array_map(fn ($a) => $this->mapear($a, $syncedAt, $syncedAtValor), $bloque);
 
                 // No incluir 'fecha_vencimiento', 'pm', 'legajo',
                 // 'observaciones', 'link_registro' ni 'proveedor_id' acá: son
@@ -48,6 +65,9 @@ class ArticuloSyncService
                 //
                 // 'codigo_proveedor' sí va: ese es el string del ERP, distinto
                 // de la FK 'proveedor_id' que resuelve contra el padrón local.
+                //
+                // 'activo' también va: a diferencia de los campos de arriba,
+                // lo determina el ERP (estar o no en el feed), no el panel.
                 Articulo::upsert(
                     $lote,
                     ['codigo'],
@@ -57,7 +77,7 @@ class ArticuloSyncService
                         'codigo_agrupacion_2', 'descripcion_agrupacion_2',
                         'codigo_agrupacion_3', 'descripcion_agrupacion_3',
                         'stock', 'stock_disponible', 'codigo_proveedor',
-                        'modificado_en', 'synced_at', 'updated_at',
+                        'modificado_en', 'synced_at', 'activo', 'updated_at',
                     ]
                 );
 
@@ -68,12 +88,27 @@ class ArticuloSyncService
 
         } while (RpSistemasClient::tienePaginaSiguiente($paginado));
 
-        Log::info("RpSistemas: sincronización completada — {$total} artículos procesados");
+        // Nunca se desactiva sobre un feed vacío: un mal día del ERP no puede
+        // dejar el selector de productos del portal público sin nada.
+        $desactivados = 0;
 
-        return $total;
+        if ($total > 0) {
+            // `where('activo', true)` no es solo optimización: sin esto, un
+            // artículo ya desactivado vuelve a tocar `updated_at` en cada
+            // corrida y MySQL lo cuenta como fila afectada, así que
+            // `$desactivados` nunca bajaría a 0 aunque nada cambie de verdad.
+            $desactivados = Articulo::whereNotNull('synced_at')
+                ->where('synced_at', '<', $syncedAtValor)
+                ->where('activo', true)
+                ->update(['activo' => false, 'updated_at' => Carbon::now()]);
+        }
+
+        Log::info("RpSistemas: sincronización completada — {$total} artículos procesados, {$desactivados} desactivados");
+
+        return ['procesados' => $total, 'activos' => $total, 'desactivados' => $desactivados];
     }
 
-    private function mapear(array $a, Carbon $syncedAt): array
+    private function mapear(array $a, Carbon $syncedAt, string $syncedAtValor): array
     {
         $now = $syncedAt->toDateTimeString();
 
@@ -93,7 +128,8 @@ class ArticuloSyncService
             'stock_disponible' => $this->numero($a['stock_disponible'] ?? null),
             'codigo_proveedor' => $this->texto($a['codigo_proveedor'] ?? '') ?: null,
             'modificado_en' => $this->fecha($a['fecha_modi'] ?? null),
-            'synced_at' => $now,
+            'synced_at' => $syncedAtValor,
+            'activo' => true,
             'created_at' => $now,
             'updated_at' => $now,
         ];

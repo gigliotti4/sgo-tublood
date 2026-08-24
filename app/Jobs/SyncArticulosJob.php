@@ -24,8 +24,8 @@ class SyncArticulosJob implements ShouldQueue
         $service = new ArticuloSyncService($client);
 
         try {
-            $total = $service->sync();
-            Log::info("SyncArticulosJob: completado — {$total} artículos sincronizados");
+            $resultado = $service->sync();
+            Log::info("SyncArticulosJob: completado — {$resultado['procesados']} artículos sincronizados ({$resultado['activos']} activos, {$resultado['desactivados']} desactivados)");
         } catch (RpSistemasException $e) {
             Log::error('SyncArticulosJob: error de API RP Sistemas', [
                 'servicio' => $e->servicio,

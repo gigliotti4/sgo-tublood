@@ -17,10 +17,14 @@ class ArticuloController extends Controller
         $this->authorize('articulos.view');
 
         $search = $request->string('search')->trim()->value();
+        $estado = $request->string('estado')->trim()->value();
 
         $articulos = Articulo::query()
             ->with('proveedor:id,numero,razon_social')
             ->when($search, fn ($q) => $q->buscar($search))
+            // Encadenado después del buscador: buscar "AGUJA" dentro de los
+            // discontinuados tiene que funcionar.
+            ->when($estado, fn ($q) => $q->where('activo', $estado === 'activos'))
             ->orderBy('descripcion')
             ->paginate(50)
             ->withQueryString();
@@ -29,10 +33,11 @@ class ArticuloController extends Controller
 
         return inertia('Admin/Articulos/Index', [
             'articulos' => $articulos,
-            'filters' => ['search' => $search],
+            'filters' => ['search' => $search, 'estado' => $estado],
             'lastSync' => $lastSync,
             // Sin filtrar: el paginador ya trae el total de la búsqueda vigente.
             'total' => Articulo::count(),
+            'totalInactivos' => Articulo::where('activo', false)->count(),
         ]);
     }
 

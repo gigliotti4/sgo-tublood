@@ -19,6 +19,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * ⚠️ `codigo_proveedor` (string del ERP, se pisa en cada sync) y `proveedor_id`
  * (FK al padrón local, propia del panel) son dos campos distintos: no está
  * confirmado que usen la misma numeración.
+ *
+ * `activo` también lo pisa la sync, aunque no viaje en el body de RP: se
+ * deriva de si el artículo vino en el feed de la última corrida. Ver
+ * `ArticuloSyncService::sync()`.
  */
 class Articulo extends Model
 {
@@ -42,6 +46,7 @@ class Articulo extends Model
         'proveedor_id',
         'modificado_en',
         'synced_at',
+        'activo',
         'fecha_vencimiento',
         'pm',
         'legajo',
@@ -54,12 +59,22 @@ class Articulo extends Model
         'stock_disponible' => 'decimal:4',
         'modificado_en' => 'datetime',
         'synced_at' => 'datetime',
+        'activo' => 'boolean',
         'fecha_vencimiento' => 'date',
     ];
 
     public function proveedor(): BelongsTo
     {
         return $this->belongsTo(Proveedor::class);
+    }
+
+    /**
+     * Solo lo que RP sigue sirviendo (o lo que cargó el Excel de Calidad y
+     * nunca vino de un feed) — ver ArticuloSyncService para cómo se deriva.
+     */
+    public function scopeActivos(Builder $query): Builder
+    {
+        return $query->where('activo', true);
     }
 
     /**

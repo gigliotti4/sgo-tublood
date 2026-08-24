@@ -15,6 +15,10 @@ use Illuminate\Http\Request;
  * ⚠️ Es un endpoint **público**, porque el portal de carga no tiene login. Por
  * eso devuelve únicamente código y descripción: nunca stock, proveedor ni nada
  * que no esté ya en el catálogo comercial. Va con rate limit en la ruta.
+ *
+ * Solo ofrece artículos activos (`scopeActivos`): un discontinuado no se
+ * puede elegir en un reclamo nuevo, aunque siga en la tabla para que los
+ * reclamos ya cargados con ese código sigan resolviendo contra él.
  */
 class ArticuloController extends Controller
 {
@@ -38,6 +42,7 @@ class ArticuloController extends Controller
         }
 
         $articulos = Articulo::query()
+            ->activos()
             ->buscar(mb_substr($termino, 0, 100))
             ->limit(self::LIMITE)
             ->get(['codigo', 'descripcion']);

@@ -21,8 +21,8 @@ class SyncArticulosCommand extends Command
 
             try {
                 $service = new ArticuloSyncService(new RpSistemasClient);
-                $total = $service->sync();
-                $this->info("✓ {$total} artículos sincronizados.");
+                $resultado = $service->sync();
+                $this->info("✓ {$resultado['procesados']} artículos sincronizados ({$resultado['activos']} activos, {$resultado['desactivados']} desactivados).");
             } catch (RpSistemasException $e) {
                 $this->error("Error de API RP Sistemas [{$e->servicio}]: {$e->getMessage()}");
 
