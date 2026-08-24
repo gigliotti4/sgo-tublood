@@ -177,6 +177,8 @@ export interface ConfiguracionMarca {
     app_nombre: string
     app_bajada: string
     logo: string | null
+    /** Versión clara, para fondos oscuros. Null cae al ícono por defecto, no al `logo`. */
+    logo_dark: string | null
     favicon: string | null
     login_kicker: string
     login_titulo: string

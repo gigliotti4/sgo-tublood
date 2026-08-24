@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Configuracion as ConfiguracionModel;
+use App\Services\RecorteImagen;
 use App\Support\Configuracion;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -107,6 +108,12 @@ class ConfiguracionController extends Controller
         $anterior = Configuracion::get($clave);
 
         $path = $request->file($clave)->store(self::CARPETA, 'public');
+
+        // Un logo exportado con el lienzo más grande que el dibujo se ve chico
+        // en pantalla sin que haya nada mal en el CSS. Recortarlo acá lo
+        // arregla para cualquier archivo que suban, sin depender de cómo lo
+        // hayan exportado. No aborta la subida si falla.
+        app(RecorteImagen::class)->recortar(Storage::disk('public')->path($path));
 
         $this->guardar($clave, $path);
 

@@ -29,6 +29,7 @@ const page = usePage<PageProps>()
 
 // Marca y textos administrables desde /configuracion.
 const marca = computed(() => page.props.configuracion)
+
 const currentBroadcastingFingerprint = JSON.stringify(page.props.broadcasting)
 
 if (broadcastingFingerprint !== currentBroadcastingFingerprint && page.props.broadcasting.driver === 'pusher') {
@@ -60,6 +61,12 @@ const mobileSidebarOpen = ref(false)
 const notificacionesOpen = ref(false)
 const userMenuOpen = ref(false)
 const fabOpen = ref(false)
+
+// El logo se limita por alto con el ancho libre, para que uno apaisado no
+// quede aplastado dentro de un cuadrado. Colapsado entra en la columna angosta.
+const logoTamano = computed(() =>
+    sidebarCollapsed.value && !mobileSidebarOpen.value ? 'h-9 max-w-[58px]' : 'h-10 max-w-45',
+)
 
 interface NotificacionTiempoReal {
     tipo: string
@@ -457,24 +464,48 @@ const icons: Record<string, string> = {
                 class="flex h-16 shrink-0 items-center gap-3 px-5"
                 :class="sidebarCollapsed ? 'lg:justify-center lg:px-0' : ''"
             >
-                <!-- Logo cargado desde /configuracion, o el icono por defecto. -->
+                <!--
+                    Logo cargado desde /configuracion, sin texto al lado: el logo
+                    ya trae la marca.
+
+                    Las dos variantes se alternan por CSS (`dark:hidden` /
+                    `hidden dark:block`) y no leyendo `isDark` del composable: la
+                    clase `.dark` la escribe el blade antes de que cargue Vue, así
+                    que no hay parpadeo al recargar en modo oscuro.
+
+                    El tamaño se limita por alto con el ancho libre, para que un
+                    logo apaisado no quede aplastado dentro de un cuadrado.
+                -->
+                <!-- Variante clara: se ve con el tema claro. -->
                 <img
                     v-if="marca.logo"
                     :src="marca.logo"
                     :alt="marca.app_nombre"
-                    class="h-9 w-9 shrink-0 rounded-lg object-contain"
+                    class="w-auto shrink-0 object-contain dark:hidden"
+                    :class="logoTamano"
                 />
-                <div v-else class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-500 shadow-theme-xs">
+                <div v-else class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-500 shadow-theme-xs dark:hidden">
                     <svg class="h-5 w-5 text-white" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
+                    <span class="sr-only">{{ marca.app_nombre }}</span>
                 </div>
-                <Transition name="slide">
-                    <div v-if="!sidebarCollapsed || mobileSidebarOpen" class="min-w-0">
-                        <p class="truncate text-base font-bold tracking-tight text-gray-900 dark:text-white">{{ marca.app_nombre }}</p>
-                        <p class="truncate text-theme-xs text-gray-400">{{ marca.app_bajada }}</p>
-                    </div>
-                </Transition>
+
+                <!-- Variante oscura. Sin logo claro cargado va el ícono por
+                     defecto y NO el `logo` normal, que no se leería acá. -->
+                <img
+                    v-if="marca.logo_dark"
+                    :src="marca.logo_dark"
+                    :alt="marca.app_nombre"
+                    class="hidden w-auto shrink-0 object-contain dark:block"
+                    :class="logoTamano"
+                />
+                <div v-else class="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-500 shadow-theme-xs dark:flex">
+                    <svg class="h-5 w-5 text-white" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span class="sr-only">{{ marca.app_nombre }}</span>
+                </div>
             </div>
 
             <!-- Nav -->

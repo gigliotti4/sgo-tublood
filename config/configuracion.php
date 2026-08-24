@@ -60,7 +60,14 @@ return [
             'label' => 'Logo',
             'tipo' => 'imagen',
             'default' => null,
-            'hint' => 'PNG o SVG, idealmente cuadrado. Sin logo se usa el ícono por defecto.',
+            'hint' => 'La versión para fondos claros. Se muestra a su proporción real. Sin logo se usa el ícono por defecto.',
+        ],
+        'logo_dark' => [
+            'grupo' => 'marca',
+            'label' => 'Logo para fondos oscuros',
+            'tipo' => 'imagen',
+            'default' => null,
+            'hint' => 'La versión clara del logo: se usa en el panel del login y en el sidebar con modo oscuro. Sin esto, ahí va el ícono por defecto (el logo normal no se leería sobre fondo oscuro).',
         ],
         'favicon' => [
             'grupo' => 'marca',

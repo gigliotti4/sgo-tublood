@@ -45,22 +45,24 @@ const features = computed(() =>
             />
 
             <!-- Logo -->
-            <div class="relative flex items-center gap-3">
-                <!-- Logo cargado, o el icono por defecto si no hay ninguno. -->
+            <!--
+                Este panel siempre tiene fondo oscuro, así que va el logo claro.
+                Sin logo claro cargado se usa el ícono por defecto (blanco) y no
+                el `logo` normal: ese es para fondo claro y acá no se leería.
+                Sin texto al lado: el logo ya trae la marca.
+            -->
+            <div class="relative flex items-center">
                 <img
-                    v-if="marca.logo"
-                    :src="marca.logo"
+                    v-if="marca.logo_dark"
+                    :src="marca.logo_dark"
                     :alt="marca.empresa_nombre"
-                    class="w-10 h-10 rounded-xl object-contain shrink-0"
+                    class="h-14 w-auto max-w-55 object-contain"
                 />
-                <div v-else class="w-10 h-10 bg-brand-500 rounded-xl flex items-center justify-center shadow-lg shadow-brand-950/50 shrink-0">
-                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <div v-else class="w-12 h-12 bg-brand-500 rounded-xl flex items-center justify-center shadow-lg shadow-brand-950/50 shrink-0">
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                     </svg>
-                </div>
-                <div>
-                    <span class="text-white font-bold text-lg leading-tight block">{{ marca.empresa_nombre }}</span>
-                    <span class="text-brand-100 text-xs">{{ marca.empresa_bajada }}</span>
+                    <span class="sr-only">{{ marca.empresa_nombre }}</span>
                 </div>
             </div>
 
@@ -100,22 +102,23 @@ const features = computed(() =>
         <div class="flex-1 flex items-center justify-center bg-corp-25 px-6 py-12">
             <div class="w-full max-w-sm">
 
-                <!-- Logo móvil (solo en pantallas pequeñas) -->
-                <div class="flex items-center gap-3 mb-10 lg:hidden">
+                <!--
+                    Logo móvil (solo en pantallas chicas, donde el panel oscuro
+                    de la izquierda no se ve). Acá el fondo es claro, así que va
+                    el `logo` normal y no la versión clara.
+                -->
+                <div class="flex items-center mb-10 lg:hidden">
                     <img
                         v-if="marca.logo"
                         :src="marca.logo"
                         :alt="marca.empresa_nombre"
-                        class="w-9 h-9 rounded-xl object-contain"
+                        class="h-10 w-auto max-w-45 object-contain"
                     />
-                    <div v-else class="w-9 h-9 bg-brand-500 rounded-xl flex items-center justify-center shadow-sm">
+                    <div v-else class="w-10 h-10 bg-brand-500 rounded-xl flex items-center justify-center shadow-sm">
                         <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                         </svg>
-                    </div>
-                    <div>
-                        <span class="font-bold text-corp-800 text-base block leading-tight">{{ marca.empresa_nombre }}</span>
-                        <span class="text-corp-400 text-xs">{{ marca.app_nombre }}</span>
+                        <span class="sr-only">{{ marca.empresa_nombre }}</span>
                     </div>
                 </div>
 

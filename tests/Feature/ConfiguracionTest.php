@@ -146,4 +146,41 @@ class ConfiguracionTest extends TestCase
             fn ($page) => $page->where('configuracion.empresa_nombre', 'Marca Nueva')
         );
     }
+
+    /**
+     * Con la cache poblada, agregar una clave al catalogo tiene que verse en el
+     * acto. Antes se cacheaba el array ya resuelto, asi que una clave nueva no
+     * estaba en la cache vieja y `paraCompartir()` reventaba con "Undefined
+     * array key" hasta que alguien limpiara la cache a mano.
+     */
+    public function test_una_clave_agregada_al_catalogo_no_rompe_con_la_cache_poblada(): void
+    {
+        // Poblar la cache con el catalogo actual.
+        Configuracion::valores();
+
+        config(['configuracion.claves.clave_nueva' => [
+            'grupo' => 'marca',
+            'label' => 'Clave nueva',
+            'tipo' => 'texto',
+            'default' => 'valor por defecto',
+        ]]);
+
+        $this->assertSame('valor por defecto', Configuracion::get('clave_nueva'));
+        $this->assertArrayHasKey('clave_nueva', Configuracion::paraCompartir());
+    }
+
+    /** Lo mismo para una clave de imagen, que es la que indexaba sin guarda. */
+    public function test_una_clave_de_imagen_agregada_al_catalogo_no_rompe(): void
+    {
+        Configuracion::valores();
+
+        config(['configuracion.claves.imagen_nueva' => [
+            'grupo' => 'marca',
+            'label' => 'Imagen nueva',
+            'tipo' => 'imagen',
+            'default' => null,
+        ]]);
+
+        $this->assertNull(Configuracion::paraCompartir()['imagen_nueva']);
+    }
 }

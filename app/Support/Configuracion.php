@@ -45,41 +45,48 @@ class Configuracion
      */
     public static function valores(): array
     {
+        $guardados = static::guardados();
+
+        $valores = [];
+
+        foreach (static::catalogo() as $clave => $def) {
+            // `??` y no `?:`: un texto que alguien vació a propósito tiene que
+            // quedar vacío, no volver al default.
+            $valores[$clave] = $guardados[$clave] ?? $def['default'] ?? null;
+        }
+
+        return $valores;
+    }
+
+    /**
+     * Lo guardado en la base, cacheado.
+     *
+     * ⚠️ Se cachea **solo la lectura de la base**, no el array ya resuelto
+     * contra el catálogo. Si se cacheara el resultado final, agregar una clave
+     * nueva al catálogo dejaría la caché vieja sin esa clave y todo lo que la
+     * leyera reventaría hasta que alguien limpiara la caché a mano — una
+     * trampa en cada deploy que sume una clave. Resolver contra el catálogo en
+     * cada llamada es en memoria y no cuesta nada.
+     *
+     * @return array<string, string|null>
+     */
+    private static function guardados(): array
+    {
         try {
-            return Cache::rememberForever(self::CACHE_KEY, function () {
-                $guardados = ConfiguracionModel::pluck('valor', 'clave')->all();
-
-                $valores = [];
-
-                foreach (static::catalogo() as $clave => $def) {
-                    // `??` y no `?:`: un texto que alguien vació a propósito
-                    // tiene que quedar vacío, no volver al default.
-                    $valores[$clave] = $guardados[$clave] ?? $def['default'] ?? null;
-                }
-
-                return $valores;
-            });
+            return Cache::rememberForever(
+                self::CACHE_KEY,
+                fn () => ConfiguracionModel::pluck('valor', 'clave')->all()
+            );
         } catch (\Throwable) {
             // La tabla puede no existir todavía (instalación nueva antes de
             // migrar, o el deploy entre el `git pull` y el `migrate`). Esto se
             // comparte en **todas** las requests, así que un fallo acá dejaría
-            // la app entera en 500, login incluido: mejor renderizar con los
-            // textos por defecto. No se cachea el fallback a propósito, para
-            // que se recupere solo en cuanto la tabla exista.
-            return static::defaults();
+            // la app entera en 500, login incluido: devolviendo "nada guardado"
+            // se renderiza con los textos por defecto del catálogo. No se
+            // cachea el fallback a propósito, para que se recupere solo en
+            // cuanto la tabla exista.
+            return [];
         }
-    }
-
-    /** Solo los valores por defecto del catálogo, sin tocar la base. */
-    private static function defaults(): array
-    {
-        $valores = [];
-
-        foreach (static::catalogo() as $clave => $def) {
-            $valores[$clave] = $def['default'] ?? null;
-        }
-
-        return $valores;
     }
 
     public static function get(string $clave): ?string
@@ -97,7 +104,7 @@ class Configuracion
 
         foreach (static::catalogo() as $clave => $def) {
             if (($def['tipo'] ?? null) === 'imagen') {
-                $valores[$clave] = $valores[$clave]
+                $valores[$clave] = ($valores[$clave] ?? null)
                     ? Storage::disk('public')->url($valores[$clave])
                     : null;
             }
