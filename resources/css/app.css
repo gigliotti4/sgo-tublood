@@ -6,24 +6,52 @@
 @source '../../storage/framework/views/*.php';
 
 @theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+    --font-sans: 'Poppins', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
-    /* Fuente del panel interno (estilo TailAdmin). El portal público y el login mantienen --font-sans. */
-    --font-outfit: 'Outfit', ui-sans-serif, system-ui, sans-serif;
+    /* Mismo Poppins que --font-sans: la app usa una sola tipografía. El token
+       conserva el nombre `outfit` porque lo usan 4 archivos y renombrarlo no
+       aportaría nada; la clase `font-outfit` sigue siendo válida. */
+    --font-outfit: 'Poppins', ui-sans-serif, system-ui, sans-serif;
 
-    /* Paleta brand: azul corporativo Tublood #2a3182 como brand-500 */
-    --color-brand-25: #f7f8fd;
-    --color-brand-50: #eef0fa;
-    --color-brand-100: #dee2f6;
-    --color-brand-200: #bfc6ec;
-    --color-brand-300: #93a0dd;
-    --color-brand-400: #6373c4;
-    --color-brand-500: #2a3182;
-    --color-brand-600: #232970;
-    --color-brand-700: #1c215c;
-    --color-brand-800: #161a49;
-    --color-brand-900: #101336;
-    --color-brand-950: #0a0c24;
+    /* Paleta institucional de Tublood. Los tres colores del manual de marca
+       entran como valores exactos y el resto de la escala se interpola:
+
+         brand-500 = PANTONE Reflex Blue C  #001489  (color primario)
+         brand-100 = PANTONE P 115-3 C      #C8EAFD  (celeste de apoyo)
+         corp-500  = PANTONE 417 C          #65665C  (gris corporativo)
+
+       Los pasos intermedios de `brand` se interpolan entre el celeste y el
+       azul, así que toda la rampa clara es del mismo color de marca en vez de
+       un azul genérico. */
+    --color-brand-25: #f1fafe;
+    --color-brand-50: #e1f3fe;
+    --color-brand-100: #c8eafd;
+    --color-brand-200: #9cbbe3;
+    --color-brand-300: #6e8ac9;
+    --color-brand-400: #3c54ac;
+    --color-brand-500: #001489;
+    --color-brand-600: #001279;
+    --color-brand-700: #000f65;
+    --color-brand-800: #000c4f;
+    --color-brand-900: #00083a;
+    --color-brand-950: #000524;
+
+    /* Gris corporativo (PANTONE 417 C). Es el neutro de marca, distinto del
+       `gray` funcional de abajo: ese es el gris azulado de la plantilla y lo
+       usa el chrome del panel (bordes, fondos, texto secundario). `corp` se
+       reserva para las pantallas de cara al cliente. */
+    --color-corp-25: #f6f6f5;
+    --color-corp-50: #eeeeed;
+    --color-corp-100: #e0e0de;
+    --color-corp-200: #cbcbc8;
+    --color-corp-300: #b2b2ae;
+    --color-corp-400: #93948d;
+    --color-corp-500: #65665c;
+    --color-corp-600: #55564d;
+    --color-corp-700: #45453f;
+    --color-corp-800: #32332e;
+    --color-corp-900: #22231f;
+    --color-corp-950: #141412;
 
     /* Grises TailAdmin (tinte azulado) — pisan el gray default de Tailwind */
     --color-gray-25: #fcfcfd;

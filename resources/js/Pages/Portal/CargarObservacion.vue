@@ -6,6 +6,9 @@ import type { PageProps } from '@/types'
 
 const page = usePage<PageProps>()
 
+// Marca y textos administrables desde /configuracion.
+const marca = computed(() => page.props.configuracion)
+
 // Lo deja el handler de 419 de bootstrap/app.php si el form expiró.
 const flashError = computed(() => page.props.flash?.error)
 
@@ -138,8 +141,8 @@ const submit = () => form.post(route('observaciones.public.store'), { forceFormD
                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
                     </svg>
                 </div>
-                <h1 class="text-2xl font-bold text-white">Cargar observación</h1>
-                <p class="mt-1 text-sm text-brand-200">Espacio exclusivo para clientes de Tublood</p>
+                <h1 class="text-2xl font-bold text-white">{{ marca.portal_titulo }}</h1>
+                <p class="mt-1 text-sm text-brand-200">{{ marca.portal_bajada }}</p>
             </div>
 
             <!-- Aviso de formulario expirado (419) -->

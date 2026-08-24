@@ -6,6 +6,7 @@ use App\Models\Cliente;
 use App\Models\Observacion;
 use App\Models\User;
 use App\Notifications\ObservacionExternaRecibidaNotification;
+use App\Support\Configuracion;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -36,6 +37,11 @@ class HandleInertiaRequests extends Middleware
                 'success' => session('success'),
                 'error' => session('error'),
             ],
+            // Marca y textos administrables. Se comparte en **todas** las
+            // requests, no solo las autenticadas: el login y el portal público
+            // son justamente los que más lo necesitan. Va cacheado, así que no
+            // agrega una query por request. Ver App\Support\Configuracion.
+            'configuracion' => Configuracion::paraCompartir(),
             // Solo son datos publicos del broadcaster. El App ID y el secret
             // permanecen siempre del lado del servidor.
             'broadcasting' => $this->broadcastingConfig(),

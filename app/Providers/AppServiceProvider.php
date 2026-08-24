@@ -2,8 +2,10 @@
 
 namespace App\Providers;
 
+use App\Support\Configuracion;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -17,6 +19,13 @@ class AppServiceProvider extends ServiceProvider
             if ($user->hasRole('super-admin')) {
                 return true;
             }
+        });
+
+        // El favicon y el título de la pestaña son administrables, y viven en
+        // el blade raíz (fuera de Inertia), así que no alcanza con las props
+        // compartidas de HandleInertiaRequests. Va cacheado, sin query extra.
+        View::composer('app', function ($view) {
+            $view->with('configuracionMarca', Configuracion::paraCompartir());
         });
 
         // La cookie de "Mantener sesión iniciada" dura 30 días, no los 400 que

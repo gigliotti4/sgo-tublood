@@ -83,6 +83,8 @@ export interface Articulo {
     proveedor?: { id: number; numero: string | null; razon_social: string } | null
     modificado_en: string | null
     synced_at: string | null
+    /** Vino en el último sync de RP (o lo cargó el Excel de Calidad sin sync). Ver ArticuloSyncService. */
+    activo: boolean
     fecha_vencimiento: string | null
     pm: string | null
     legajo: string | null
@@ -163,6 +165,33 @@ export interface ClienteVencimiento {
     fecha_vencimiento: string
 }
 
+/**
+ * Marca y textos administrables desde /configuracion.
+ * El catalogo de claves vive en config/configuracion.php; los valores por
+ * defecto son los textos que antes estaban hardcodeados.
+ * `logo` y `favicon` llegan ya resueltos como URL publica (o null).
+ */
+export interface ConfiguracionMarca {
+    empresa_nombre: string
+    empresa_bajada: string
+    app_nombre: string
+    app_bajada: string
+    logo: string | null
+    favicon: string | null
+    login_kicker: string
+    login_titulo: string
+    login_titulo_destacado: string
+    login_parrafo: string
+    /** Un punto destacado por linea. */
+    login_features: string
+    login_footer: string
+    login_pie_sistema: string
+    portal_titulo: string
+    portal_bajada: string
+    pdf_encabezado: string
+    pdf_pie: string
+}
+
 export interface PageProps extends Record<string, unknown> {
     auth: {
         user: User | null
@@ -171,6 +200,7 @@ export interface PageProps extends Record<string, unknown> {
         success?: string
         error?: string
     }
+    configuracion: ConfiguracionMarca
     broadcasting: {
         driver: 'pusher' | 'reverb' | 'null'
         key: string | null

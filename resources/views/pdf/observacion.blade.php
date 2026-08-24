@@ -5,6 +5,11 @@
     con tablas y `width` en porcentajes. La fuente es DejaVu Sans porque es la
     única que trae DomPDF con cobertura UTF-8 completa (Helvetica rompe las
     tildes y la ñ).
+
+    Los colores están escritos a mano (no hay tokens de Tailwind acá): son los
+    del manual de marca, PANTONE Reflex Blue C #001489 y PANTONE 417 C
+    #65665C. Si cambia la paleta en resources/css/app.css hay que tocarlos
+    también acá.
 --}}
 <!DOCTYPE html>
 <html lang="es">
@@ -25,11 +30,11 @@
         header {
             position: fixed;
             top: -18mm; left: 0; right: 0;
-            border-bottom: 1.5pt solid #4f46e5;
+            border-bottom: 1.5pt solid #001489;
             padding-bottom: 4mm;
         }
-        header .marca { font-size: 13pt; font-weight: bold; color: #4f46e5; }
-        header .sub { font-size: 7.5pt; color: #6b7280; }
+        header .marca { font-size: 13pt; font-weight: bold; color: #001489; }
+        header .sub { font-size: 7.5pt; color: #65665c; }
         header .numero { font-size: 10pt; font-weight: bold; text-align: right; }
 
         footer {
@@ -44,7 +49,7 @@
         h1 { font-size: 13pt; margin: 0 0 1mm; }
         h2 {
             font-size: 8pt; text-transform: uppercase; letter-spacing: 0.5pt;
-            color: #6b7280; font-weight: bold;
+            color: #65665c; font-weight: bold;
             margin: 6mm 0 2mm; padding-bottom: 1mm;
             border-bottom: 0.5pt solid #e5e7eb;
         }
@@ -63,13 +68,13 @@
 
         /* Pares etiqueta/valor */
         table.datos td { padding: 1.2mm 0; vertical-align: top; }
-        table.datos td.k { width: 32%; color: #6b7280; font-size: 8pt; }
+        table.datos td.k { width: 32%; color: #65665c; font-size: 8pt; }
         table.datos td.v { width: 68%; }
 
         /* Grillas de datos */
         table.grilla { margin-top: 1mm; }
         table.grilla th {
-            background: #f9fafb; color: #6b7280;
+            background: #f9fafb; color: #65665c;
             font-size: 7.5pt; text-align: left; font-weight: bold;
             padding: 1.5mm 2mm; border-bottom: 0.5pt solid #e5e7eb;
         }
@@ -94,9 +99,16 @@
 <header>
     <table>
         <tr>
+            @if ($logo)
+                {{-- Incrustado en base64 por el controller: DomPDF corre con
+                     enable_remote=false y una <img> con URL saldria vacia. --}}
+                <td style="width: 14mm; vertical-align: middle;">
+                    <img src="{{ $logo }}" style="max-width: 11mm; max-height: 11mm;">
+                </td>
+            @endif
             <td>
-                <div class="marca">Tublood SA</div>
-                <div class="sub">Sistema de Gestión de Observaciones</div>
+                <div class="marca">{{ $marca['empresa_nombre'] }}</div>
+                <div class="sub">{{ $marca['pdf_encabezado'] }}</div>
             </td>
             <td class="numero">
                 Observación {{ $observacion->numero }}<br>
@@ -107,7 +119,7 @@
 </header>
 
 <footer>
-    Documento generado automáticamente por el SGO — Tublood SA · Página <span class="pagina"></span>
+    {{ $marca['pdf_pie'] }} · Página <span class="pagina"></span>
 </footer>
 
 <h1>{{ $observacion->titulo }}</h1>
@@ -241,9 +253,31 @@
     @endif
 </div>
 
+@if (count($imagenes))
+    <h2>Imágenes</h2>
+    {{-- Grilla de 2 por fila con <table>: DomPDF es CSS 2.1, no hay flex ni grid. --}}
+    <table style="width: 100%;">
+        @foreach (array_chunk($imagenes, 2) as $fila)
+            <tr>
+                @foreach ($fila as $img)
+                    <td style="width: 50%; padding: 0 2mm 4mm 0; vertical-align: top;">
+                        <img src="{{ $img['src'] }}" style="max-width: 100%; max-height: 70mm;">
+                        <div class="sub" style="font-size: 7pt; margin-top: 1mm;">{{ $img['nombre'] }}</div>
+                    </td>
+                @endforeach
+                {{-- Celda de relleno para que una fila impar no estire la ultima imagen. --}}
+                @if (count($fila) === 1)
+                    <td style="width: 50%;"></td>
+                @endif
+            </tr>
+        @endforeach
+    </table>
+@endif
+
 <h2>Archivos adjuntos</h2>
 @if ($observacion->attachments->isNotEmpty())
-    {{-- Solo se listan: los archivos no se embeben en el PDF. --}}
+    {{-- Las imagenes ya se muestran arriba; acá se listan todos los adjuntos
+         con su peso, que es la referencia para descargarlos del sistema. --}}
     <table class="grilla">
         <thead>
             <tr><th>Archivo</th><th style="width: 20%;">Tamaño</th></tr>
@@ -261,6 +295,9 @@
     </table>
     <p class="vacio" style="font-size: 7.5pt; margin-top: 2mm;">
         Los archivos se listan como referencia; se descargan desde el sistema.
+        @if (count($imagenesOmitidas))
+            No se incrustaron en el PDF: {{ implode(', ', $imagenesOmitidas) }}.
+        @endif
     </p>
 @else
     <p class="vacio">Sin archivos adjuntos.</p>

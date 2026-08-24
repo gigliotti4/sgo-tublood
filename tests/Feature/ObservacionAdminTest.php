@@ -5,10 +5,13 @@ namespace Tests\Feature;
 use App\Models\Articulo;
 use App\Models\Cliente;
 use App\Models\Observacion;
+use App\Models\ObservationAttachment;
 use App\Models\Proveedor;
 use App\Models\Sector;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -1105,5 +1108,77 @@ class ObservacionAdminTest extends TestCase
                 ],
             ])
             ->assertSessionHasErrors('datos_especificos.falla_maquina');
+    }
+
+    /**
+     * El PDF incrusta las imagenes adjuntas en base64 (DomPDF corre con
+     * enable_remote=false, asi que una <img> con URL saldria vacia).
+     */
+    public function test_el_pdf_se_genera_con_una_imagen_adjunta(): void
+    {
+        Storage::fake('local');
+
+        $observacion = $this->observacion();
+
+        $path = UploadedFile::fake()->image('falla.jpg')->store('observaciones', 'local');
+
+        ObservationAttachment::create([
+            'observation_id' => $observacion->id,
+            'path' => $path,
+            'original_name' => 'falla.jpg',
+            'mime_type' => 'image/jpeg',
+            'size' => 2048,
+        ]);
+
+        $response = $this->actingAs($this->userWith('observaciones.view'))
+            ->get("/observaciones/{$observacion->id}/pdf");
+
+        $response->assertOk();
+        $this->assertSame('application/pdf', $response->headers->get('content-type'));
+    }
+
+    /** Un adjunto que no es imagen no se incrusta, pero el PDF sigue saliendo. */
+    public function test_el_pdf_se_genera_con_un_adjunto_que_no_es_imagen(): void
+    {
+        Storage::fake('local');
+
+        $observacion = $this->observacion();
+
+        $path = UploadedFile::fake()->create('informe.pdf', 100)->store('observaciones', 'local');
+
+        ObservationAttachment::create([
+            'observation_id' => $observacion->id,
+            'path' => $path,
+            'original_name' => 'informe.pdf',
+            'mime_type' => 'application/pdf',
+            'size' => 102400,
+        ]);
+
+        $this->actingAs($this->userWith('observaciones.view'))
+            ->get("/observaciones/{$observacion->id}/pdf")
+            ->assertOk();
+    }
+
+    /**
+     * Un adjunto cuya fila quedo en la base pero cuyo archivo ya no esta en
+     * disco no puede tumbar la descarga del PDF.
+     */
+    public function test_el_pdf_no_se_rompe_si_falta_el_archivo_en_disco(): void
+    {
+        Storage::fake('local');
+
+        $observacion = $this->observacion();
+
+        ObservationAttachment::create([
+            'observation_id' => $observacion->id,
+            'path' => 'observaciones/no-existe.jpg',
+            'original_name' => 'no-existe.jpg',
+            'mime_type' => 'image/jpeg',
+            'size' => 2048,
+        ]);
+
+        $this->actingAs($this->userWith('observaciones.view'))
+            ->get("/observaciones/{$observacion->id}/pdf")
+            ->assertOk();
     }
 }

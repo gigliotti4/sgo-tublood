@@ -12,6 +12,7 @@ use App\Models\Sector;
 use App\Models\User;
 use App\Notifications\ObservacionSeguimientoNotification;
 use App\Services\ObservacionExportService;
+use App\Support\Configuracion;
 use App\Support\TaxonomiaIncidencias;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
@@ -27,6 +28,16 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ObservacionController extends Controller
 {
+    /**
+     * Topes del PDF: mas alla de esto, las imagenes se listan por nombre en vez
+     * de incrustarse. Un caso con 30 fotos generaria un PDF de decenas de MB y
+     * podria agotar la memoria de la request al pasarlas a base64.
+     */
+    private const PDF_MAX_IMAGENES = 12;
+
+    /** 4 MB por imagen. El portal ya limita a 3 MB; el panel acepta mas. */
+    private const PDF_MAX_PESO_IMAGEN = 4 * 1024 * 1024;
+
     private const PROVINCIAS = [
         'Buenos Aires', 'Catamarca', 'Chaco', 'Chubut',
         'Ciudad Autónoma de Buenos Aires', 'Córdoba', 'Corrientes', 'Entre Ríos',
@@ -211,8 +222,11 @@ class ObservacionController extends Controller
             'sector:id,nombre',
             'cliente:id,numero,razon_social,mail,telefono',
             ...self::EAGER_PRODUCTOS,
-            'attachments:id,observation_id,original_name,size',
+            // `path` y `mime_type` hacen falta para incrustar las imagenes.
+            'attachments:id,observation_id,original_name,size,path,mime_type',
         ]);
+
+        $imagenes = $this->imagenesParaPdf($observacion);
 
         $pdf = Pdf::loadView('pdf.observacion', [
             'observacion' => $observacion,
@@ -221,9 +235,87 @@ class ObservacionController extends Controller
             'prioridades' => config('incidencias.prioridades'),
             'estados' => Observacion::ESTADOS,
             'emitido' => now()->format('d/m/Y H:i'),
+            'marca' => Configuracion::valores(),
+            'logo' => $this->logoParaPdf(),
+            'imagenes' => $imagenes['incrustadas'],
+            'imagenesOmitidas' => $imagenes['omitidas'],
         ])->setPaper('a4');
 
         return $pdf->download("observacion-{$observacion->numero}.pdf");
+    }
+
+    /**
+     * El logo como data URI, o null si no hay ninguno cargado.
+     *
+     * DomPDF corre con `enable_remote => false`, asi que una <img> con URL sale
+     * vacia sin avisar: todo lo que entra al PDF va incrustado en base64.
+     */
+    private function logoParaPdf(): ?string
+    {
+        $path = Configuracion::pathImagen('logo');
+
+        if (! $path) {
+            return null;
+        }
+
+        // El SVG no lo renderiza DomPDF sin extensiones: se ignora y el PDF
+        // cae al encabezado de solo texto, que es el comportamiento de antes.
+        $mime = @mime_content_type($path) ?: '';
+
+        if (! str_starts_with($mime, 'image/') || str_contains($mime, 'svg')) {
+            return null;
+        }
+
+        return 'data:'.$mime.';base64,'.base64_encode((string) file_get_contents($path));
+    }
+
+    /**
+     * Los adjuntos que son imagen, incrustados en base64 para el PDF.
+     *
+     * Se aplican dos topes para que un caso con muchas fotos no genere un PDF
+     * inmanejable ni haga explotar la memoria de la request: un maximo de
+     * imagenes y un tope de peso por archivo. Lo que queda afuera se devuelve
+     * aparte para listarlo por nombre.
+     *
+     * @return array{incrustadas: array<int, array{nombre: string, src: string}>, omitidas: array<int, string>}
+     */
+    private function imagenesParaPdf(Observacion $observacion): array
+    {
+        $incrustadas = [];
+        $omitidas = [];
+
+        foreach ($observacion->attachments as $adjunto) {
+            if (! str_starts_with((string) $adjunto->mime_type, 'image/')) {
+                continue;
+            }
+
+            // El SVG no lo renderiza DomPDF: se lista como archivo, no se rompe.
+            if (str_contains((string) $adjunto->mime_type, 'svg')) {
+                $omitidas[] = $adjunto->original_name;
+
+                continue;
+            }
+
+            if (count($incrustadas) >= self::PDF_MAX_IMAGENES || $adjunto->size > self::PDF_MAX_PESO_IMAGEN) {
+                $omitidas[] = $adjunto->original_name;
+
+                continue;
+            }
+
+            // Un adjunto cuyo archivo ya no esta en disco no puede tumbar la
+            // descarga del PDF: se saltea en silencio.
+            if (! Storage::disk('local')->exists($adjunto->path)) {
+                continue;
+            }
+
+            $incrustadas[] = [
+                'nombre' => $adjunto->original_name,
+                'src' => 'data:'.$adjunto->mime_type.';base64,'
+                    .base64_encode(Storage::disk('local')->get($adjunto->path)),
+            ];
+        }
+
+        return ['incrustadas' => $incrustadas, 'omitidas' => $omitidas];
     }
 
     /**

@@ -24,6 +24,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'articulos.view', 'articulos.edit', 'articulos.sync', 'articulos.import',
             'proveedores.view', 'proveedores.edit', 'proveedores.import', 'proveedores.sync',
             'ventas.view', 'ventas.sync', 'ventas.montos',
+            'configuracion.view', 'configuracion.edit',
         ];
 
         foreach ($permissions as $permission) {
@@ -49,6 +50,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'articulos.view', 'articulos.edit', 'articulos.sync', 'articulos.import',
             'proveedores.view', 'proveedores.edit', 'proveedores.import', 'proveedores.sync',
             'ventas.view', 'ventas.sync',
+            'configuracion.view', 'configuracion.edit',
         ]);
 
         $viewer = Role::firstOrCreate(['name' => 'viewer']);
