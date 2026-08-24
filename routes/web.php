@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\ArticuloController as AdminArticuloController;
 use App\Http\Controllers\Admin\BajaController;
 use App\Http\Controllers\Admin\BitacoraController;
 use App\Http\Controllers\Admin\ClienteController;
+use App\Http\Controllers\Admin\ConfiguracionController;
 use App\Http\Controllers\Admin\ObservacionController as AdminObservacionController;
 use App\Http\Controllers\Admin\ProveedorController;
 use App\Http\Controllers\Admin\RoleController;
@@ -12,6 +13,7 @@ use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\VentaController;
 use App\Http\Controllers\ArticuloController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
+use App\Http\Controllers\Auth\PasswordResetController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\NotificacionController;
 use App\Http\Controllers\Portal\ObservacionController;
@@ -22,6 +24,16 @@ Route::get('/', fn () => redirect()->route('login'));
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthenticatedSessionController::class, 'create'])->name('login');
     Route::post('/login', [AuthenticatedSessionController::class, 'store']);
+
+    // Nombres de ruta fijos: Illuminate\Auth\Notifications\ResetPassword y el
+    // password broker asumen password.reset / password.request.
+    Route::get('/recuperar-password', [PasswordResetController::class, 'solicitar'])->name('password.request');
+    // Throttle propio (no el default del broker, que es por mail): los ~30
+    // usuarios salen por una sola IP corporativa, mismo motivo que el login.
+    Route::post('/recuperar-password', [PasswordResetController::class, 'enviarLink'])
+        ->middleware('throttle:10,1')->name('password.email');
+    Route::get('/restablecer-password/{token}', [PasswordResetController::class, 'formulario'])->name('password.reset');
+    Route::post('/restablecer-password', [PasswordResetController::class, 'restablecer'])->name('password.update');
 });
 
 // Búsqueda de artículos del selector de productos. Pública porque el portal de
@@ -210,6 +222,16 @@ Route::middleware(['auth'])->group(function () {
     });
     Route::middleware('can:roles.delete')->group(function () {
         Route::delete('/roles/{role}', [RoleController::class, 'destroy'])->name('roles.destroy');
+    });
+
+    // Configuración de marca y textos (logo, favicon, textos del login,
+    // del portal y del PDF). Permisos propios: cambiar la identidad de la app
+    // es más sensible que administrar usuarios.
+    Route::middleware('can:configuracion.view')->group(function () {
+        Route::get('/configuracion', [ConfiguracionController::class, 'index'])->name('configuracion.index');
+    });
+    Route::middleware('can:configuracion.edit')->group(function () {
+        Route::post('/configuracion', [ConfiguracionController::class, 'update'])->name('configuracion.update');
     });
 
     // Bitácora: vista transversal del historial de todas las observaciones

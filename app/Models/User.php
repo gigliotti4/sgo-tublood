@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Notifications\RestablecerPasswordNotification;
 use App\Support\TaxonomiaIncidencias;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -25,6 +26,12 @@ class User extends Authenticatable
     public function sector(): BelongsTo
     {
         return $this->belongsTo(Sector::class);
+    }
+
+    /** Notificación propia en español, sin cola — ver RestablecerPasswordNotification. */
+    public function sendPasswordResetNotification($token): void
+    {
+        $this->notify(new RestablecerPasswordNotification($token));
     }
 
     /**
