@@ -65,6 +65,23 @@ for sapi in fpm cli; do
     echo "extension=pdo_sqlsrv.so" > "/etc/php/8.3/${sapi}/conf.d/30-pdo_sqlsrv.ini"
 done
 
+# Límites de subida. Los defaults de PHP (2M / 8M) quedan por debajo de lo que
+# la app acepta: los adjuntos de observaciones y clientes validan hasta 10 MB
+# por archivo. Con 2M, un adjunto normal fallaba en producción aunque el
+# formulario lo diera por válido.
+#
+# `post_max_size` tiene que ser mayor que `upload_max_filesize` (el POST lleva
+# el archivo más el resto del formulario) y menor o igual al
+# `client_max_body_size` de nginx (12M), o nginx corta antes y el error es
+# menos claro. Si se pasa `post_max_size`, PHP descarta el POST entero
+# —token CSRF incluido— y el usuario ve "la sesión expiró" en vez del motivo real.
+for sapi in fpm cli; do
+    cat > "/etc/php/8.3/${sapi}/conf.d/99-sgo.ini" <<'INI'
+upload_max_filesize = 10M
+post_max_size = 12M
+INI
+done
+
 echo "==> Composer"
 if ! command -v composer >/dev/null; then
     curl -fsSL https://getcomposer.org/installer | php -- \

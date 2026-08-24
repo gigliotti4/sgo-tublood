@@ -57,6 +57,14 @@ else
     echo "==> Sin cambios en el front: salteo el build"
 fi
 
+# El symlink public/storage -> storage/app/public es lo que hace servibles los
+# archivos del disco `public` (hoy el logo y el favicon de /configuracion). Sin
+# esto se suben bien pero devuelven 404, que se ve como "no puedo subir
+# imagenes". No estaba en provision.sh y faltaba en el droplet.
+# Es idempotente: si el link ya existe, artisan lo informa y sigue.
+echo "==> Symlink de storage"
+"$PHP" artisan storage:link
+
 echo "==> Migraciones"
 "$PHP" artisan migrate --force
 
