@@ -191,7 +191,7 @@ class AlertasObservacionTest extends TestCase
         Notification::assertSentTo(
             $responsable,
             ObservacionAsignadaNotification::class,
-            fn ($notificacion) => str_starts_with($notificacion->toMail($responsable)->subject, '🔴 CRÍTICA — '),
+            fn ($notificacion) => str_starts_with($notificacion->toMail($responsable)->subject, 'Prioridad crítica: '),
         );
     }
 
@@ -204,7 +204,7 @@ class AlertasObservacionTest extends TestCase
         Notification::assertSentTo(
             $responsable,
             ObservacionAsignadaNotification::class,
-            fn ($notificacion) => ! str_contains($notificacion->toMail($responsable)->subject, 'CRÍTICA'),
+            fn ($notificacion) => ! str_contains($notificacion->toMail($responsable)->subject, 'Prioridad crítica'),
         );
     }
 
@@ -381,5 +381,42 @@ class AlertasObservacionTest extends TestCase
         $observacion->update(['estado' => 'en_proceso']);
 
         Notification::assertNothingSentTo($responsable->gerente);
+    }
+
+    /**
+     * Los mails llevan la casilla del sector que atiende el tipo de caso: si
+     * salieran solo de no-reply@ las respuestas se pierden, y ademas es una
+     * senal que penalizan los filtros de spam.
+     */
+    public function test_el_aviso_lleva_el_reply_to_del_tipo_de_caso(): void
+    {
+        $responsable = $this->responsable();
+
+        $falla = $this->observacion(['numero' => '0001-26', 'tipo' => 'falla_producto']);
+        $servicio = $this->observacion(['numero' => '0002-26', 'tipo' => 'disconformidad_servicio']);
+
+        $this->assertSame(
+            [['calidad@tublood.com', null]],
+            (new ObservacionAsignadaNotification($falla))->toMail($responsable)->replyTo
+        );
+
+        // A proposito distinto del rol que clasifica (calidad_servicio):
+        // quien responde el mail no es quien clasifica el caso.
+        $this->assertSame(
+            [['asuntosregulatorios@tublood.com', null]],
+            (new ObservacionAsignadaNotification($servicio))->toMail($responsable)->replyTo
+        );
+    }
+
+    /** Un tipo sin casilla declarada no lleva Reply-To en vez de romper. */
+    public function test_un_tipo_sin_reply_to_declarado_no_lleva_ninguno(): void
+    {
+        $responsable = $this->responsable();
+        $interna = $this->observacion(['tipo' => 'doble_etiquetado']);
+
+        $this->assertSame(
+            [],
+            (new ObservacionAsignadaNotification($interna))->toMail($responsable)->replyTo
+        );
     }
 }

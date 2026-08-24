@@ -73,6 +73,25 @@ class TaxonomiaIncidencias
         return config('incidencias.roles_por_tipo', []);
     }
 
+    /**
+     * Casilla a la que llega la respuesta si alguien contesta el mail de un
+     * caso de este tipo. Null si el tipo no declara ninguna, y entonces el
+     * mail sale sin Reply-To (que es el comportamiento de antes).
+     *
+     * Ojo: no es lo mismo que `rolDeTipo()`. Ese resuelve quién clasifica el
+     * caso dentro del sistema; este, a dónde va la respuesta. Hoy difieren:
+     * las disconformidades las clasifica Calidad de Servicio y las responde
+     * Asuntos Regulatorios.
+     */
+    public static function replyToDeTipo(?string $tipoKey): ?string
+    {
+        if ($tipoKey === null) {
+            return null;
+        }
+
+        return config("incidencias.reply_to_por_tipo.{$tipoKey}");
+    }
+
     /** Def del tipo de incidencia para un sector, o null si no existe. */
     public static function tipo(string $sectorSlug, string $tipoKey): ?array
     {

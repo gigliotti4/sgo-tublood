@@ -3,6 +3,7 @@
 namespace App\Notifications;
 
 use App\Models\Observacion;
+use App\Support\TaxonomiaIncidencias;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -31,7 +32,7 @@ class ObservacionRecibidaClienteNotification extends Notification implements Sho
 
     public function toMail(object $notifiable): MailMessage
     {
-        return (new MailMessage)
+        $mail = (new MailMessage)
             ->subject("Recibimos tu reclamo — N° {$this->observacion->numero}")
             ->greeting("Hola {$this->observacion->contacto_nombre},")
             ->line('Recibimos tu reclamo y ya está en revisión por nuestro equipo de Calidad.')
@@ -40,5 +41,14 @@ class ObservacionRecibidaClienteNotification extends Notification implements Sho
             ->line('Guardá este número: es la referencia para cualquier consulta sobre el caso.')
             ->line('Te vamos a contactar a este mismo correo cuando tengamos novedades.')
             ->salutation('Gracias, equipo de Tublood.');
+
+        // El cliente contesta este mail y tiene que llegarle al sector que
+        // atiende su tipo de reclamo, no a no-reply@. Es el mail más expuesto
+        // de todos: es el único que sale a una dirección externa.
+        if ($replyTo = TaxonomiaIncidencias::replyToDeTipo($this->observacion->tipo)) {
+            $mail->replyTo($replyTo);
+        }
+
+        return $mail;
     }
 }

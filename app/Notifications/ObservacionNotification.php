@@ -3,6 +3,7 @@
 namespace App\Notifications;
 
 use App\Models\Observacion;
+use App\Support\TaxonomiaIncidencias;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\BroadcastMessage;
@@ -55,12 +56,22 @@ abstract class ObservacionNotification extends Notification implements ShouldQue
     {
         $critica = $this->observacion->prioridad === 'critica';
 
+        // El asunto no lleva emoji ni la palabra en mayúsculas: el patrón
+        // "🔴 CRÍTICA —" al principio del asunto es de los que penalizan los
+        // filtros de spam, y justo son los avisos que más importa que lleguen.
+        // El caso crítico se distingue igual por el texto y por el cuerpo.
         $mail = (new MailMessage)
-            ->subject(($critica ? '🔴 CRÍTICA — ' : '').$this->asunto())
+            ->subject(($critica ? 'Prioridad crítica: ' : '').$this->asunto())
             ->greeting("Hola {$notifiable->name},");
 
         if ($critica) {
-            $mail->line('**Esta observación es de prioridad CRÍTICA.**');
+            $mail->line('**Esta observación es de prioridad crítica.**');
+        }
+
+        // Casilla del sector que atiende este tipo de caso, para que la
+        // respuesta no muera en no-reply@. Ver `reply_to_por_tipo`.
+        if ($replyTo = TaxonomiaIncidencias::replyToDeTipo($this->observacion->tipo)) {
+            $mail->replyTo($replyTo);
         }
 
         return $mail

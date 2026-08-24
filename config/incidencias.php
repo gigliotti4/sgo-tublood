@@ -48,6 +48,23 @@ return [
         'disconformidad_servicio' => 'calidad_servicio',
     ],
 
+    // Casilla de respuesta de los mails de cada tipo de reclamo externo.
+    //
+    // Es un mapa aparte de `roles_por_tipo` a propósito: ese dice **quién
+    // clasifica** el caso dentro del sistema, y este **a dónde llega la
+    // respuesta** si alguien contesta el mail. No tienen por qué coincidir —
+    // hoy no lo hacen: las disconformidades las clasifica Calidad de Servicio
+    // pero las responde Asuntos Regulatorios.
+    //
+    // Sin esto los mails salen de `no-reply@` sin dirección de respuesta, que
+    // además de perder las respuestas es una señal que penalizan los filtros
+    // de spam: un remitente al que nadie puede contestar no acumula
+    // reputación. Un tipo sin entrada acá simplemente no lleva Reply-To.
+    'reply_to_por_tipo' => [
+        'falla_producto' => 'calidad@tublood.com',
+        'disconformidad_servicio' => 'asuntosregulatorios@tublood.com',
+    ],
+
     // De dónde salió el caso. Se guardan como texto legible (la columna
     // `observations.tipo_caso` es un string libre; la lista se valida acá).
     'tipos_caso' => [
