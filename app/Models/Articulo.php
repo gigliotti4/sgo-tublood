@@ -11,14 +11,18 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  *
  * Los datos del ERP (código, descripción, stock, agrupaciones...) son de solo
  * lectura: los llena `ArticuloSyncService` y se pisan en cada sincronización.
- * `fecha_vencimiento`, `pm`, `legajo`, `observaciones`, `link_registro` y
- * `proveedor_id` son la excepción: son propios del panel, se cargan a mano o
- * por Excel, y el `upsert()` del sync **no los toca a propósito** — ver el
- * comentario en `ArticuloSyncService`.
+ * `fecha_vencimiento`, `pm`, `legajo`, `observaciones` y `link_registro` son
+ * la excepción: son propios del panel, se cargan a mano o por Excel, y el
+ * `upsert()` del sync **no los toca a propósito** — ver el comentario en
+ * `ArticuloSyncService`.
  *
- * ⚠️ `codigo_proveedor` (string del ERP, se pisa en cada sync) y `proveedor_id`
- * (FK al padrón local, propia del panel) son dos campos distintos: no está
- * confirmado que usen la misma numeración.
+ * `proveedor_id` es un caso mixto: sigue siendo propio del panel (el
+ * `upsert()` tampoco lo toca), pero después de sincronizar, un paso aparte
+ * intenta **completarlo solo si está vacío** cuando `codigo_proveedor`
+ * coincide con un `proveedores.numero` real — nunca pisa una asignación ya
+ * hecha a mano. `codigo_proveedor` (string suelto del ERP) casi nunca es un
+ * número de proveedor válido, pero cuando sí lo es, el dato es correcto. Ver
+ * `ArticuloSyncService::sync()`.
  *
  * `activo` también lo pisa la sync, aunque no viaje en el body de RP: se
  * deriva de si el artículo vino en el feed de la última corrida. Ver

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Articulo;
+use App\Models\Proveedor;
 use App\Services\RpSistemas\ArticuloSyncService;
 use App\Services\RpSistemas\RpSistemasClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -54,7 +55,7 @@ class ArticuloSyncTest extends TestCase
         ];
     }
 
-    /** @return array{procesados: int, activos: int, desactivados: int} */
+    /** @return array{procesados: int, activos: int, desactivados: int, proveedores_vinculados: int} */
     private function sincronizar(): array
     {
         return (new ArticuloSyncService(new RpSistemasClient))->sync();
@@ -309,5 +310,66 @@ class ArticuloSyncTest extends TestCase
         $response->assertJsonCount(1);
         $response->assertJsonFragment(['codigo' => 'RE-1631']);
         $response->assertJsonMissing(['codigo' => 'RE-999']);
+    }
+
+    // ── Vinculación de proveedor por codigo_proveedor ────────────────────────
+
+    /**
+     * codigo_proveedor casi nunca es un número de proveedor real, pero cuando
+     * sí coincide con proveedores.numero, es información correcta y vale la
+     * pena vincularla — ver el docblock de ArticuloSyncService::sync().
+     */
+    public function test_vincula_el_proveedor_cuando_codigo_proveedor_coincide(): void
+    {
+        $proveedor = Proveedor::create(['numero' => 'PRO1', 'razon_social' => 'Distribuidora Test SA']);
+
+        Http::fake(['*articulos.php' => Http::response($this->respuesta([
+            $this->articulo(['codigo_proveedor' => 'PRO1']),
+        ]))]);
+
+        $resultado = $this->sincronizar();
+
+        $this->assertSame($proveedor->id, Articulo::first()->proveedor_id);
+        $this->assertSame(1, $resultado['proveedores_vinculados']);
+    }
+
+    /** Sin proveedor con ese número, proveedor_id queda en null sin romper nada. */
+    public function test_no_vincula_proveedor_cuando_codigo_proveedor_no_matchea(): void
+    {
+        Http::fake(['*articulos.php' => Http::response($this->respuesta([
+            $this->articulo(['codigo_proveedor' => 'CODIGO-QUE-NO-EXISTE']),
+        ]))]);
+
+        $resultado = $this->sincronizar();
+
+        $this->assertNull(Articulo::first()->proveedor_id);
+        $this->assertSame(0, $resultado['proveedores_vinculados']);
+    }
+
+    /**
+     * El caso central: un proveedor ya asignado a mano (por Excel o desde la
+     * ficha) no se pisa aunque codigo_proveedor matchee con OTRO proveedor.
+     * proveedor_id sigue siendo un campo propio del panel.
+     */
+    public function test_no_pisa_un_proveedor_ya_asignado_a_mano(): void
+    {
+        $asignadoAMano = Proveedor::create(['numero' => '500', 'razon_social' => 'El que cargó Calidad']);
+        $otro = Proveedor::create(['numero' => 'PRO1', 'razon_social' => 'El que coincide con el ERP']);
+
+        Articulo::create([
+            'codigo' => 'RE-1631',
+            'descripcion' => 'Descripción vieja',
+            'proveedor_id' => $asignadoAMano->id,
+        ]);
+
+        Http::fake(['*articulos.php' => Http::response($this->respuesta([
+            $this->articulo(['codigo_proveedor' => 'PRO1']),
+        ]))]);
+
+        $resultado = $this->sincronizar();
+
+        $this->assertSame($asignadoAMano->id, Articulo::first()->proveedor_id);
+        $this->assertSame(0, $resultado['proveedores_vinculados']);
+        $this->assertNotSame($otro->id, Articulo::first()->proveedor_id);
     }
 }

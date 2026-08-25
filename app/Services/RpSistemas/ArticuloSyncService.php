@@ -4,6 +4,7 @@ namespace App\Services\RpSistemas;
 
 use App\Models\Articulo;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class ArticuloSyncService
@@ -26,7 +27,16 @@ class ArticuloSyncService
      * `whereNotNull` y por lo tanto nunca se desactiva por esta vía: no
      * vinieron de un feed del que puedan "dejar de venir".
      *
-     * @return array{procesados: int, activos: int, desactivados: int}
+     * Al final intenta vincular el proveedor: `codigo_proveedor` (el string
+     * suelto del ERP) casi nunca es un número de proveedor real — verificado
+     * a mano, de ~70 valores distintos solo un puñado coincide con
+     * `proveedores.numero` — pero cuando coincide, el dato es correcto (se
+     * confirmó contra un proveedor ya cargado a mano por Excel, y matcheaba).
+     * Vale la pena aprovechar esos casos aunque sean pocos. Nunca pisa un
+     * `proveedor_id` ya asignado: es un campo propio del panel, y esto es un
+     * intento best-effort de completarlo, no una fuente de verdad.
+     *
+     * @return array{procesados: int, activos: int, desactivados: int, proveedores_vinculados: int}
      */
     public function sync(): array
     {
@@ -103,9 +113,31 @@ class ArticuloSyncService
                 ->update(['activo' => false, 'updated_at' => Carbon::now()]);
         }
 
-        Log::info("RpSistemas: sincronización completada — {$total} artículos procesados, {$desactivados} desactivados");
+        // Subconsulta escalar y no un UPDATE...JOIN: SQLite (lo que usan los
+        // tests) no soporta join en un UPDATE, pero sí una subconsulta, y
+        // rinde igual de bien en MySQL. `proveedores.numero` tiene índice
+        // único (permite varios NULL, pero no un no-NULL repetido), así que
+        // la subconsulta nunca puede devolver más de una fila.
+        //
+        // Recorrer ~4000 filas en PHP para resolver cada una contra ~1900
+        // proveedores sería lento y no aporta nada que SQL no resuelva mejor.
+        // `whereNull('proveedor_id')` es lo que garantiza que nunca se pisa
+        // una asignación manual.
+        $vinculados = DB::table('articulos')
+            ->whereNull('proveedor_id')
+            ->whereNotNull('codigo_proveedor')
+            ->whereIn('codigo_proveedor', function ($query) {
+                $query->select('numero')->from('proveedores')->whereNotNull('numero');
+            })
+            ->update([
+                'proveedor_id' => DB::raw(
+                    '(select id from proveedores where proveedores.numero = articulos.codigo_proveedor)'
+                ),
+            ]);
 
-        return ['procesados' => $total, 'activos' => $total, 'desactivados' => $desactivados];
+        Log::info("RpSistemas: sincronización completada — {$total} artículos procesados, {$desactivados} desactivados, {$vinculados} proveedores vinculados");
+
+        return ['procesados' => $total, 'activos' => $total, 'desactivados' => $desactivados, 'proveedores_vinculados' => $vinculados];
     }
 
     private function mapear(array $a, Carbon $syncedAt, string $syncedAtValor): array
