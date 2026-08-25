@@ -118,6 +118,8 @@ Route::middleware(['auth'])->group(function () {
     // se registra antes de este grupo, así que siempre matchea primero y no
     // choca con /articulos/{articulo}.
     Route::middleware('can:articulos.view')->group(function () {
+        // Antes del index para que /articulos/export no caiga en el listado.
+        Route::get('/articulos/export', [AdminArticuloController::class, 'export'])->name('articulos.export');
         Route::get('/articulos', [AdminArticuloController::class, 'index'])->name('articulos.index');
     });
     Route::middleware('can:articulos.sync')->group(function () {

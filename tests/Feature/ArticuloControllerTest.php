@@ -8,6 +8,7 @@ use App\Models\Proveedor;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
@@ -159,5 +160,87 @@ class ArticuloControllerTest extends TestCase
             ->get('/articulos')
             ->assertInertia(fn ($page) => $page
                 ->where('articulos.data.0.proveedor.razon_social', 'PROPATO HNOS S A I C'));
+    }
+
+    // ── Exportación a Excel ──────────────────────────────────────────────────
+
+    public function test_exportar_requiere_permiso_articulos_view(): void
+    {
+        $this->actingAs(User::factory()->create())
+            ->get('/articulos/export')
+            ->assertStatus(403);
+    }
+
+    public function test_exportar_devuelve_un_xlsx(): void
+    {
+        Articulo::create(['codigo' => 'RE-1631', 'descripcion' => 'AGUJA 40/12 TERUMO']);
+        $user = $this->userWith('articulos.view');
+
+        $response = $this->actingAs($user)->get('/articulos/export');
+
+        $response->assertOk();
+        $response->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        $this->assertStringContainsString(
+            'articulos-'.now()->format('Y-m-d').'.xlsx',
+            $response->headers->get('content-disposition')
+        );
+    }
+
+    /** Lo que ves es lo que baja: el archivo respeta el buscador y el filtro de estado. */
+    public function test_exportar_respeta_los_filtros_del_listado(): void
+    {
+        Articulo::create(['codigo' => 'RE-1631', 'descripcion' => 'AGUJA 40/12 TERUMO']);
+        Articulo::create(['codigo' => 'RE-999', 'descripcion' => 'GASA ESTERIL']);
+        $user = $this->userWith('articulos.view');
+
+        $filas = $this->filasDelExcel(
+            $this->actingAs($user)->get('/articulos/export?search=AGUJA')
+        );
+
+        // Encabezado + una sola fila de datos.
+        $this->assertCount(2, $filas);
+        $this->assertSame('RE-1631', $filas[1][0]);
+    }
+
+    /**
+     * Las columnas Estado y Origen son el motivo del export: separan "activo
+     * según el último sync" de "nunca vino de RP" (Excel de Calidad), que es
+     * la distinción que no se ve mirando solo el listado en pantalla.
+     */
+    public function test_exportar_incluye_estado_y_origen(): void
+    {
+        Articulo::create([
+            'codigo' => 'RE-1631', 'descripcion' => 'AGUJA 40/12 TERUMO',
+            'activo' => true, 'synced_at' => now(),
+        ]);
+        Articulo::create([
+            'codigo' => 'RE-999', 'descripcion' => 'GASA ESTERIL',
+            'activo' => false, 'synced_at' => now()->subDay(),
+        ]);
+        Articulo::create([
+            'codigo' => 'EXCEL-1', 'descripcion' => 'Cargado a mano por Calidad',
+            'activo' => true, 'synced_at' => null,
+        ]);
+        $user = $this->userWith('articulos.view');
+
+        $filas = $this->filasDelExcel($this->actingAs($user)->get('/articulos/export'));
+        $porCodigo = collect($filas)->skip(1)->keyBy(0);
+
+        $this->assertSame('Activo', $porCodigo['RE-1631'][17]);
+        $this->assertSame('RP Sistemas', $porCodigo['RE-1631'][18]);
+
+        $this->assertSame('Discontinuado', $porCodigo['RE-999'][17]);
+        $this->assertSame('RP Sistemas', $porCodigo['RE-999'][18]);
+
+        $this->assertSame('Activo', $porCodigo['EXCEL-1'][17]);
+        $this->assertSame('Carga manual (Excel)', $porCodigo['EXCEL-1'][18]);
+    }
+
+    private function filasDelExcel($response): array
+    {
+        $path = tempnam(sys_get_temp_dir(), 'export').'.xlsx';
+        file_put_contents($path, $response->streamedContent());
+
+        return IOFactory::load($path)->getActiveSheet()->toArray();
     }
 }

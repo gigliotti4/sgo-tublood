@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Head, Link, router, useForm } from '@inertiajs/vue3'
 import { route } from 'ziggy-js'
 import AppLayout from '@/Layouts/AppLayout.vue'
@@ -46,6 +46,11 @@ watch(search, () => {
 })
 
 watch(estado, recargar)
+
+const urlExportar = computed(() => route('articulos.export', {
+    search: search.value || undefined,
+    estado: estado.value || undefined,
+}))
 
 const syncing = ref(false)
 
@@ -111,6 +116,13 @@ const submitImport = () => {
                 </div>
 
                 <div class="flex flex-wrap items-center gap-3">
+                    <!-- Descarga directa, no navegación de Inertia: por eso <a> y no <Link>. -->
+                    <a
+                        :href="urlExportar"
+                        class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-white/[0.05]"
+                    >
+                        Exportar a Excel
+                    </a>
                     <Button v-if="hasPermission('articulos.import')" variant="outline" @click="showImportModal = true">
                         Importar Excel
                     </Button>

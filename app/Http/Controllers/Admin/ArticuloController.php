@@ -5,10 +5,13 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Jobs\SyncArticulosJob;
 use App\Models\Articulo;
+use App\Services\ArticuloExportService;
 use App\Services\ArticuloImportService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ArticuloController extends Controller
 {
@@ -19,12 +22,7 @@ class ArticuloController extends Controller
         $search = $request->string('search')->trim()->value();
         $estado = $request->string('estado')->trim()->value();
 
-        $articulos = Articulo::query()
-            ->with('proveedor:id,numero,razon_social')
-            ->when($search, fn ($q) => $q->buscar($search))
-            // Encadenado después del buscador: buscar "AGUJA" dentro de los
-            // discontinuados tiene que funcionar.
-            ->when($estado, fn ($q) => $q->where('activo', $estado === 'activos'))
+        $articulos = $this->filtrados($request)
             ->orderBy('descripcion')
             ->paginate(50)
             ->withQueryString();
@@ -39,6 +37,37 @@ class ArticuloController extends Controller
             'total' => Articulo::count(),
             'totalInactivos' => Articulo::where('activo', false)->count(),
         ]);
+    }
+
+    /**
+     * Exporta el catálogo a Excel, con el mismo filtro que el listado: lo que
+     * ves es lo que baja. Suma columnas de Estado y Origen que el listado no
+     * muestra — ver ArticuloExportService.
+     */
+    public function export(Request $request): StreamedResponse
+    {
+        $this->authorize('articulos.view');
+
+        $articulos = $this->filtrados($request)->orderBy('descripcion')->get();
+
+        return (new ArticuloExportService)->exportar($articulos);
+    }
+
+    /**
+     * La query del listado con los filtros de la request aplicados. La
+     * comparten el listado y la exportación a Excel.
+     */
+    private function filtrados(Request $request): Builder
+    {
+        $search = $request->string('search')->trim()->value();
+        $estado = $request->string('estado')->trim()->value();
+
+        return Articulo::query()
+            ->with('proveedor:id,numero,razon_social')
+            ->when($search, fn ($q) => $q->buscar($search))
+            // Encadenado después del buscador: buscar "AGUJA" dentro de los
+            // discontinuados tiene que funcionar.
+            ->when($estado, fn ($q) => $q->where('activo', $estado === 'activos'));
     }
 
     public function sync(): RedirectResponse
