@@ -12,11 +12,10 @@ class ObservacionAsignadaNotification extends ObservacionNotification
         parent::__construct($observacion);
     }
 
-    /** La asignación se avisa en el panel; no genera un correo adicional. */
-    public function via(object $notifiable): array
-    {
-        return ['database', 'broadcast'];
-    }
+    // Sin override de via(): hereda ['database', 'broadcast', 'mail'] de
+    // ObservacionNotification. Antes se recortaba a solo panel — "no genera un
+    // correo adicional" — pero el responsable no tiene por qué estar mirando
+    // el sistema en el momento en que le asignan un caso.
 
     protected function tipo(): string
     {

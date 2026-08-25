@@ -499,4 +499,85 @@ class ClienteControllerTest extends TestCase
         $this->assertDatabaseMissing('cliente_attachments', ['id' => $archivo->id]);
         Storage::disk('local')->assertMissing($path);
     }
+
+    // ── Autocompletado de razón social (clientes.buscar) ────────────────────
+
+    public function test_buscar_requiere_permiso_clientes_view(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user)->get('/clientes/buscar?numero=1')->assertStatus(403);
+    }
+
+    public function test_buscar_devuelve_la_razon_social_de_un_numero_existente(): void
+    {
+        Cliente::create(['numero' => '1234', 'razon_social' => 'Droguería del Sur SA']);
+
+        $response = $this->actingAs($this->userWith('clientes.view'))
+            ->get('/clientes/buscar?numero=1234');
+
+        $response->assertOk();
+        $response->assertJson(['numero' => '1234', 'razon_social' => 'Droguería del Sur SA']);
+    }
+
+    public function test_buscar_un_numero_inexistente_devuelve_vacio_sin_error(): void
+    {
+        $response = $this->actingAs($this->userWith('clientes.view'))
+            ->get('/clientes/buscar?numero=99999');
+
+        // No es 'null': response()->json(null) serializa como '{}' en esta
+        // versión de Symfony (su constructor reemplaza null por un
+        // ArrayObject vacío antes de codificar). Lo que importa para el
+        // frontend es que no traiga 'id' — eso es lo que chequea para saber
+        // si hubo match.
+        $response->assertOk();
+        $this->assertArrayNotHasKey('id', $response->json());
+    }
+
+    public function test_buscar_sin_numero_devuelve_vacio(): void
+    {
+        $response = $this->actingAs($this->userWith('clientes.view'))
+            ->get('/clientes/buscar?numero=');
+
+        // Mismo motivo que el test anterior: sin match la respuesta es '{}',
+        // no 'null'.
+        $response->assertOk();
+        $this->assertArrayNotHasKey('id', $response->json());
+    }
+
+    /**
+     * Es coincidencia exacta, no un buscador de texto: mismo criterio que
+     * ObservacionController::clienteIdDesdeNumero(), que es lo que va a
+     * vincular el caso al guardar.
+     */
+    public function test_buscar_no_matchea_por_texto_parcial(): void
+    {
+        Cliente::create(['numero' => '1234', 'razon_social' => 'Droguería del Sur SA']);
+
+        $response = $this->actingAs($this->userWith('clientes.view'))
+            ->get('/clientes/buscar?numero=123');
+
+        // Mismo motivo que el test anterior: sin match la respuesta es '{}',
+        // no 'null'.
+        $response->assertOk();
+        $this->assertArrayNotHasKey('id', $response->json());
+    }
+
+    /** No expone campos sensibles: solo lo que hace falta para autocompletar. */
+    public function test_buscar_no_devuelve_campos_sensibles(): void
+    {
+        Cliente::create([
+            'numero' => '1234',
+            'razon_social' => 'Droguería del Sur SA',
+            'mail' => 'contacto@drogueriadelsur.com',
+            'telefono' => '011-4444-5555',
+        ]);
+
+        $response = $this->actingAs($this->userWith('clientes.view'))
+            ->get('/clientes/buscar?numero=1234');
+
+        $response->assertOk();
+        $response->assertJsonStructure(['id', 'numero', 'razon_social']);
+        $response->assertJsonMissing(['mail' => 'contacto@drogueriadelsur.com']);
+        $this->assertArrayNotHasKey('telefono', $response->json());
+    }
 }

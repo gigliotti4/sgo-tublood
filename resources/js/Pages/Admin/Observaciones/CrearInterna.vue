@@ -87,6 +87,64 @@ const form = useForm({
     attachments: [] as File[],
 })
 
+/**
+ * Autocompleta la razón social al tipear el N° de cliente, para que un número
+ * mal cargado se note antes de guardar y no recién al revisar el caso
+ * después. Coincidencia exacta contra `clientes.buscar`, la misma que usa el
+ * backend para vincular el caso.
+ */
+interface ClienteResuelto { id: number; numero: string; razon_social: string }
+const clienteResuelto = ref<ClienteResuelto | null>(null)
+const clienteNoEncontrado = ref(false)
+// Lo último que puso el autocompletado, para no pisar una razón social que la
+// persona corrigió a mano después de que el número resolviera.
+let ultimaRazonSocialAuto = ''
+let peticionCliente = 0
+let debounceCliente: ReturnType<typeof setTimeout>
+
+watch(() => form.contacto_numero_cliente, (numeroCrudo) => {
+    clearTimeout(debounceCliente)
+    clienteResuelto.value = null
+    clienteNoEncontrado.value = false
+
+    const numero = numeroCrudo.trim()
+
+    if (numero === '') return
+
+    debounceCliente = setTimeout(async () => {
+        const propia = ++peticionCliente
+
+        try {
+            const r = await fetch(`${route('clientes.buscar')}?numero=${encodeURIComponent(numero)}`, {
+                headers: { Accept: 'application/json' },
+            })
+
+            // Llegó tarde: ya hay una búsqueda más nueva en curso.
+            if (propia !== peticionCliente) return
+
+            const cliente: Partial<ClienteResuelto> | null = r.ok ? await r.json() : null
+
+            // Sin match, el backend responde `{}` y no `null` (así serializa
+            // response()->json(null) en esta versión de Symfony), así que acá
+            // se chequea `id` y no la verdad del objeto entero — un `{}` es
+            // truthy en JS.
+            if (cliente?.id) {
+                const encontrado = cliente as ClienteResuelto
+                clienteResuelto.value = encontrado
+
+                if (form.contacto_nombre === '' || form.contacto_nombre === ultimaRazonSocialAuto) {
+                    form.contacto_nombre = encontrado.razon_social
+                    ultimaRazonSocialAuto = encontrado.razon_social
+                }
+            } else {
+                clienteNoEncontrado.value = true
+            }
+        } catch {
+            // Sin respuesta, el campo sigue siendo texto libre: no bloquea el guardado.
+        }
+    }, 350)
+})
+
 const sectorSlug = computed(() => props.sectores.find(s => s.id === form.sector_id)?.slug ?? null)
 
 /**
@@ -277,9 +335,20 @@ const submit = () => form.post(route('observaciones.store'), { forceFormData: tr
                         v-model="form.contacto_numero_cliente"
                         :required="requiereCliente"
                         label="N° de cliente"
-                        hint="Si coincide con un cliente sincronizado de RP Sistemas, la observación queda vinculada."
                         :error="form.errors.contacto_numero_cliente"
-                    />
+                    >
+                        <template #hint>
+                            <span v-if="clienteResuelto" class="text-success-600 dark:text-success-400">
+                                Cliente encontrado: {{ clienteResuelto.razon_social }}
+                            </span>
+                            <span v-else-if="clienteNoEncontrado" class="text-warning-600 dark:text-warning-400">
+                                No coincide con ningún cliente sincronizado — se puede guardar igual.
+                            </span>
+                            <span v-else>
+                                Si coincide con un cliente sincronizado de RP Sistemas, la observación queda vinculada.
+                            </span>
+                        </template>
+                    </Input>
                     <Input
                         v-model="form.contacto_nombre"
                         label="Razón social"

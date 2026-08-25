@@ -86,8 +86,12 @@ Route::middleware(['auth'])->group(function () {
 
     // Clientes
     Route::middleware('can:clientes.view')->group(function () {
-        // Antes del index para que /clientes/export no caiga en el listado.
+        // Antes del index para que /clientes/export ni /clientes/buscar caigan
+        // en el listado (que espera un {cliente} numérico en otras rutas).
         Route::get('/clientes/export', [ClienteController::class, 'export'])->name('clientes.export');
+        // Autocompletado de razón social por N° de cliente, usado en la carga
+        // interna de observaciones (Admin/Observaciones/CrearInterna.vue).
+        Route::get('/clientes/buscar', [ClienteController::class, 'buscarPorNumero'])->name('clientes.buscar');
         Route::get('/clientes', [ClienteController::class, 'index'])->name('clientes.index');
         Route::get('/clientes/{cliente}/archivos/{attachment}', [ClienteController::class, 'downloadArchivo'])
             ->name('clientes.archivos.download')->scopeBindings();

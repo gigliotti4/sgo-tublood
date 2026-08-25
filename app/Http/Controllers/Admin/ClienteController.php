@@ -10,6 +10,7 @@ use App\Services\ClienteExportService;
 use App\Services\ClienteImportService;
 use App\Support\Documentacion;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -54,6 +55,42 @@ class ClienteController extends Controller
             // Sin filtrar: el paginador ya trae el total de la búsqueda vigente.
             'total' => Cliente::count(),
         ]);
+    }
+
+    /**
+     * Resuelve la razón social de un N° de cliente para autocompletar el
+     * formulario de carga interna de observaciones
+     * (Admin/Observaciones/CrearInterna.vue).
+     *
+     * Coincidencia **exacta**, no un buscador de texto: es la misma columna
+     * que usa `ObservacionController::clienteIdDesdeNumero()` para vincular el
+     * caso, así que lo que se ve acá tiene que ser justo lo que va a matchear
+     * al guardar. Devuelve solo `id`, `numero` y `razon_social` — nada de
+     * mail, teléfono ni documentación, que no hacen falta para esto.
+     *
+     * Detrás de `clientes.view` a propósito: expone la relación
+     * número → razón social del padrón, y no está pensado para exponerse
+     * público (a diferencia de `articulos.buscar`, que sí lo está).
+     *
+     * ⚠️ Sin match responde `{}` y no `null`: `response()->json(null)`
+     * serializa como `{}` en esta versión de Symfony (su constructor hace
+     * `$data ??= new ArrayObject()` antes de codificar), así que "vacío" no
+     * se puede distinguir en el JSON. El frontend no debe chequear el objeto
+     * entero como truthy — tiene que mirar la presencia de `id`.
+     */
+    public function buscarPorNumero(Request $request): JsonResponse
+    {
+        $this->authorize('clientes.view');
+
+        $numero = trim((string) $request->query('numero', ''));
+
+        if ($numero === '') {
+            return response()->json(null);
+        }
+
+        $cliente = Cliente::where('numero', $numero)->first(['id', 'numero', 'razon_social']);
+
+        return response()->json($cliente);
     }
 
     /**

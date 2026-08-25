@@ -62,7 +62,7 @@ class AlertasObservacionTest extends TestCase
         $this->assertSame(0, $observacion->alerta_nivel);
     }
 
-    public function test_crear_con_responsable_le_avisa_en_el_panel(): void
+    public function test_crear_con_responsable_le_avisa_en_el_panel_y_por_mail(): void
     {
         Notification::fake();
         $responsable = $this->responsable();
@@ -73,7 +73,7 @@ class AlertasObservacionTest extends TestCase
             ObservacionAsignadaNotification::class,
             fn ($notificacion) => $notificacion->toArray($responsable)['tipo'] === 'observacion_asignada'
                 && $notificacion->toArray($responsable)['observacion_id'] === $observacion->id
-                && $notificacion->via($responsable) === ['database', 'broadcast'],
+                && $notificacion->via($responsable) === ['database', 'broadcast', 'mail'],
         );
     }
 
