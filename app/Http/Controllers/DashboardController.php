@@ -17,6 +17,14 @@ class DashboardController extends Controller
     private const TOPE_PROVEEDORES = 10;
 
     /**
+     * Ventana del KPI de tiempo de resolución, en días.
+     *
+     * No es un promedio histórico a propósito: con el tiempo se vuelve
+     * insensible y una mejora real del equipo dejaría de notarse en el número.
+     */
+    private const DIAS_VENTANA_KPI = 90;
+
+    /**
      * Cuántas observaciones lista el hover de una tarjeta.
      *
      * "Todas" no es viable: el numerito puede ser de miles y el panel tiene que
@@ -46,8 +54,7 @@ class DashboardController extends Controller
                 'ncAbiertas' => 0,
             ],
             'kpis' => [
-                // TODO: requiere sla_configs para calcular el % de cumplimiento (pendiente).
-                'tiempoSla' => null,
+                'resolucion' => $this->tiempoPromedioResolucion(),
                 'critica' => Observacion::where('prioridad', 'critica')->count(),
                 'sinClasificar' => Observacion::where('estado', 'pendiente_clasificacion')->count(),
             ],
@@ -59,8 +66,7 @@ class DashboardController extends Controller
                     'count' => Observacion::where('estado', $estado)->count(),
                 ])
                 ->values(),
-            // TODO: requiere tabla sectors (pendiente).
-            'porSector' => [],
+            'porSector' => $this->observacionesPorSector(),
             // Lo que muestra el hover de las tarjetas "Abiertas" y "Asignadas a
             // mí". Cada lista usa **el mismo criterio que el numero de su
             // tarjeta**: si no, el panel contradiria al contador que abre.
@@ -84,6 +90,74 @@ class DashboardController extends Controller
             // canceladas mostrando el slug crudo en las tablas.
             'estadoLabels' => Observacion::ESTADOS,
         ]);
+    }
+
+    /**
+     * Tiempo promedio desde que entra una observación hasta que se cierra.
+     *
+     * Se mide de punta a punta (`created_at` → `cerrada_at`), incluyendo lo que
+     * el caso esperó a ser clasificado: es lo que mide un sistema de calidad y
+     * lo que le importa a quien reclamó, no solo el trabajo del sector.
+     *
+     * Devuelve **horas** y no días: un caso resuelto en 4 h no puede figurar
+     * como "0 días". El formato lo decide el frontend según la magnitud.
+     *
+     * `null` cuando no hay casos cerrados en la ventana — distinto de `0`, que
+     * sería un promedio buenísimo y justo lo contrario de lo que pasa.
+     *
+     * ⚠️ El promedio se hace en PHP y no con `AVG(TIMESTAMPDIFF(...))`: esa
+     * función es de MySQL y los tests corren en SQLite (forzado por
+     * phpunit.xml), donde reventaría con un error de sintaxis. Son las cerradas
+     * de 90 días, no un volumen que justifique pelearse con SQL portable.
+     *
+     * @return array{horas: float|null, casos: int}
+     */
+    private function tiempoPromedioResolucion(): array
+    {
+        $cerradas = Observacion::query()
+            ->where('estado', 'cerrada')
+            ->whereNotNull('cerrada_at')
+            ->where('cerrada_at', '>=', now()->subDays(self::DIAS_VENTANA_KPI))
+            ->get(['created_at', 'cerrada_at']);
+
+        if ($cerradas->isEmpty()) {
+            return ['horas' => null, 'casos' => 0];
+        }
+
+        return [
+            'horas' => round($cerradas->avg(
+                fn (Observacion $o) => $o->created_at->diffInHours($o->cerrada_at)
+            ), 1),
+            'casos' => $cerradas->count(),
+        ];
+    }
+
+    /**
+     * Cuántas observaciones tiene cada sector, para el gráfico de barras.
+     *
+     * ⚠️ `leftJoin` y no `join`: un inner descartaría las observaciones sin
+     * sector, que son justo las que hay que ver. El portal público guarda el
+     * reclamo aunque no logre resolver el sector (nunca puede perder un
+     * reclamo), así que ese bucket tiene casos reales — esconderlos haría que
+     * el gráfico mienta por omisión, mismo criterio que el contador "sin
+     * proveedor" del ranking de arriba.
+     *
+     * Las canceladas quedan afuera, igual que en el gráfico por estado.
+     *
+     * @return Collection<int, array{sector: string, count: int}>
+     */
+    private function observacionesPorSector(): Collection
+    {
+        return Observacion::query()
+            ->leftJoin('sectors', 'sectors.id', '=', 'observations.sector_id')
+            ->where('observations.estado', '!=', 'cancelada')
+            ->groupBy('sectors.id', 'sectors.nombre')
+            ->orderByDesc('count')
+            ->get([
+                DB::raw("COALESCE(sectors.nombre, 'Sin sector') as sector"),
+                DB::raw('COUNT(*) as count'),
+            ])
+            ->map(fn ($fila) => ['sector' => $fila->sector, 'count' => (int) $fila->count]);
     }
 
     /**

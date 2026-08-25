@@ -71,6 +71,7 @@ class Observacion extends Model
         'created_by',
         'responsable_asignado_at',
         'vence_at',
+        'cerrada_at',
         'alerta_nivel',
         'sector_id',
         'contacto_telefono',
@@ -89,6 +90,7 @@ class Observacion extends Model
         'datos_especificos' => 'array',
         'responsable_asignado_at' => 'datetime',
         'vence_at' => 'datetime',
+        'cerrada_at' => 'datetime',
         'alerta_nivel' => 'integer',
     ];
 

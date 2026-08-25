@@ -56,7 +56,8 @@ const props = defineProps<{
         ncAbiertas: number
     }
     kpis: {
-        tiempoSla: number | null
+        /** Promedio del alta al cierre. `horas` es null si no hubo cierres en la ventana. */
+        resolucion: { horas: number | null; casos: number }
         critica: number
         sinClasificar: number
     }
@@ -108,15 +109,30 @@ const formatFecha = (d: string) =>
 
 const totalEstados = computed(() => props.porEstado.reduce((acc, e) => acc + e.count, 0))
 
+/**
+ * El promedio de resolucion, legible segun su magnitud: un caso de 4 h no
+ * puede mostrarse como "0 dias". Sin cierres en la ventana devuelve null y la
+ * tarjeta dice "Sin datos" — cero seria un promedio buenisimo y justo lo
+ * contrario de lo que pasa.
+ */
+const resolucionTexto = computed(() => {
+    const horas = props.kpis.resolucion.horas
+
+    if (horas === null) return null
+    if (horas < 24) return `${Math.round(horas)} h`
+
+    return `${(horas / 24).toFixed(1).replace('.', ',')} días`
+})
+
 // Barras: observaciones por sector
 const sectorChartOptions = computed<ApexOptions>(() => ({
     chart: {
         type: 'bar',
-        fontFamily: 'Outfit, sans-serif',
+        fontFamily: 'Poppins, sans-serif',
         toolbar: { show: false },
         foreColor: '#98a2b3',
     },
-    colors: ['#2a3182'],
+    colors: ['#001489'],
     plotOptions: {
         bar: { horizontal: false, columnWidth: '39%', borderRadius: 5, borderRadiusApplication: 'end' },
     },
@@ -146,7 +162,7 @@ const sectorChartSeries = computed(() => [
 const proveedorChartOptions = computed<ApexOptions>(() => ({
     chart: {
         type: 'bar',
-        fontFamily: 'Outfit, sans-serif',
+        fontFamily: 'Poppins, sans-serif',
         foreColor: '#98a2b3',
         toolbar: { show: false },
         events: {
@@ -189,7 +205,7 @@ const proveedorChartSeries = computed(() => [
 
 // Donut: observaciones por estado
 const estadoChartOptions = computed<ApexOptions>(() => ({
-    chart: { type: 'donut', fontFamily: 'Outfit, sans-serif', foreColor: '#98a2b3' },
+    chart: { type: 'donut', fontFamily: 'Poppins, sans-serif', foreColor: '#98a2b3' },
     labels: props.porEstado.map(e => e.label),
     colors: props.porEstado.map(e => estadoColor[e.estado] ?? '#98a2b3'),
     dataLabels: { enabled: false },
@@ -324,11 +340,21 @@ const statCards = computed<StatCard[]>(() => [
         <!-- KPI row -->
         <div class="mb-6 grid grid-cols-1 divide-y divide-gray-100 rounded-2xl border border-gray-200 bg-white dark:divide-gray-800 dark:border-gray-800 dark:bg-white/[0.03] sm:grid-cols-2 sm:divide-y-0 sm:divide-x xl:grid-cols-3">
             <div class="px-6 py-5">
-                <p class="text-theme-xs font-medium uppercase tracking-wide text-gray-400">KPI: Tiempo &lt;72h</p>
-                <p class="mt-1 text-2xl font-bold" :class="(kpis.tiempoSla ?? 0) >= 85 ? 'text-success-600 dark:text-success-400' : 'text-error-500 dark:text-error-400'">
-                    {{ kpis.tiempoSla ?? 0 }}%
+                <p class="text-theme-xs font-medium uppercase tracking-wide text-gray-400">Tiempo promedio de resolución</p>
+                <!--
+                    Sin semaforo de color a proposito: no hay una meta definida
+                    (esa era la tabla de SLA que nunca se implemento), y pintarlo
+                    contra un umbral inventado repetiria el problema de la
+                    tarjeta que esto reemplaza, que mostraba 0% en rojo siempre.
+                -->
+                <p v-if="resolucionTexto" class="mt-1 text-2xl font-bold text-gray-800 dark:text-white/90">
+                    {{ resolucionTexto }}
                 </p>
-                <p class="mt-0.5 text-theme-xs text-gray-400">Meta &gt; 85%</p>
+                <p v-else class="mt-1 text-2xl font-bold text-gray-400">Sin datos</p>
+                <p class="mt-0.5 text-theme-xs text-gray-400">
+                    Últimos 90 días · {{ kpis.resolucion.casos }}
+                    {{ kpis.resolucion.casos === 1 ? 'caso cerrado' : 'casos cerrados' }}
+                </p>
             </div>
             <div class="px-6 py-5">
                 <p class="text-theme-xs font-medium uppercase tracking-wide text-gray-400">Crítica</p>

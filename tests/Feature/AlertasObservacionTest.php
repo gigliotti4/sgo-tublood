@@ -419,4 +419,44 @@ class AlertasObservacionTest extends TestCase
             (new ObservacionAsignadaNotification($interna))->toMail($responsable)->replyTo
         );
     }
+
+    // ── Fecha de cierre (alimenta el KPI de tiempo de resolución) ────────────
+
+    public function test_cerrar_un_caso_sella_la_fecha_de_cierre(): void
+    {
+        $observacion = $this->observacion(['numero' => '0001-26', 'estado' => 'en_proceso']);
+        $this->assertNull($observacion->cerrada_at);
+
+        $observacion->update(['estado' => 'cerrada']);
+
+        $this->assertNotNull($observacion->fresh()->cerrada_at);
+    }
+
+    /**
+     * Sin esto, un caso reabierto y cerrado de nuevo conservaría la fecha del
+     * primer cierre y mentiría el promedio del Dashboard.
+     */
+    public function test_reabrir_un_caso_borra_la_fecha_de_cierre(): void
+    {
+        $observacion = $this->observacion(['numero' => '0001-26', 'estado' => 'en_proceso']);
+        $observacion->update(['estado' => 'cerrada']);
+        $this->assertNotNull($observacion->fresh()->cerrada_at);
+
+        $observacion->update(['estado' => 'en_proceso']);
+
+        $this->assertNull($observacion->fresh()->cerrada_at);
+    }
+
+    /** Editar un caso ya cerrado (un comentario, un adjunto) no mueve su fecha de cierre. */
+    public function test_guardar_un_caso_cerrado_sin_tocar_el_estado_no_pisa_la_fecha(): void
+    {
+        $observacion = $this->observacion(['numero' => '0001-26', 'estado' => 'en_proceso']);
+        $observacion->update(['estado' => 'cerrada']);
+        $original = $observacion->fresh()->cerrada_at;
+
+        $this->travel(2)->hours();
+        $observacion->update(['titulo' => 'Otro título']);
+
+        $this->assertEquals($original, $observacion->fresh()->cerrada_at);
+    }
 }

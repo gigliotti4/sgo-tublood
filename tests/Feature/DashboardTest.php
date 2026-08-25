@@ -6,6 +6,7 @@ use App\Models\Articulo;
 use App\Models\Observacion;
 use App\Models\ObservationProduct;
 use App\Models\Proveedor;
+use App\Models\Sector;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -225,5 +226,142 @@ class DashboardTest extends TestCase
             'numero_remito' => 'R-1',
             'tipo_comprobante' => 'remito',
         ]);
+    }
+
+    // ── KPI: tiempo promedio de resolución ──────────────────────────────────
+
+    /**
+     * `cerrada_at` se setea a mano en estos tests (no cerrando el caso) para
+     * poder fijar duraciones conocidas: el observer siempre pondría now().
+     */
+    private function cerrada(string $numero, int $horasParaCerrar, int $diasAtras = 0): Observacion
+    {
+        $cierre = now()->subDays($diasAtras);
+
+        $obs = $this->observacion($numero, ['estado' => 'cerrada']);
+        $obs->forceFill([
+            'created_at' => $cierre->copy()->subHours($horasParaCerrar),
+            'cerrada_at' => $cierre,
+        ])->save();
+
+        return $obs;
+    }
+
+    public function test_el_kpi_promedia_las_cerradas_de_la_ventana(): void
+    {
+        $this->cerrada('0001-26', horasParaCerrar: 10);
+        $this->cerrada('0002-26', horasParaCerrar: 20);
+
+        $this->actingAs(User::factory()->create())
+            ->get('/dashboard')
+            ->assertInertia(fn ($page) => $page
+                ->where('kpis.resolucion.horas', 15)
+                ->where('kpis.resolucion.casos', 2));
+    }
+
+    /** Una cerrada hace más de 90 días no entra: el KPI es de la ventana, no histórico. */
+    public function test_el_kpi_ignora_lo_cerrado_fuera_de_la_ventana(): void
+    {
+        $this->cerrada('0001-26', horasParaCerrar: 10);
+        $this->cerrada('0002-26', horasParaCerrar: 500, diasAtras: 120);
+
+        $this->actingAs(User::factory()->create())
+            ->get('/dashboard')
+            ->assertInertia(fn ($page) => $page
+                ->where('kpis.resolucion.horas', 10)
+                ->where('kpis.resolucion.casos', 1));
+    }
+
+    /** Un caso anulado no es trabajo terminado: no puede inflar ni bajar el promedio. */
+    public function test_el_kpi_no_cuenta_las_canceladas(): void
+    {
+        $this->cerrada('0001-26', horasParaCerrar: 10);
+
+        $cancelada = $this->observacion('0002-26', ['estado' => 'cancelada']);
+        $cancelada->forceFill([
+            'created_at' => now()->subHours(999),
+            'cerrada_at' => now(),
+        ])->save();
+
+        $this->actingAs(User::factory()->create())
+            ->get('/dashboard')
+            ->assertInertia(fn ($page) => $page
+                ->where('kpis.resolucion.horas', 10)
+                ->where('kpis.resolucion.casos', 1));
+    }
+
+    /** Sin cierres, el KPI viaja null y NO cero: cero sería un promedio buenísimo. */
+    public function test_el_kpi_sin_casos_cerrados_es_null(): void
+    {
+        $this->observacion('0001-26');
+
+        $this->actingAs(User::factory()->create())
+            ->get('/dashboard')
+            ->assertInertia(fn ($page) => $page
+                ->where('kpis.resolucion.horas', null)
+                ->where('kpis.resolucion.casos', 0));
+    }
+
+    // ── Observaciones por sector ────────────────────────────────────────────
+
+    public function test_agrupa_las_observaciones_por_sector(): void
+    {
+        $calidad = Sector::create(['nombre' => 'Garantía de Calidad', 'slug' => 'garantia_calidad']);
+        $logistica = Sector::create(['nombre' => 'Logística', 'slug' => 'logistica']);
+
+        $this->observacion('0001-26', ['sector_id' => $calidad->id]);
+        $this->observacion('0002-26', ['sector_id' => $calidad->id]);
+        $this->observacion('0003-26', ['sector_id' => $logistica->id]);
+
+        $this->actingAs(User::factory()->create())
+            ->get('/dashboard')
+            ->assertInertia(fn ($page) => $page
+                ->has('porSector', 2)
+                // Ordenado de mayor a menor.
+                ->where('porSector.0.sector', 'Garantía de Calidad')
+                ->where('porSector.0.count', 2)
+                ->where('porSector.1.sector', 'Logística')
+                ->where('porSector.1.count', 1));
+    }
+
+    /**
+     * Los casos sin sector se muestran, no se esconden: el portal público
+     * guarda el reclamo aunque no logre resolver el sector, y si el gráfico los
+     * omitiera nadie se enteraría de que hay casos sin derivar. Es la decisión
+     * que se rompe sola si alguien cambia el leftJoin por un join.
+     */
+    public function test_las_observaciones_sin_sector_se_agrupan_aparte(): void
+    {
+        $calidad = Sector::create(['nombre' => 'Garantía de Calidad', 'slug' => 'garantia_calidad']);
+
+        $this->observacion('0001-26', ['sector_id' => $calidad->id]);
+        $this->observacion('0002-26', ['sector_id' => $calidad->id]);
+        // Dos sin sector, para que el orden por cantidad sea determinista.
+        $this->observacion('0003-26', ['sector_id' => null]);
+        $this->observacion('0004-26', ['sector_id' => null]);
+        $this->observacion('0005-26', ['sector_id' => null]);
+
+        $this->actingAs(User::factory()->create())
+            ->get('/dashboard')
+            ->assertInertia(fn ($page) => $page
+                ->has('porSector', 2)
+                ->where('porSector.0.sector', 'Sin sector')
+                ->where('porSector.0.count', 3)
+                ->where('porSector.1.sector', 'Garantía de Calidad')
+                ->where('porSector.1.count', 2));
+    }
+
+    public function test_el_grafico_por_sector_no_cuenta_las_canceladas(): void
+    {
+        $calidad = Sector::create(['nombre' => 'Garantía de Calidad', 'slug' => 'garantia_calidad']);
+
+        $this->observacion('0001-26', ['sector_id' => $calidad->id]);
+        $this->observacion('0002-26', ['sector_id' => $calidad->id, 'estado' => 'cancelada']);
+
+        $this->actingAs(User::factory()->create())
+            ->get('/dashboard')
+            ->assertInertia(fn ($page) => $page
+                ->has('porSector', 1)
+                ->where('porSector.0.count', 1));
     }
 }

@@ -24,6 +24,8 @@ class ObservacionObserver
 {
     public function saving(Observacion $observacion): void
     {
+        $this->marcarCierre($observacion);
+
         if (! $observacion->isDirty('responsable_id')) {
             return;
         }
@@ -44,6 +46,28 @@ class ObservacionObserver
         // Sin sector o sin plazo cargado no hay contra qué medir: la observación
         // queda sin vencimiento y nunca alerta.
         $observacion->vence_at = $dias ? now()->addWeekdays($dias) : null;
+    }
+
+    /**
+     * Sella (o borra) la fecha de cierre cuando el caso entra o sale de un
+     * estado final. Alimenta el KPI de tiempo promedio de resolucion.
+     *
+     * Va en `saving()` y no en `updated()` a proposito: aca el valor viaja en
+     * el mismo UPDATE que el cambio de estado. Hacerlo en `updated()` obligaria
+     * a un segundo guardado con `saveQuietly()` para no re-disparar el observer
+     * en bucle.
+     *
+     * Reabrir un caso vuelve `cerrada_at` a null: sin esto, un caso reabierto y
+     * cerrado de nuevo conservaria la fecha del primer cierre y mentiria el
+     * promedio.
+     */
+    private function marcarCierre(Observacion $observacion): void
+    {
+        if (! $observacion->isDirty('estado')) {
+            return;
+        }
+
+        $observacion->cerrada_at = $observacion->estaFinalizada() ? now() : null;
     }
 
     public function updated(Observacion $observacion): void
