@@ -2,6 +2,8 @@
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3'
 import { computed, ref, watch } from 'vue'
 import SelectorArticulo from '@/Components/SelectorArticulo.vue'
+import ResumenErrores from '@/Components/ResumenErrores.vue'
+import { erroresDeArchivos } from '@/lib/errores'
 import type { PageProps } from '@/types'
 
 const page = usePage<PageProps>()
@@ -101,6 +103,11 @@ form.transform(data => ({
 const errorProducto = (index: number, campo: keyof ProductoForm) =>
     (form.errors as Record<string, string>)[`productos.${index}.${campo}`]
 
+// Los errores de archivo vuelven en `attachments.0`, `attachments.1`… y no en
+// `attachments`, así que sin esto el cliente adjuntaba algo que el servidor
+// rechazaba y el formulario se negaba a enviarse sin decir por qué.
+const erroresArchivos = computed(() => erroresDeArchivos(form.errors as Record<string, string>))
+
 // El portal es siempre claro (sin dark:), por eso no reusa los componentes del panel.
 const inputClass = (error?: string) => [
     'h-11 w-full rounded-lg border bg-white px-4 py-2.5 text-[16px] sm:text-sm text-gray-800 shadow-theme-xs transition placeholder:text-gray-400 focus:outline-none focus:ring-3',
@@ -155,6 +162,12 @@ const submit = () => form.post(route('observaciones.public.store'), { forceFormD
                 </svg>
                 {{ flashError }}
             </div>
+
+            <ResumenErrores
+                :errors="form.errors as Record<string, string>"
+                titulo="No pudimos enviar tu observación"
+                class="mb-5"
+            />
 
             <form @submit.prevent="submit" class="space-y-8 rounded-2xl border border-gray-200 bg-white p-6 shadow-theme-sm sm:p-8">
                 <!-- Tipo -->
@@ -499,10 +512,18 @@ const submit = () => form.post(route('observaciones.public.store'), { forceFormD
                         <li
                             v-for="(file, index) in form.attachments"
                             :key="index"
-                            class="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm"
+                            class="rounded-lg px-3 py-2 text-sm"
+                            :class="erroresArchivos[index] ? 'bg-error-50 ring-1 ring-error-200' : 'bg-gray-50'"
                         >
-                            <span class="truncate text-gray-700">{{ file.name }}</span>
-                            <button type="button" class="cursor-pointer rounded-full p-2 -m-2 text-gray-400 hover:text-error-500" @click="removeFile(index)">✕</button>
+                            <div class="flex items-center justify-between">
+                                <span class="truncate text-gray-700">{{ file.name }}</span>
+                                <button type="button" class="cursor-pointer rounded-full p-2 -m-2 text-gray-400 hover:text-error-500" @click="removeFile(index)">✕</button>
+                            </div>
+                            <!-- El error va pegado a su archivo: con varios adjuntos,
+                                 un mensaje suelto al pie no dice cuál hay que sacar. -->
+                            <p v-if="erroresArchivos[index]" class="mt-1 text-xs text-error-600">
+                                {{ erroresArchivos[index] }}
+                            </p>
                         </li>
                     </ul>
                     <p v-if="form.errors.attachments" class="text-xs text-error-500">{{ form.errors.attachments }}</p>

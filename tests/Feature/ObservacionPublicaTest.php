@@ -12,6 +12,7 @@ use App\Notifications\ObservacionRecibidaClienteNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -284,6 +285,74 @@ class ObservacionPublicaTest extends TestCase
 
         $this->assertDatabaseCount('observations', 1);
         Notification::assertNothingSentTo(User::factory()->create());
+    }
+
+    /**
+     * Las reglas son `attachments.*`, así que el error vuelve en
+     * `attachments.0`. La pantalla mostraba solo `attachments` (la clave del
+     * array, que nunca falla) y el cliente veía el formulario negarse a
+     * enviarse sin un mensaje.
+     */
+    public function test_un_adjunto_muy_pesado_devuelve_el_error_en_su_indice(): void
+    {
+        Storage::fake('local');
+
+        $this->post('/cargar-observacion', [
+            ...$this->datosFallaProducto(),
+            'attachments' => [
+                UploadedFile::fake()->create('chico.pdf', 100),
+                UploadedFile::fake()->create('enorme.pdf', 5000),
+            ],
+        ])->assertSessionHasErrors('attachments.1');
+
+        $this->assertDatabaseCount('observations', 0);
+    }
+
+    public function test_un_adjunto_de_formato_no_permitido_devuelve_el_error_en_su_indice(): void
+    {
+        Storage::fake('local');
+
+        $this->post('/cargar-observacion', [
+            ...$this->datosFallaProducto(),
+            'attachments' => [UploadedFile::fake()->create('informe.docx', 50)],
+        ])->assertSessionHasErrors('attachments.0');
+    }
+
+    /**
+     * Sin nombres legibles el mensaje sale como "El campo productos.0.lote es
+     * obligatorio", que no le dice a un cliente qué tiene que completar.
+     */
+    public function test_los_mensajes_nombran_los_campos_en_castellano(): void
+    {
+        $datos = $this->datosFallaProducto();
+        $datos['productos'][0]['lote'] = '';
+
+        $errores = $this->post('/cargar-observacion', $datos)
+            ->assertSessionHasErrors('productos.0.lote')
+            ->getSession()
+            ->get('errors')
+            ->get('productos.0.lote');
+
+        $this->assertStringContainsString('lote', $errores[0]);
+        $this->assertStringNotContainsString('productos.0', $errores[0]);
+    }
+
+    /**
+     * Si el guardado se cae, el cliente tiene que enterarse **sin** perder lo
+     * que cargó: se devuelve como error de validación (422) y no como 500,
+     * porque Inertia trata el 422 sin navegar y el formulario queda intacto.
+     *
+     * La falla se fuerza volteando la tabla hija, que es lo que se escribe
+     * después de la observación: así se ejercita también el rollback.
+     */
+    public function test_una_falla_al_guardar_avisa_y_no_deja_la_observacion_a_medias(): void
+    {
+        Schema::drop('observation_products');
+
+        $this->post('/cargar-observacion', $this->datosFallaProducto())
+            ->assertSessionHasErrors('guardado');
+
+        $this->assertDatabaseCount('observations', 0);
     }
 
     public function test_confirmacion_sin_sesion_redirige_al_formulario(): void

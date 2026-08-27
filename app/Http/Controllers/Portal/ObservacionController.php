@@ -10,12 +10,13 @@ use App\Models\Sector;
 use App\Models\User;
 use App\Notifications\ObservacionExternaRecibidaNotification;
 use App\Notifications\ObservacionRecibidaClienteNotification;
+use App\Support\ReglasObservacion;
 use App\Support\TaxonomiaIncidencias;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 class ObservacionController extends Controller
@@ -62,29 +63,55 @@ class ObservacionController extends Controller
             'titulo' => ['required', 'string', 'max:255'],
             'descripcion' => ['required', 'string'],
 
-            'institucion' => ['required_if:tipo,falla_producto', 'nullable', 'string', 'max:255'],
-            'provincia' => ['required_if:tipo,falla_producto', 'nullable', 'string', 'max:255'],
-            'equipamiento' => ['nullable', 'string', 'max:255'],
-            'ejecutivo_cuenta' => ['nullable', 'string', 'max:255'],
+            ...ReglasObservacion::productos(),
+            ...ReglasObservacion::adjuntos(),
+        ], [], ReglasObservacion::atributos());
 
-            'productos' => ['required_if:tipo,falla_producto', 'array'],
-            'productos.*.producto' => ['required', 'string', 'max:255'],
-            'productos.*.codigo' => ['required', 'string', 'max:255'],
-            'productos.*.cantidad_afectada' => ['required', 'integer', 'min:1'],
-            'productos.*.tipo_presentacion' => ['required', 'in:'.implode(',', array_keys(ObservationProduct::PRESENTACIONES))],
-            'productos.*.lote' => ['required', 'string', 'max:255'],
-            'productos.*.fecha_vencimiento' => ['required', 'date'],
-            'productos.*.numero_remito' => ['nullable', 'string', 'max:255'],
-            'productos.*.tipo_comprobante' => ['nullable', 'in:factura,remito'],
+        $observacion = $this->guardar($data, $request);
 
-            'attachments' => ['array'],
-            'attachments.*' => ['file', 'mimes:jpg,jpeg,png,pdf', 'max:3072'],
-        ]);
+        $this->avisar($observacion);
 
-        $observacion = DB::transaction(function () use ($data, $request) {
-            $anio = (int) now()->format('Y');
-            $numero = Observacion::generarNumero($anio);
+        return redirect()->route('observaciones.public.confirmacion')
+            ->with('numero', $observacion->numero);
+    }
 
+    /**
+     * El alta en sí, con la red por si se cae.
+     *
+     * Para cuando esto corre el cliente ya completó un formulario largo. Si el
+     * guardado falla por algo que no es culpa de lo que cargó (la base, el
+     * disco, dos altas peleándose el mismo número), dejar propagar la excepción
+     * le muestra una pantalla de error cruda y le borra todo lo que escribió.
+     *
+     * Por eso se relanza como error de validación: Inertia trata el 422 sin
+     * navegar (mantiene `preserveState`), así que el formulario queda intacto
+     * —archivos elegidos incluidos— con el mensaje arriba y el cliente puede
+     * reintentar sin volver a cargar nada. Un `back()->with('error')` no sirve:
+     * es un redirect, remonta el componente y se lleva puesto el formulario.
+     */
+    private function guardar(array $data, Request $request): Observacion
+    {
+        try {
+            return $this->crear($data, $request);
+        } catch (Throwable $e) {
+            Log::error('No se pudo guardar el reclamo del portal público', [
+                'email' => $data['contacto_email'] ?? null,
+                'tipo' => $data['tipo'] ?? null,
+                'error' => $e->getMessage(),
+                'exception' => $e,
+            ]);
+
+            throw ValidationException::withMessages([
+                'guardado' => ReglasObservacion::mensajeDeFalla(),
+            ]);
+        }
+    }
+
+    private function crear(array $data, Request $request): Observacion
+    {
+        $anio = (int) now()->format('Y');
+
+        return Observacion::altaConNumero($anio, function (string $numero) use ($data, $request, $anio) {
             $clienteId = null;
             if (! empty($data['contacto_numero_cliente'])) {
                 $clienteId = Cliente::where('numero', trim($data['contacto_numero_cliente']))->value('id');
@@ -130,11 +157,6 @@ class ObservacionController extends Controller
 
             return $observacion;
         });
-
-        $this->avisar($observacion);
-
-        return redirect()->route('observaciones.public.confirmacion')
-            ->with('numero', $observacion->numero);
     }
 
     /**

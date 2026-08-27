@@ -110,6 +110,30 @@ class ObservacionBajaTest extends TestCase
         $this->assertSame('0002-26', Observacion::generarNumero(2026));
     }
 
+    /**
+     * El caso que `count()` no cubría: un borrado **definitivo** (fuera del
+     * soft delete) deja un hueco en la serie, y contar filas devolvía un
+     * correlativo ya usado. Sale del máximo justamente por esto.
+     */
+    public function test_generar_numero_no_repite_aunque_falte_una_del_medio(): void
+    {
+        $this->observacion(['numero' => '0001-26', 'anio' => 2026]);
+        $delMedio = $this->observacion(['numero' => '0002-26', 'anio' => 2026]);
+        $this->observacion(['numero' => '0003-26', 'anio' => 2026]);
+
+        $delMedio->forceDelete();
+
+        $this->assertSame('0004-26', Observacion::generarNumero(2026));
+    }
+
+    /** Cada año arranca su propia serie. */
+    public function test_generar_numero_arranca_en_uno_para_un_anio_sin_observaciones(): void
+    {
+        $this->observacion(['numero' => '0007-26', 'anio' => 2026]);
+
+        $this->assertSame('0001-27', Observacion::generarNumero(2027));
+    }
+
     public function test_una_observacion_borrada_desaparece_del_listado_y_de_la_campana(): void
     {
         $user = $this->userWith('observaciones.view', 'observaciones.delete');

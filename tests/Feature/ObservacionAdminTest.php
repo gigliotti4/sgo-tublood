@@ -11,6 +11,7 @@ use App\Models\Sector;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use Spatie\Permission\Models\Permission;
@@ -473,6 +474,74 @@ class ObservacionAdminTest extends TestCase
         $producto = Observacion::first()->productos->first();
         $this->assertNull($producto->numero_remito);
         $this->assertNull($producto->tipo_comprobante);
+    }
+
+    /**
+     * Igual que en el portal: el error de un adjunto vuelve en su índice y no
+     * en la clave del array, así que sin mirar `attachments.N` el formulario se
+     * negaba a enviarse sin mostrar nada.
+     */
+    public function test_store_interna_devuelve_el_error_del_adjunto_en_su_indice(): void
+    {
+        Storage::fake('local');
+
+        $user = $this->userWith('observaciones.edit');
+        $sector = Sector::create(['nombre' => 'Garantía de Calidad', 'slug' => 'garantia_calidad']);
+
+        $this->actingAs($user)
+            ->post('/observaciones', [
+                'origen' => 'interna',
+                'sector_id' => $sector->id,
+                'tipo' => 'disconformidad_servicio',
+                'titulo' => 'Demora en la entrega',
+                'descripcion' => 'Se demoró el envío.',
+                'prioridad' => 'media',
+                'tipo_caso' => 'Monitoreo de Servicios',
+                'attachments' => [
+                    UploadedFile::fake()->create('ok.pdf', 100),
+                    UploadedFile::fake()->create('enorme.pdf', 5000),
+                ],
+            ])
+            ->assertSessionHasErrors('attachments.1');
+
+        $this->assertDatabaseCount('observations', 0);
+    }
+
+    /**
+     * Una falla al guardar vuelve como error de validación y no como 500: es lo
+     * que mantiene el formulario cargado del otro lado (Inertia no navega ante
+     * un 422). Se fuerza volteando la tabla hija, que se escribe después.
+     */
+    public function test_store_interna_avisa_si_el_guardado_se_cae(): void
+    {
+        $user = $this->userWith('observaciones.edit');
+        $sector = Sector::create(['nombre' => 'Garantía de Calidad', 'slug' => 'garantia_calidad']);
+
+        Schema::drop('observation_products');
+
+        $this->actingAs($user)
+            ->post('/observaciones', [
+                'origen' => 'interna',
+                'sector_id' => $sector->id,
+                'tipo' => 'falla_producto',
+                'titulo' => 'Producto con falla',
+                'descripcion' => 'El producto llegó dañado.',
+                'prioridad' => 'alta',
+                'tipo_caso' => 'Devolución',
+                'institucion' => 'Clínica Test',
+                'provincia' => 'Córdoba',
+                'productos' => [[
+                    'producto' => 'Guía de infusión',
+                    'codigo' => 'GUIA-123',
+                    'cantidad_afectada' => 3,
+                    'tipo_presentacion' => 'presentacion_venta',
+                    'lote' => 'L-123',
+                    'fecha_vencimiento' => '2027-01-01',
+                ]],
+            ])
+            ->assertSessionHasErrors('guardado');
+
+        $this->assertDatabaseCount('observations', 0);
     }
 
     public function test_store_interna_disconformidad_servicio_en_garantia_calidad(): void

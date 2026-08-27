@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useForm } from '@inertiajs/vue3'
 import Badge from '@/Components/Badge.vue'
 import Button from '@/Components/Button.vue'
 import Icon from '@/Components/Icon.vue'
 import Textarea from '@/Components/Textarea.vue'
 import { accionLabels, accionVariant, comoCambioSimple, esBaja, esClasificacion, esNotificados, formatFechaHora, formatSize, nombreAutor } from '@/lib/bitacora'
+import { erroresDeArchivos } from '@/lib/errores'
 import type { ObservationHistoryEntry } from '@/types'
 
 /**
@@ -49,6 +50,11 @@ const onDrop = (e: DragEvent) => {
 const quitarDeLaCola = (index: number) => {
     form.archivos = form.archivos.filter((_, i) => i !== index)
 }
+
+// Un error por archivo: los errores vuelven en `archivos.0`, `archivos.1`… y
+// acá no se mostraba ninguno, así que un adjunto rechazado dejaba el comentario
+// sin enviarse y sin explicación.
+const erroresArchivos = computed(() => erroresDeArchivos(form.errors as Record<string, string>, 'archivos'))
 
 const puedeEnviar = () => form.nota.trim() !== '' || form.archivos.length > 0
 
@@ -178,19 +184,27 @@ const enviar = () => {
                 <li
                     v-for="(file, index) in form.archivos"
                     :key="index"
-                    class="flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-theme-xs dark:bg-white/[0.03]"
+                    class="rounded-lg px-3 py-2 text-theme-xs"
+                    :class="erroresArchivos[index]
+                        ? 'bg-error-50 ring-1 ring-error-200 dark:bg-error-500/10 dark:ring-error-500/30'
+                        : 'bg-gray-50 dark:bg-white/[0.03]'"
                 >
-                    <span class="min-w-0 flex-1 truncate text-gray-700 dark:text-gray-300">{{ file.name }}</span>
-                    <span class="shrink-0 text-gray-400">{{ formatSize(file.size) }}</span>
-                    <button
-                        type="button"
-                        class="shrink-0 text-gray-400 transition-colors hover:text-error-500"
-                        title="Quitar"
-                        @click="quitarDeLaCola(index)"
-                    >
-                        <Icon name="trash" class="h-3.5 w-3.5" />
-                        <span class="sr-only">Quitar {{ file.name }} de la lista</span>
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <span class="min-w-0 flex-1 truncate text-gray-700 dark:text-gray-300">{{ file.name }}</span>
+                        <span class="shrink-0 text-gray-400">{{ formatSize(file.size) }}</span>
+                        <button
+                            type="button"
+                            class="shrink-0 text-gray-400 transition-colors hover:text-error-500"
+                            title="Quitar"
+                            @click="quitarDeLaCola(index)"
+                        >
+                            <Icon name="trash" class="h-3.5 w-3.5" />
+                            <span class="sr-only">Quitar {{ file.name }} de la lista</span>
+                        </button>
+                    </div>
+                    <p v-if="erroresArchivos[index]" class="mt-1 text-error-600 dark:text-error-400">
+                        {{ erroresArchivos[index] }}
+                    </p>
                 </li>
             </ul>
 

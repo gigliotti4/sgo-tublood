@@ -13,18 +13,22 @@ use App\Models\User;
 use App\Notifications\ObservacionSeguimientoNotification;
 use App\Services\ObservacionExportService;
 use App\Support\Configuracion;
+use App\Support\ReglasObservacion;
 use App\Support\TaxonomiaIncidencias;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 class ObservacionController extends Controller
 {
@@ -334,9 +338,9 @@ class ObservacionController extends Controller
         $this->authorize('update', $observacion);
 
         $data = $request->validate([
+            ...ReglasObservacion::adjuntosDelPanel(),
             'archivos' => ['required', 'array'],
-            'archivos.*' => ['file', 'mimes:jpg,jpeg,png,pdf,doc,docx,xls,xlsx', 'max:10240'],
-        ]);
+        ], [], ReglasObservacion::atributos('archivos'));
 
         foreach ($data['archivos'] as $file) {
             $observacion->guardarAdjunto($file);
@@ -378,9 +382,8 @@ class ObservacionController extends Controller
 
         $data = $request->validate([
             'nota' => ['nullable', 'string', 'max:5000'],
-            'archivos' => ['array'],
-            'archivos.*' => ['file', 'mimes:jpg,jpeg,png,pdf,doc,docx,xls,xlsx', 'max:10240'],
-        ]);
+            ...ReglasObservacion::adjuntosDelPanel(),
+        ], [], ReglasObservacion::atributos('archivos'));
 
         if (blank($data['nota'] ?? null) && empty($request->file('archivos', []))) {
             throw ValidationException::withMessages([
@@ -451,7 +454,7 @@ class ObservacionController extends Controller
      * adjuntos sueltos, que quedan aparte de los que cuelgan de una entrada de
      * bitácora para no mostrar el mismo archivo dos veces.
      *
-     * @return array<string, \Closure>
+     * @return array<string, Closure>
      */
     private function eagerLoadsDeGestion(): array
     {
@@ -547,9 +550,8 @@ class ObservacionController extends Controller
             'contacto_email' => ['nullable', 'email', 'max:255'],
             'notificados' => ['array'],
             'notificados.*' => ['integer', 'exists:users,id'],
-            'attachments' => ['array'],
-            'attachments.*' => ['file', 'mimes:jpg,jpeg,png,pdf', 'max:3072'],
-        ]);
+            ...ReglasObservacion::adjuntos(),
+        ], [], ReglasObservacion::atributos());
 
         $sector = Sector::findOrFail($base['sector_id']);
 
@@ -581,11 +583,11 @@ class ObservacionController extends Controller
 
         $especificos = $request->validate($reglas, [], $atributos);
 
-        DB::transaction(function () use ($base, $sector, $especificos, $request) {
+        $this->guardar(fn () => Observacion::altaConNumero((int) now()->format('Y'), function (string $numero) use ($base, $sector, $especificos, $request) {
             $anio = (int) now()->format('Y');
 
             $observacion = Observacion::create([
-                'numero' => Observacion::generarNumero($anio),
+                'numero' => $numero,
                 'anio' => $anio,
                 'origen' => 'interna',
                 'estado' => 'clasificada',
@@ -606,7 +608,7 @@ class ObservacionController extends Controller
 
             $this->guardarAdjuntos($observacion, $request);
             $this->sincronizarNotificados($observacion, $base['notificados'] ?? []);
-        });
+        }));
 
         return redirect()->route('observaciones.index')
             ->with('success', 'Observación interna creada correctamente.');
@@ -625,28 +627,17 @@ class ObservacionController extends Controller
             $request->merge(['productos' => []]);
         }
 
-        $data = $request->validate([
-            'institucion' => ['required_if:tipo,falla_producto', 'nullable', 'string', 'max:255'],
-            'provincia' => ['required_if:tipo,falla_producto', 'nullable', 'string', 'max:255'],
-            'equipamiento' => ['nullable', 'string', 'max:255'],
-            'ejecutivo_cuenta' => ['nullable', 'string', 'max:255'],
+        $data = $request->validate(
+            ReglasObservacion::productos(),
+            [],
+            ReglasObservacion::atributos()
+        );
 
-            'productos' => ['required_if:tipo,falla_producto', 'array'],
-            'productos.*.producto' => ['required', 'string', 'max:255'],
-            'productos.*.codigo' => ['required', 'string', 'max:255'],
-            'productos.*.cantidad_afectada' => ['required', 'integer', 'min:1'],
-            'productos.*.tipo_presentacion' => ['required', 'in:'.implode(',', array_keys(ObservationProduct::PRESENTACIONES))],
-            'productos.*.lote' => ['required', 'string', 'max:255'],
-            'productos.*.fecha_vencimiento' => ['required', 'date'],
-            'productos.*.numero_remito' => ['nullable', 'string', 'max:255'],
-            'productos.*.tipo_comprobante' => ['nullable', 'in:factura,remito'],
-        ]);
-
-        DB::transaction(function () use ($base, $sector, $data, $request) {
+        $this->guardar(fn () => Observacion::altaConNumero((int) now()->format('Y'), function (string $numero) use ($base, $sector, $data, $request) {
             $anio = (int) now()->format('Y');
 
             $observacion = Observacion::create([
-                'numero' => Observacion::generarNumero($anio),
+                'numero' => $numero,
                 'anio' => $anio,
                 'origen' => 'interna',
                 'estado' => 'clasificada',
@@ -674,10 +665,40 @@ class ObservacionController extends Controller
 
             $this->guardarAdjuntos($observacion, $request);
             $this->sincronizarNotificados($observacion, $base['notificados'] ?? []);
-        });
+        }));
 
         return redirect()->route('observaciones.index')
             ->with('success', 'Observación interna creada correctamente.');
+    }
+
+    /**
+     * Corre el alta con la red por si se cae.
+     *
+     * Mismo criterio que en el portal público: si el guardado falla por algo que
+     * no es culpa de lo que se completó (la base, el disco, dos altas
+     * peleándose el mismo número), dejar propagar la excepción muestra una
+     * pantalla de error cruda y borra un formulario largo entero.
+     *
+     * Se relanza como error de validación porque Inertia trata el 422 sin
+     * navegar: el formulario queda intacto —archivos elegidos incluidos— y el
+     * mensaje sale en el resumen de arriba. Un `back()->with('error')` es un
+     * redirect, remonta el componente y se lleva puesto lo cargado.
+     */
+    private function guardar(Closure $alta): void
+    {
+        try {
+            $alta();
+        } catch (Throwable $e) {
+            Log::error('No se pudo guardar la observación interna', [
+                'usuario' => request()->user()?->id,
+                'error' => $e->getMessage(),
+                'exception' => $e,
+            ]);
+
+            throw ValidationException::withMessages([
+                'guardado' => ReglasObservacion::mensajeDeFalla(),
+            ]);
+        }
     }
 
     /** Vincula por N° contra la tabla local de clientes (mismo criterio que el portal). */

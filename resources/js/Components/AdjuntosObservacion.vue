@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { router, useForm } from '@inertiajs/vue3'
 import Button from '@/Components/Button.vue'
 import Icon from '@/Components/Icon.vue'
+import { erroresDeArchivos } from '@/lib/errores'
 import type { ObservationAttachment } from '@/types'
 
 /**
@@ -26,6 +27,10 @@ const props = defineProps<{
 const uploadForm = useForm({
     archivos: [] as File[],
 })
+
+// Un error por archivo. Antes se mostraba `archivos.0` a secas: si el que
+// sobraba de peso era el segundo, no se veía nada y el botón "no hacía nada".
+const erroresArchivos = computed(() => erroresDeArchivos(uploadForm.errors as Record<string, string>, 'archivos'))
 
 const isDragging = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
@@ -126,27 +131,35 @@ const formatSize = (bytes: number) => {
                 />
             </div>
 
-            <p v-if="uploadForm.errors['archivos.0']" class="mt-2 text-xs text-error-500">
-                {{ uploadForm.errors['archivos.0'] }}
+            <p v-if="uploadForm.errors.archivos" class="mt-2 text-xs text-error-500 dark:text-error-400">
+                {{ uploadForm.errors.archivos }}
             </p>
 
             <ul v-if="uploadForm.archivos.length" class="mt-3 space-y-1.5">
                 <li
                     v-for="(file, index) in uploadForm.archivos"
                     :key="index"
-                    class="flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-theme-xs dark:bg-white/[0.03]"
+                    class="rounded-lg px-3 py-2 text-theme-xs"
+                    :class="erroresArchivos[index]
+                        ? 'bg-error-50 ring-1 ring-error-200 dark:bg-error-500/10 dark:ring-error-500/30'
+                        : 'bg-gray-50 dark:bg-white/[0.03]'"
                 >
-                    <span class="min-w-0 flex-1 truncate text-gray-700 dark:text-gray-300">{{ file.name }}</span>
-                    <span class="shrink-0 text-gray-400">{{ formatSize(file.size) }}</span>
-                    <button
-                        type="button"
-                        class="shrink-0 text-gray-400 transition-colors hover:text-error-500"
-                        title="Quitar"
-                        @click="quitarDeLaCola(index)"
-                    >
-                        <Icon name="trash" class="h-3.5 w-3.5" />
-                        <span class="sr-only">Quitar {{ file.name }} de la lista</span>
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <span class="min-w-0 flex-1 truncate text-gray-700 dark:text-gray-300">{{ file.name }}</span>
+                        <span class="shrink-0 text-gray-400">{{ formatSize(file.size) }}</span>
+                        <button
+                            type="button"
+                            class="shrink-0 text-gray-400 transition-colors hover:text-error-500"
+                            title="Quitar"
+                            @click="quitarDeLaCola(index)"
+                        >
+                            <Icon name="trash" class="h-3.5 w-3.5" />
+                            <span class="sr-only">Quitar {{ file.name }} de la lista</span>
+                        </button>
+                    </div>
+                    <p v-if="erroresArchivos[index]" class="mt-1 text-error-600 dark:text-error-400">
+                        {{ erroresArchivos[index] }}
+                    </p>
                 </li>
             </ul>
 

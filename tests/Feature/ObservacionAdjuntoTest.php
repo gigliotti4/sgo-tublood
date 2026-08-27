@@ -159,6 +159,30 @@ class ObservacionAdjuntoTest extends TestCase
         $this->assertCount(0, $observacion->fresh()->attachments);
     }
 
+    /**
+     * El índice importa: la pantalla mostraba `archivos.0` a secas, así que si
+     * el archivo que sobraba era el segundo no se veía ningún mensaje y el
+     * botón "no hacía nada".
+     */
+    public function test_el_error_apunta_al_archivo_que_lo_causo_y_no_al_primero(): void
+    {
+        $user = $this->userWith('observaciones.view');
+        $observacion = $this->observacion();
+        $observacion->update(['responsable_id' => $user->id]);
+
+        $this->actingAs($user)
+            ->post("/observaciones/{$observacion->id}/archivos", [
+                'archivos' => [
+                    UploadedFile::fake()->create('informe.pdf', 10),
+                    UploadedFile::fake()->create('script.exe', 10),
+                ],
+            ])
+            ->assertSessionHasErrors('archivos.1')
+            ->assertSessionDoesntHaveErrors('archivos.0');
+
+        $this->assertCount(0, $observacion->fresh()->attachments);
+    }
+
     public function test_borrar_un_adjunto_elimina_fila_y_archivo(): void
     {
         $user = $this->userWith('observaciones.view');
