@@ -83,7 +83,8 @@ class ProveedorClasificacionTest extends TestCase
         $proveedor = $this->proveedor(['tipo_proveedor' => 'importador']);
 
         $this->actingAs($this->userWith('proveedores.view', 'proveedores.edit'))
-            ->put("/proveedores/{$proveedor->id}/documentacion", [
+            ->put("/proveedores/{$proveedor->id}", [
+                'razon_social' => $proveedor->razon_social,
                 'documentos' => [
                     'constancia_arca' => ['presentado' => true],
                     'habilitacion_anmat' => ['presentado' => true, 'fecha_vencimiento' => '2027-05-01'],
@@ -104,7 +105,8 @@ class ProveedorClasificacionTest extends TestCase
         $proveedor = $this->proveedor(['tipo_proveedor' => 'importador']);
 
         $this->actingAs($this->userWith('proveedores.view', 'proveedores.edit'))
-            ->put("/proveedores/{$proveedor->id}/documentacion", [
+            ->put("/proveedores/{$proveedor->id}", [
+                'razon_social' => $proveedor->razon_social,
                 'documentos' => [
                     'constancia_arca' => ['presentado' => true],
                     'habilitacion_anmat' => ['presentado' => true, 'fecha_vencimiento' => now()->subDay()->toDateString()],
@@ -125,7 +127,8 @@ class ProveedorClasificacionTest extends TestCase
         $proveedor = $this->proveedor(['tipo_proveedor' => 'farmacia']);
 
         $this->actingAs($this->userWith('proveedores.view', 'proveedores.edit'))
-            ->put("/proveedores/{$proveedor->id}/documentacion", [
+            ->put("/proveedores/{$proveedor->id}", [
+                'razon_social' => $proveedor->razon_social,
                 'documentos' => [
                     'constancia_arca' => ['presentado' => true],
                     'habilitacion_ministerio' => ['presentado' => true],
@@ -137,13 +140,23 @@ class ProveedorClasificacionTest extends TestCase
         $this->assertCount(0, $proveedor->fresh()->documentos);
     }
 
+    /**
+     * Sin tipo no hay documentos que exigir, así que cualquier clave que venga
+     * en el checklist sobra. Lo rechazan las reglas del propio tipo (vacías),
+     * no un guard aparte: desde que el checklist se guarda junto con el tipo,
+     * el caso "documentos sin tipo" es el mismo que "documento que este tipo no
+     * pide" del test de arriba.
+     */
     public function test_no_se_puede_cargar_documentacion_sin_tipo(): void
     {
         $proveedor = $this->proveedor();
 
         $this->actingAs($this->userWith('proveedores.view', 'proveedores.edit'))
-            ->put("/proveedores/{$proveedor->id}/documentacion", ['documentos' => []])
-            ->assertSessionHas('error');
+            ->put("/proveedores/{$proveedor->id}", [
+                'razon_social' => $proveedor->razon_social,
+                'documentos' => ['constancia_arca' => ['presentado' => true]],
+            ])
+            ->assertSessionHasErrors('documentos');
 
         $this->assertCount(0, $proveedor->fresh()->documentos);
     }
@@ -302,6 +315,6 @@ class ProveedorClasificacionTest extends TestCase
         $this->actingAs($this->userWith('proveedores.view', 'proveedores.edit'))
             ->get("/proveedores/{$proveedor->id}/edit")
             ->assertOk()
-            ->assertInertia(fn ($page) => $page->has('documentos', 4));
+            ->assertInertia(fn ($page) => $page->has('catalogoDocumentos.veterinaria', 4));
     }
 }

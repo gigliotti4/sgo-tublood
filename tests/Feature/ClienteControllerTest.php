@@ -159,7 +159,7 @@ class ClienteControllerTest extends TestCase
         $user = $this->userWith('clientes.view', 'clientes.edit');
 
         $this->actingAs($user)
-            ->put("/clientes/{$cliente->id}/documentacion", [
+            ->put("/clientes/{$cliente->id}", [
                 'documentos' => [
                     'constancia_arca' => ['presentado' => true],
                     'habilitacion_ministerio' => ['presentado' => true],
@@ -180,7 +180,7 @@ class ClienteControllerTest extends TestCase
         ]);
 
         $this->actingAs($this->userWith('clientes.view', 'clientes.edit'))
-            ->put("/clientes/{$cliente->id}/documentacion", [
+            ->put("/clientes/{$cliente->id}", [
                 'documentos' => [
                     'constancia_arca' => ['presentado' => true],
                     'habilitacion_anmat' => ['presentado' => true, 'fecha_vencimiento' => '2027-05-01'],
@@ -204,7 +204,7 @@ class ClienteControllerTest extends TestCase
         ]);
 
         $this->actingAs($this->userWith('clientes.view', 'clientes.edit'))
-            ->put("/clientes/{$cliente->id}/documentacion", [
+            ->put("/clientes/{$cliente->id}", [
                 'documentos' => [
                     'constancia_arca' => ['presentado' => true],
                     'habilitacion_anmat' => ['presentado' => true, 'fecha_vencimiento' => now()->subDay()->toDateString()],
@@ -230,7 +230,7 @@ class ClienteControllerTest extends TestCase
         $cliente = $this->importadorConDocumentacionCompleta();
 
         $this->actingAs($this->userWith('clientes.view', 'clientes.edit'))
-            ->put("/clientes/{$cliente->id}/documentacion", [
+            ->put("/clientes/{$cliente->id}", [
                 'documentos' => [
                     'constancia_arca' => ['presentado' => true],
                     'habilitacion_anmat' => ['presentado' => true, 'fecha_vencimiento' => '2027-05-01'],
@@ -276,7 +276,7 @@ class ClienteControllerTest extends TestCase
         $cliente->update(['tipo_cliente' => 'farmacia']);
 
         $this->actingAs($this->userWith('clientes.view', 'clientes.edit'))
-            ->put("/clientes/{$cliente->id}/documentacion", [
+            ->put("/clientes/{$cliente->id}", [
                 'documentos' => [
                     'constancia_arca' => ['presentado' => true],
                     'habilitacion_ministerio' => ['presentado' => true],
@@ -296,7 +296,7 @@ class ClienteControllerTest extends TestCase
         ]);
 
         $this->actingAs($this->userWith('clientes.view', 'clientes.edit'))
-            ->put("/clientes/{$cliente->id}/documentacion", [
+            ->put("/clientes/{$cliente->id}", [
                 'documentos' => [
                     'constancia_arca' => ['presentado' => true],
                     'habilitacion_ministerio' => ['presentado' => true],
@@ -308,15 +308,108 @@ class ClienteControllerTest extends TestCase
         $this->assertCount(0, $cliente->fresh()->documentos);
     }
 
+    /**
+     * Sin tipo no hay documentos que exigir, así que cualquier clave que venga
+     * en el checklist sobra. Lo rechazan las reglas del propio tipo (vacías),
+     * no un guard aparte: desde que el checklist se guarda junto con el tipo,
+     * el caso "documentos sin tipo" es el mismo que "documento que este tipo no
+     * pide" del test de arriba.
+     */
     public function test_no_se_puede_cargar_documentacion_sin_tipo_de_cliente(): void
     {
         $cliente = Cliente::create(['numero' => '1', 'razon_social' => 'Empresa Test SA']);
 
         $this->actingAs($this->userWith('clientes.view', 'clientes.edit'))
-            ->put("/clientes/{$cliente->id}/documentacion", ['documentos' => []])
-            ->assertSessionHas('error');
+            ->put("/clientes/{$cliente->id}", [
+                'documentos' => ['constancia_arca' => ['presentado' => true]],
+            ])
+            ->assertSessionHasErrors('documentos');
 
         $this->assertCount(0, $cliente->fresh()->documentos);
+    }
+
+    /**
+     * Lo que motivó unificar el guardado: clasificar y cargar los papeles en
+     * una sola pasada.
+     *
+     * Antes el checklist se armaba contra el tipo **ya guardado**, así que
+     * había que guardar el tipo, esperar a que apareciera el bloque y guardar
+     * de nuevo los vencimientos. Acá las dos cosas viajan juntas y los
+     * documentos se validan contra el tipo que viene en el request.
+     */
+    public function test_clasificar_y_cargar_la_documentacion_en_un_solo_guardado(): void
+    {
+        $cliente = Cliente::create(['numero' => '1', 'razon_social' => 'Importadora Test SA']);
+
+        $this->actingAs($this->userWith('clientes.view', 'clientes.edit'))
+            ->put("/clientes/{$cliente->id}", [
+                'tipo_cliente' => 'importador',
+                'tiene_legajo' => true,
+                'habilitado' => true,
+                'documentos' => [
+                    'constancia_arca' => ['presentado' => true],
+                    'habilitacion_anmat' => ['presentado' => true, 'fecha_vencimiento' => '2027-05-01'],
+                    'certificado_funcionamiento' => ['presentado' => true, 'fecha_vencimiento' => '2027-01-01'],
+                    'bpf' => ['presentado' => true, 'fecha_vencimiento' => '2027-03-10'],
+                ],
+            ])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect(route('clientes.edit', $cliente));
+
+        $cliente->refresh();
+
+        $this->assertSame('importador', $cliente->tipo_cliente);
+        $this->assertTrue($cliente->tiene_legajo);
+        $this->assertCount(4, $cliente->documentos);
+        // Los dos derivados quedan bien de una, sin un segundo guardado.
+        $this->assertTrue($cliente->documentacion_completa);
+        $this->assertSame('2027-03-10', $cliente->fecha_vencimiento->toDateString());
+    }
+
+    /**
+     * Reclasificar y cargar los papeles del tipo nuevo también entra en un solo
+     * guardado: los documentos se validan contra el tipo del request, no contra
+     * el que el cliente tenía.
+     */
+    public function test_reclasificar_y_cargar_el_checklist_del_tipo_nuevo_de_una(): void
+    {
+        $cliente = $this->importadorConDocumentacionCompleta();
+
+        $this->actingAs($this->userWith('clientes.view', 'clientes.edit'))
+            ->put("/clientes/{$cliente->id}", [
+                'tipo_cliente' => 'farmacia',
+                'documentos' => [
+                    'constancia_arca' => ['presentado' => true],
+                    'habilitacion_ministerio' => ['presentado' => true],
+                ],
+            ])
+            ->assertSessionHasNoErrors();
+
+        $cliente->refresh();
+
+        $this->assertSame('farmacia', $cliente->tipo_cliente);
+        // Los del tipo anterior que farmacia no pide se van; los compartidos quedan.
+        $this->assertEqualsCanonicalizing(
+            ['constancia_arca', 'habilitacion_ministerio'],
+            $cliente->documentos->pluck('documento')->all(),
+        );
+        // Farmacia no tiene documento determinante: deja de vencer.
+        $this->assertNull($cliente->fecha_vencimiento);
+        $this->assertTrue($cliente->documentacion_completa);
+    }
+
+    /** La ficha manda el catálogo de todos los tipos para poder armar el checklist sin guardar. */
+    public function test_la_ficha_manda_el_catalogo_de_documentos_de_todos_los_tipos(): void
+    {
+        $cliente = Cliente::create(['numero' => '1', 'razon_social' => 'Sin Clasificar SA']);
+
+        $this->actingAs($this->userWith('clientes.view', 'clientes.edit'))
+            ->get("/clientes/{$cliente->id}/edit")
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->has('catalogoDocumentos.importador', 4)
+                ->has('catalogoDocumentos.farmacia', 2)
+                ->where('cliente.tipo_cliente', null));
     }
 
     public function test_el_listado_filtra_por_tipo_y_por_estado_documental(): void
@@ -374,7 +467,7 @@ class ClienteControllerTest extends TestCase
         ]);
 
         $this->actingAs($this->userWith('clientes.view', 'clientes.edit'))
-            ->put("/clientes/{$cliente->id}/documentacion", [
+            ->put("/clientes/{$cliente->id}", [
                 'documentos' => [
                     'constancia_arca' => ['presentado' => true],
                     'habilitacion_anmat' => ['presentado' => true, 'fecha_vencimiento' => '2027-05-01'],

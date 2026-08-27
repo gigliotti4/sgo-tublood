@@ -9,17 +9,22 @@ import RadioGroup from '@/Components/RadioGroup.vue'
 import Button from '@/Components/Button.vue'
 import ControlDocumental from '@/Components/ControlDocumental.vue'
 import ChecklistDocumentos from '@/Components/ChecklistDocumentos.vue'
-import type { DocumentoChecklist, EstadoDocumentacion, Proveedor } from '@/types'
+import { useChecklistDocumental } from '@/composables/useChecklistDocumental'
+import type { ChecklistFormulario, DocumentoChecklist, DocumentosCargados, EstadoDocumentacion, Proveedor } from '@/types'
 
 const props = defineProps<{
     proveedor: Proveedor
     tipos: Record<string, string>
-    documentos: DocumentoChecklist[]
+    /** Los documentos de **todos** los tipos: el checklist se arma con el que se elija. */
+    catalogoDocumentos: Record<string, DocumentoChecklist[]>
+    documentosCargados: DocumentosCargados
     estado: EstadoDocumentacion
     /** Clave del documento del que sale el vencimiento del proveedor, si el tipo tiene uno. */
     documentoDeterminante: string | null
 }>()
 
+// Un solo formulario para toda la ficha: el tipo, los datos generales y el
+// checklist se guardan juntos. Mismo criterio que la ficha de cliente.
 const form = useForm({
     razon_social: props.proveedor.razon_social ?? '',
     domicilio: props.proveedor.domicilio ?? '',
@@ -32,6 +37,14 @@ const form = useForm({
     // El RadioGroup trabaja con strings; el backend los valida como boolean.
     tiene_legajo: props.proveedor.tiene_legajo ? '1' : '0',
     habilitado: props.proveedor.habilitado ? '1' : '0',
+    documentos: {} as ChecklistFormulario,
+})
+
+const { documentos } = useChecklistDocumental({
+    catalogo: props.catalogoDocumentos,
+    cargados: props.documentosCargados,
+    tipo: computed(() => form.tipo_proveedor),
+    form,
 })
 
 const submit = () => form.put(route('proveedores.update', props.proveedor.id))
@@ -42,7 +55,7 @@ const opcionesSiNo = [
 ]
 
 const etiquetaDeterminante = computed(() =>
-    props.documentos.find(d => d.documento === props.documentoDeterminante)?.label ?? null,
+    documentos.value.find(d => d.documento === props.documentoDeterminante)?.label ?? null,
 )
 </script>
 
@@ -77,7 +90,7 @@ const etiquetaDeterminante = computed(() =>
                     con RP Sistemas: si hay que corregir algo permanente, corregilo en el ERP. La clasificación
                     de más abajo y Observaciones son propias del panel y no las toca la sincronización.
                 </p>
-                <form @submit.prevent="submit" class="space-y-4">
+                <form id="ficha-proveedor" @submit.prevent="submit" class="space-y-4">
                     <Input
                         v-model="form.razon_social"
                         label="Razón social"
@@ -145,23 +158,32 @@ const etiquetaDeterminante = computed(() =>
                         </div>
                     </div>
 
-                    <div class="flex gap-3 pt-2">
-                        <Button type="submit" variant="primary" :disabled="form.processing">Guardar cambios</Button>
-                    </div>
                 </form>
             </div>
 
+            <!-- El checklist es parte del mismo formulario de arriba (`form`
+                 atributo): así el tipo elegido y los documentos que ese tipo
+                 exige se guardan de una, con el botón del final. -->
+            <ChecklistDocumentos
+                v-model="form.documentos"
+                :documentos="documentos"
+                :errors="form.errors as Record<string, string>"
+                entidad="proveedor"
+            />
+
+            <div class="flex gap-3">
+                <Button type="submit" form="ficha-proveedor" variant="primary" :disabled="form.processing">
+                    Guardar cambios
+                </Button>
+            </div>
+
+            <!-- Después del formulario: es el resultado de lo guardado, no algo
+                 que se edite. Se actualiza al guardar. -->
             <ControlDocumental
                 :estado="estado"
                 :tipo="proveedor.tipo_proveedor"
                 :fecha-vencimiento="proveedor.fecha_vencimiento"
                 :etiqueta-determinante="etiquetaDeterminante"
-                entidad="proveedor"
-            />
-
-            <ChecklistDocumentos
-                :documentos="documentos"
-                :url="route('proveedores.documentacion.update', proveedor.id)"
                 entidad="proveedor"
             />
         </div>

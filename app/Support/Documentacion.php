@@ -112,6 +112,50 @@ class Documentacion
     }
 
     /**
+     * El checklist de **todos** los tipos que ofrece una entidad, listo para el
+     * frontend: `[slug del tipo => [ {documento, label, obligatorio, vence,
+     * determina_vencimiento}, ... ]]`.
+     *
+     * Existe para que la ficha muestre los documentos del tipo **elegido en el
+     * select** y no del que está guardado. Antes el checklist se armaba en el
+     * controller contra `$registro->tipo_cliente`, así que elegir un tipo no
+     * mostraba nada hasta guardar: había que guardar los datos generales, ver
+     * aparecer el bloque y recién ahí cargar los vencimientos, con un segundo
+     * guardado. Mandando el catálogo entero, el bloque se arma en el acto.
+     *
+     * Son diez tipos con un puñado de documentos cada uno: cabe de sobra en las
+     * props de la página y evita un viaje al servidor por cada cambio del select.
+     *
+     * ⚠️ Va con el catálogo **completo** y no recortado por entidad, aunque el
+     * select sí se recorte: un registro clasificado con un tipo que después se
+     * sacó de la lista de su entidad tiene que seguir mostrando su checklist.
+     * Recortarlo acá le dejaba la documentación en blanco. Mismo criterio que
+     * `etiqueta()` y `documentos()`.
+     *
+     * @return array<string, list<array{documento: string, label: string, obligatorio: bool, vence: bool, determina_vencimiento: bool}>>
+     */
+    public static function checklistPorTipo(): array
+    {
+        $catalogo = [];
+
+        foreach (array_keys(static::todosLosTipos()) as $slug) {
+            $catalogo[$slug] = [];
+
+            foreach (static::documentos($slug) as $clave => $def) {
+                $catalogo[$slug][] = [
+                    'documento' => $clave,
+                    'label' => $def['label'],
+                    'obligatorio' => (bool) $def['obligatorio'],
+                    'vence' => (bool) $def['vence'],
+                    'determina_vencimiento' => ! empty($def['determina_vencimiento']),
+                ];
+            }
+        }
+
+        return $catalogo;
+    }
+
+    /**
      * Clave del documento que determina el vencimiento del cliente, o null si
      * el tipo no tiene ninguno (los tipos cuyos documentos no vencen).
      */

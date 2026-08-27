@@ -265,6 +265,11 @@ export interface ClienteDocumento {
  * Un documento del catálogo del tipo de cliente, ya cruzado con lo que el
  * cliente tenga cargado. Lo arma ClienteController::checklist().
  */
+/**
+ * La definición de un documento dentro del catálogo de un tipo. Sale de
+ * `Documentacion::checklistPorTipo()` y es **solo la definición**: qué se pide
+ * y cómo se comporta, sin lo que el registro tenga cargado.
+ */
 export interface DocumentoChecklist {
     documento: string
     label: string
@@ -272,9 +277,23 @@ export interface DocumentoChecklist {
     vence: boolean
     /** Su vencimiento es el del cliente ("lo que determina el VTO final"). */
     determina_vencimiento: boolean
+}
+
+/** Lo que un cliente o proveedor tiene cargado, por clave de documento. */
+export type DocumentosCargados = Record<string, {
     presentado: boolean
     fecha_vencimiento: string | null
-}
+}>
+
+/**
+ * El checklist como lo maneja el formulario: strings, que es con lo que
+ * trabajan RadioGroup e InputFecha, y es también la forma en que viaja al
+ * backend.
+ */
+export type ChecklistFormulario = Record<string, {
+    presentado: string
+    fecha_vencimiento: string
+}>
 /** El "control automático" de la planilla — ver Cliente::estadoDocumentacion(). */
 export interface EstadoDocumentacion {
     completa: boolean

@@ -9,17 +9,24 @@ import RadioGroup from '@/Components/RadioGroup.vue'
 import Button from '@/Components/Button.vue'
 import ControlDocumental from '@/Components/ControlDocumental.vue'
 import ChecklistDocumentos from '@/Components/ChecklistDocumentos.vue'
-import type { Cliente, DocumentoChecklist, EstadoDocumentacion } from '@/types'
+import { useChecklistDocumental } from '@/composables/useChecklistDocumental'
+import type { ChecklistFormulario, Cliente, DocumentoChecklist, DocumentosCargados, EstadoDocumentacion } from '@/types'
 
 const props = defineProps<{
     cliente: Cliente
     tipos: Record<string, string>
-    documentos: DocumentoChecklist[]
+    /** Los documentos de **todos** los tipos: el checklist se arma con el que se elija. */
+    catalogoDocumentos: Record<string, DocumentoChecklist[]>
+    documentosCargados: DocumentosCargados
     estado: EstadoDocumentacion
     /** Clave del documento del que sale el vencimiento del cliente, si el tipo tiene uno. */
     documentoDeterminante: string | null
 }>()
 
+// Un solo formulario para toda la ficha: el tipo, los datos generales y el
+// checklist se guardan juntos. Antes eran dos, y como los documentos se armaban
+// contra el tipo **ya guardado**, cargar la documentación de un cliente obligaba
+// a guardar el tipo, esperar a que apareciera el bloque y guardar otra vez.
 const form = useForm({
     mail_nuevo: props.cliente.mail_nuevo ?? '',
     tipo_cliente: props.cliente.tipo_cliente ?? '',
@@ -27,6 +34,14 @@ const form = useForm({
     tiene_legajo: props.cliente.tiene_legajo ? '1' : '0',
     habilitado: props.cliente.habilitado ? '1' : '0',
     notas: props.cliente.notas ?? '',
+    documentos: {} as ChecklistFormulario,
+})
+
+const { documentos } = useChecklistDocumental({
+    catalogo: props.catalogoDocumentos,
+    cargados: props.documentosCargados,
+    tipo: computed(() => form.tipo_cliente),
+    form,
 })
 
 const submit = () => form.put(route('clientes.update', props.cliente.id))
@@ -37,7 +52,7 @@ const opcionesSiNo = [
 ]
 
 const etiquetaDeterminante = computed(() =>
-    props.documentos.find(d => d.documento === props.documentoDeterminante)?.label ?? null,
+    documentos.value.find(d => d.documento === props.documentoDeterminante)?.label ?? null,
 )
 
 const uploadForm = useForm({
@@ -119,7 +134,7 @@ const formatSize = (bytes: number) => {
             <!-- Campos propios -->
             <div class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
                 <p class="mb-3 text-theme-xs font-medium uppercase tracking-wide text-gray-400">Datos generales</p>
-                <form @submit.prevent="submit" class="space-y-4">
+                <form id="ficha-cliente" @submit.prevent="submit" class="space-y-4">
                     <Select
                         v-model="form.tipo_cliente"
                         label="Tipo de cliente"
@@ -154,23 +169,32 @@ const formatSize = (bytes: number) => {
                         :rows="3"
                         :error="form.errors.notas"
                     />
-                    <div class="flex gap-3 pt-2">
-                        <Button type="submit" variant="primary" :disabled="form.processing">Guardar cambios</Button>
-                    </div>
                 </form>
             </div>
 
+            <!-- El checklist es parte del mismo formulario de arriba (`form`
+                 atributo): así el tipo elegido y los documentos que ese tipo
+                 exige se guardan de una, con el botón del final. -->
+            <ChecklistDocumentos
+                v-model="form.documentos"
+                :documentos="documentos"
+                :errors="form.errors as Record<string, string>"
+                entidad="cliente"
+            />
+
+            <div class="flex gap-3">
+                <Button type="submit" form="ficha-cliente" variant="primary" :disabled="form.processing">
+                    Guardar cambios
+                </Button>
+            </div>
+
+            <!-- Después del formulario: es el resultado de lo guardado, no algo
+                 que se edite. Se actualiza al guardar. -->
             <ControlDocumental
                 :estado="estado"
                 :tipo="cliente.tipo_cliente"
                 :fecha-vencimiento="cliente.fecha_vencimiento"
                 :etiqueta-determinante="etiquetaDeterminante"
-                entidad="cliente"
-            />
-
-            <ChecklistDocumentos
-                :documentos="documentos"
-                :url="route('clientes.documentacion.update', cliente.id)"
                 entidad="cliente"
             />
 

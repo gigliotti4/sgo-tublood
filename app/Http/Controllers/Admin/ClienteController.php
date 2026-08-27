@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Response;
@@ -203,7 +203,14 @@ class ClienteController extends Controller
         return inertia('Admin/Clientes/Edit', [
             'cliente' => $cliente,
             'tipos' => Documentacion::etiquetasTipos(),
-            'documentos' => $this->checklist($cliente),
+            // El catálogo de **todos** los tipos, no el del tipo guardado: la
+            // ficha arma el checklist con el que esté elegido en el select, sin
+            // esperar a guardar. Ver Documentacion::checklistPorTipo().
+            'catalogoDocumentos' => Documentacion::checklistPorTipo(),
+            // Lo cargado, por clave de documento. Va aparte del catálogo porque
+            // no depende del tipo: las claves se repiten entre tipos a
+            // propósito, así reclasificar no borra lo que los dos comparten.
+            'documentosCargados' => $this->documentosCargados($cliente),
             'estado' => $cliente->estadoDocumentacion(),
             'documentoDeterminante' => Documentacion::documentoDeterminante($cliente->tipo_cliente),
         ]);
@@ -214,27 +221,21 @@ class ClienteController extends Controller
      * el cliente tenga cargado de cada documento. Un documento del catálogo sin
      * fila todavía sale como no presentado, no como ausente.
      */
-    private function checklist(Cliente $cliente): array
+    /**
+     * Lo que el cliente ya tiene cargado, `[documento => {presentado, fecha}]`.
+     *
+     * Sin recortar por tipo a propósito: la pantalla cruza esto con el catálogo
+     * del tipo elegido, así que si alguien cambia el select y vuelve atrás, lo
+     * que había cargado del tipo original sigue ahí.
+     */
+    private function documentosCargados(Cliente $cliente): array
     {
-        $cargados = $cliente->documentos->keyBy('documento');
-
-        $items = [];
-
-        foreach (Documentacion::documentos($cliente->tipo_cliente) as $clave => $def) {
-            $doc = $cargados->get($clave);
-
-            $items[] = [
-                'documento' => $clave,
-                'label' => $def['label'],
-                'obligatorio' => (bool) $def['obligatorio'],
-                'vence' => (bool) $def['vence'],
-                'determina_vencimiento' => ! empty($def['determina_vencimiento']),
-                'presentado' => (bool) $doc?->presentado,
-                'fecha_vencimiento' => $doc?->fecha_vencimiento?->toDateString(),
-            ];
-        }
-
-        return $items;
+        return $cliente->documentos
+            ->mapWithKeys(fn ($doc) => [$doc->documento => [
+                'presentado' => (bool) $doc->presentado,
+                'fecha_vencimiento' => $doc->fecha_vencimiento?->toDateString(),
+            ]])
+            ->all();
     }
 
     public function update(Request $request, Cliente $cliente): RedirectResponse
@@ -244,7 +245,7 @@ class ClienteController extends Controller
         // `fecha_vencimiento` no está acá a propósito: dejó de cargarse a mano
         // y ahora sale del documento que lo determina — ver
         // Cliente::recalcularEstadoDocumental().
-        $data = $request->validate([
+        $reglas = [
             'mail_nuevo' => ['nullable', 'email', 'max:255'],
             'tipo_cliente' => ['nullable', Rule::in(array_keys(Documentacion::tipos()))],
             // `sometimes` y no `required`: un request que no los manda deja el
@@ -254,9 +255,39 @@ class ClienteController extends Controller
             'tiene_legajo' => ['sometimes', 'boolean'],
             'habilitado' => ['sometimes', 'boolean'],
             'notas' => ['nullable', 'string', 'max:5000'],
-        ]);
+        ];
 
-        $cliente->update($data);
+        // El checklist viaja en el **mismo** guardado que el tipo. Antes tenía
+        // su propio endpoint, y como las reglas se armaban contra el tipo ya
+        // guardado, había que guardar dos veces: una para el tipo y otra para
+        // los documentos. Acá se validan contra el tipo que viene en el request.
+        //
+        // `has()` y no siempre: así un request que solo actualiza datos
+        // generales (o cualquier otro camino) no está obligado a mandarlos,
+        // mismo criterio que el `sometimes` de arriba.
+        // El tipo con el que se valida el checklist es el que **viene en el
+        // request**, no el guardado: es lo que permite reclasificar y cargar los
+        // papeles del tipo nuevo en un solo guardado. Si el request no lo manda
+        // (una actualización parcial), se cae al que ya tenía.
+        $tipo = $request->has('tipo_cliente')
+            ? ($request->filled('tipo_cliente') ? $request->input('tipo_cliente') : null)
+            : $cliente->tipo_cliente;
+        $conDocumentos = $request->has('documentos');
+
+        if ($conDocumentos) {
+            $reglas += Documentacion::reglasValidacion($tipo);
+        }
+
+        $data = $request->validate(
+            $reglas,
+            attributes: $conDocumentos ? Documentacion::atributosValidacion($tipo) : [],
+        );
+
+        $cliente->update(Arr::except($data, ['documentos']));
+
+        if ($conDocumentos) {
+            $cliente->guardarDocumentos($data['documentos'] ?? []);
+        }
 
         // Cambiar de tipo cambia qué documentos se exigen y cuál determina el
         // vencimiento, así que el estado se recalcula también desde acá.
@@ -270,58 +301,6 @@ class ClienteController extends Controller
      * Guarda el checklist de documentación completo (Sí/No y vencimiento de
      * cada documento) y recalcula el estado derivado del cliente.
      */
-    public function updateDocumentacion(Request $request, Cliente $cliente): RedirectResponse
-    {
-        $this->authorize('clientes.edit');
-
-        if ($cliente->tipo_cliente === null) {
-            return back()->with('error', 'Elegí primero un tipo de cliente: la documentación requerida depende de él.');
-        }
-
-        $data = $request->validate(
-            Documentacion::reglasValidacion($cliente->tipo_cliente),
-            attributes: Documentacion::atributosValidacion($cliente->tipo_cliente),
-        );
-
-        $catalogo = Documentacion::documentos($cliente->tipo_cliente);
-
-        DB::transaction(function () use ($cliente, $catalogo, $data) {
-            foreach ($catalogo as $clave => $def) {
-                $item = $data['documentos'][$clave] ?? null;
-
-                if ($item === null) {
-                    continue;
-                }
-
-                $presentado = (bool) $item['presentado'];
-
-                $cliente->documentos()->updateOrCreate(
-                    ['documento' => $clave],
-                    [
-                        'presentado' => $presentado,
-                        // La fecha solo tiene sentido en un documento que vence
-                        // y que además está presentado: si se destilda, la del
-                        // papel anterior no puede quedar colgada.
-                        'fecha_vencimiento' => empty($def['vence']) || ! $presentado
-                            ? null
-                            : ($item['fecha_vencimiento'] ?? null),
-                    ]
-                );
-            }
-
-            // Los documentos que quedaron de un tipo anterior no se muestran ni
-            // cuentan, así que tampoco se guardan.
-            $cliente->documentos()
-                ->whereNotIn('documento', array_keys($catalogo))
-                ->delete();
-        });
-
-        $cliente->recalcularEstadoDocumental();
-
-        return redirect()->route('clientes.edit', $cliente)
-            ->with('success', 'Documentación actualizada correctamente.');
-    }
-
     public function uploadArchivo(Request $request, Cliente $cliente): RedirectResponse
     {
         $this->authorize('clientes.edit');

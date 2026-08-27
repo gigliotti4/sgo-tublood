@@ -5,6 +5,7 @@ namespace App\Models\Concerns;
 use App\Support\Documentacion;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Clasificación documental de un registro: su tipo (el del catálogo de
@@ -111,6 +112,57 @@ trait ClasificacionDocumental
             'proximo_vencimiento' => $proximo?->toDateString(),
             'dias_para_vencer' => $proximo === null ? null : (int) $hoy->diffInDays($proximo, false),
         ];
+    }
+
+    /**
+     * Guarda el checklist completo: una fila por documento del tipo actual, y
+     * fuera las que quedaron de un tipo anterior.
+     *
+     * Estaba duplicado en ClienteController y ProveedorController con el mismo
+     * cuerpo palabra por palabra. Vive acá por el mismo motivo que
+     * `estadoDocumentacion()`: son los mismos papeles y el mismo criterio para
+     * las dos entidades, y dos copias se desincronizan.
+     *
+     * ⚠️ Se llama **después** de haber guardado el tipo, porque lee
+     * `tipoDocumental()` para saber qué documentos corresponden. Quien lo llame
+     * tiene que cerrar con `recalcularEstadoDocumental()`.
+     *
+     * @param  array<string, array{presentado: mixed, fecha_vencimiento?: string|null}>  $documentos
+     */
+    public function guardarDocumentos(array $documentos): void
+    {
+        $catalogo = Documentacion::documentos($this->tipoDocumental());
+
+        DB::transaction(function () use ($catalogo, $documentos) {
+            foreach ($catalogo as $clave => $def) {
+                $item = $documentos[$clave] ?? null;
+
+                if ($item === null) {
+                    continue;
+                }
+
+                $presentado = (bool) $item['presentado'];
+
+                $this->documentos()->updateOrCreate(
+                    ['documento' => $clave],
+                    [
+                        'presentado' => $presentado,
+                        // La fecha solo tiene sentido en un documento que vence
+                        // y que además está presentado: si se destilda, la del
+                        // papel anterior no puede quedar colgada.
+                        'fecha_vencimiento' => empty($def['vence']) || ! $presentado
+                            ? null
+                            : ($item['fecha_vencimiento'] ?? null),
+                    ]
+                );
+            }
+
+            // Los documentos que quedaron de un tipo anterior no se muestran ni
+            // cuentan, así que tampoco se guardan.
+            $this->documentos()
+                ->whereNotIn('documento', array_keys($catalogo))
+                ->delete();
+        });
     }
 
     /**

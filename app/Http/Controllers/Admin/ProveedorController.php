@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Arr;
 use Illuminate\Validation\Rule;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -153,7 +153,14 @@ class ProveedorController extends Controller
         return inertia('Admin/Proveedores/Edit', [
             'proveedor' => $proveedor,
             'tipos' => Documentacion::etiquetasTipos(Documentacion::PROVEEDORES),
-            'documentos' => $this->checklist($proveedor),
+            // El catálogo de **todos** los tipos, no el del tipo guardado: la
+            // ficha arma el checklist con el que esté elegido en el select, sin
+            // esperar a guardar. Ver Documentacion::checklistPorTipo().
+            'catalogoDocumentos' => Documentacion::checklistPorTipo(),
+            // Lo cargado, por clave de documento. Va aparte del catálogo porque
+            // no depende del tipo: las claves se repiten entre tipos a
+            // propósito, así reclasificar no borra lo que los dos comparten.
+            'documentosCargados' => $this->documentosCargados($proveedor),
             'estado' => $proveedor->estadoDocumentacion(),
             'documentoDeterminante' => Documentacion::documentoDeterminante($proveedor->tipo_proveedor),
         ]);
@@ -164,27 +171,21 @@ class ProveedorController extends Controller
      * el proveedor tenga cargado de cada documento. Un documento del catálogo
      * sin fila todavía sale como no presentado, no como ausente.
      */
-    private function checklist(Proveedor $proveedor): array
+    /**
+     * Lo que el proveedor ya tiene cargado, `[documento => {presentado, fecha}]`.
+     *
+     * Sin recortar por tipo a propósito: la pantalla cruza esto con el catálogo
+     * del tipo elegido, así que si alguien cambia el select y vuelve atrás, lo
+     * que había cargado del tipo original sigue ahí.
+     */
+    private function documentosCargados(Proveedor $proveedor): array
     {
-        $cargados = $proveedor->documentos->keyBy('documento');
-
-        $items = [];
-
-        foreach (Documentacion::documentos($proveedor->tipo_proveedor) as $clave => $def) {
-            $doc = $cargados->get($clave);
-
-            $items[] = [
-                'documento' => $clave,
-                'label' => $def['label'],
-                'obligatorio' => (bool) $def['obligatorio'],
-                'vence' => (bool) $def['vence'],
-                'determina_vencimiento' => ! empty($def['determina_vencimiento']),
-                'presentado' => (bool) $doc?->presentado,
-                'fecha_vencimiento' => $doc?->fecha_vencimiento?->toDateString(),
-            ];
-        }
-
-        return $items;
+        return $proveedor->documentos
+            ->mapWithKeys(fn ($doc) => [$doc->documento => [
+                'presentado' => (bool) $doc->presentado,
+                'fecha_vencimiento' => $doc->fecha_vencimiento?->toDateString(),
+            ]])
+            ->all();
     }
 
     public function update(Request $request, Proveedor $proveedor): RedirectResponse
@@ -194,7 +195,7 @@ class ProveedorController extends Controller
         // `numero` queda afuera a propósito: es la clave con la que el import
         // reconoce al proveedor, y cambiarla acá lo duplicaría en la próxima
         // importación.
-        $data = $request->validate([
+        $reglas = [
             'razon_social' => ['required', 'string', 'max:255'],
             'domicilio' => ['nullable', 'string', 'max:255'],
             'cuit' => ['nullable', 'string', 'max:255'],
@@ -211,9 +212,35 @@ class ProveedorController extends Controller
             // solo algunos campos.
             'tiene_legajo' => ['sometimes', 'boolean'],
             'habilitado' => ['sometimes', 'boolean'],
-        ]);
+        ];
 
-        $proveedor->update($data);
+        // El checklist viaja en el **mismo** guardado que el tipo. Antes tenía
+        // su propio endpoint, y como las reglas se armaban contra el tipo ya
+        // guardado, había que guardar dos veces: una para el tipo y otra para
+        // los documentos. Acá se validan contra el tipo que viene en el request.
+        // El tipo con el que se valida el checklist es el que **viene en el
+        // request**, no el guardado: es lo que permite reclasificar y cargar los
+        // papeles del tipo nuevo en un solo guardado. Si el request no lo manda
+        // (una actualización parcial), se cae al que ya tenía.
+        $tipo = $request->has('tipo_proveedor')
+            ? ($request->filled('tipo_proveedor') ? $request->input('tipo_proveedor') : null)
+            : $proveedor->tipo_proveedor;
+        $conDocumentos = $request->has('documentos');
+
+        if ($conDocumentos) {
+            $reglas += Documentacion::reglasValidacion($tipo);
+        }
+
+        $data = $request->validate(
+            $reglas,
+            attributes: $conDocumentos ? Documentacion::atributosValidacion($tipo) : [],
+        );
+
+        $proveedor->update(Arr::except($data, ['documentos']));
+
+        if ($conDocumentos) {
+            $proveedor->guardarDocumentos($data['documentos'] ?? []);
+        }
 
         // Cambiar de tipo cambia qué documentos se exigen y cuál determina el
         // vencimiento, así que el estado se recalcula también desde acá.
@@ -227,58 +254,6 @@ class ProveedorController extends Controller
      * Guarda el checklist de documentación completo (Sí/No y vencimiento de
      * cada documento) y recalcula el estado derivado del proveedor.
      */
-    public function updateDocumentacion(Request $request, Proveedor $proveedor): RedirectResponse
-    {
-        $this->authorize('proveedores.edit');
-
-        if ($proveedor->tipo_proveedor === null) {
-            return back()->with('error', 'Elegí primero un tipo de proveedor: la documentación requerida depende de él.');
-        }
-
-        $data = $request->validate(
-            Documentacion::reglasValidacion($proveedor->tipo_proveedor),
-            attributes: Documentacion::atributosValidacion($proveedor->tipo_proveedor),
-        );
-
-        $catalogo = Documentacion::documentos($proveedor->tipo_proveedor);
-
-        DB::transaction(function () use ($proveedor, $catalogo, $data) {
-            foreach ($catalogo as $clave => $def) {
-                $item = $data['documentos'][$clave] ?? null;
-
-                if ($item === null) {
-                    continue;
-                }
-
-                $presentado = (bool) $item['presentado'];
-
-                $proveedor->documentos()->updateOrCreate(
-                    ['documento' => $clave],
-                    [
-                        'presentado' => $presentado,
-                        // La fecha solo tiene sentido en un documento que vence
-                        // y que además está presentado: si se destilda, la del
-                        // papel anterior no puede quedar colgada.
-                        'fecha_vencimiento' => empty($def['vence']) || ! $presentado
-                            ? null
-                            : ($item['fecha_vencimiento'] ?? null),
-                    ]
-                );
-            }
-
-            // Los documentos que quedaron de un tipo anterior no se muestran ni
-            // cuentan, así que tampoco se guardan.
-            $proveedor->documentos()
-                ->whereNotIn('documento', array_keys($catalogo))
-                ->delete();
-        });
-
-        $proveedor->recalcularEstadoDocumental();
-
-        return redirect()->route('proveedores.edit', $proveedor)
-            ->with('success', 'Documentación actualizada correctamente.');
-    }
-
     public function import(Request $request, ProveedorImportService $service): RedirectResponse
     {
         $this->authorize('proveedores.import');
