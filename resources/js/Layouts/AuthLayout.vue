@@ -19,6 +19,15 @@ const flashSuccess = computed(() => page.props.flash?.success)
 // Marca y textos administrables desde /configuracion.
 const marca = computed(() => page.props.configuracion)
 
+// Foto de fondo del panel de branding: la cargada desde /configuracion, o la
+// que viene con el sistema si nadie subió otra.
+//
+// El default no puede vivir en el catálogo de `config/configuracion.php` como
+// el de los textos: ahí las imágenes se resuelven contra el disco `public`
+// (`Storage::disk('public')->url(...)`) y esta es un archivo estático de
+// `public/img/`, servido directo por el server. Por eso el fallback es acá.
+const fondo = computed(() => marca.value.login_fondo ?? '/img/fondo-login.jpg')
+
 // Un punto destacado por línea. Se filtran las vacías para que un salto de
 // más en el textarea no dibuje una viñeta suelta. El trim también se come el
 // retorno de carro que deja el textarea al enviar en CRLF.
@@ -34,7 +43,28 @@ const features = computed(() =>
     <div class="min-h-screen flex">
 
         <!-- ── Panel izquierdo: branding ── -->
+        <!-- El color de fondo queda igual por si la foto no carga: el texto de acá es blanco. -->
         <div class="hidden lg:flex lg:w-[55%] bg-linear-to-br from-brand-950 via-brand-900 to-corp-900 flex-col justify-between p-14 relative overflow-hidden select-none">
+
+            <!--
+                Foto de fondo. `object-right` porque la escena está en la mitad
+                derecha de la imagen y este panel es angosto y alto: encuadrada
+                al centro se recortaría a la pared vacía.
+            -->
+            <img
+                :src="fondo"
+                alt=""
+                aria-hidden="true"
+                class="absolute inset-0 h-full w-full object-cover object-right pointer-events-none"
+            />
+
+            <!--
+                Velo sobre la foto: es una imagen muy clara y todo el texto del
+                panel es blanco. Más opaco a la izquierda (donde va el texto) y
+                más transparente a la derecha, para que la escena se siga viendo.
+            -->
+            <div class="absolute inset-0 bg-linear-to-r from-brand-950/95 via-brand-950/85 to-brand-900/60 pointer-events-none" />
+            <div class="absolute inset-0 bg-linear-to-t from-brand-950/90 via-transparent to-brand-950/40 pointer-events-none" />
 
             <!-- Formas decorativas de fondo -->
             <div class="absolute -top-32 -right-32 w-96 h-96 bg-brand-400/10 rounded-full blur-3xl pointer-events-none" />

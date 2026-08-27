@@ -186,6 +186,8 @@ export interface ConfiguracionMarca {
     login_parrafo: string
     /** Un punto destacado por linea. */
     login_features: string
+    /** Foto del panel de branding. Null cae a la que viene con el sistema, no al gradiente pelado. */
+    login_fondo: string | null
     login_footer: string
     login_pie_sistema: string
     portal_titulo: string

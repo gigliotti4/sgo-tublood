@@ -136,7 +136,10 @@ const submit = () => {
                                                 type="checkbox"
                                                 class="h-4 w-4 rounded accent-brand-500 dark:accent-brand-400"
                                             />
-                                            Quitar y volver al ícono por defecto
+                                            <!-- Genérico: a qué se vuelve al quitarla depende de la
+                                                 clave (el ícono por defecto, la foto que trae el
+                                                 sistema) y eso lo dice el hint de cada una. -->
+                                            Quitar la imagen cargada
                                         </label>
                                     </div>
                                 </div>

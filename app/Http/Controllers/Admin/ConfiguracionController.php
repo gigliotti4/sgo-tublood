@@ -39,7 +39,7 @@ class ConfiguracionController extends Controller
 
         foreach ($catalogo as $clave => $def) {
             if (($def['tipo'] ?? null) === 'imagen') {
-                $this->guardarImagen($request, $clave);
+                $this->guardarImagen($request, $clave, $def);
 
                 continue;
             }
@@ -74,8 +74,10 @@ class ConfiguracionController extends Controller
         foreach ($catalogo as $clave => $def) {
             $reglas[$clave] = match ($def['tipo'] ?? 'texto') {
                 // El favicon acepta .ico, que no es un formato de imagen que
-                // `image` reconozca, así que se valida por extensión.
-                'imagen' => ['nullable', 'file', 'mimes:png,jpg,jpeg,svg,webp,ico', 'max:2048'],
+                // `image` reconozca, así que se valida por extensión. El peso
+                // máximo sale del catálogo: una foto de fondo no entra en los
+                // 2 MB que le alcanzan a un logo.
+                'imagen' => ['nullable', 'file', 'mimes:png,jpg,jpeg,svg,webp,ico', 'max:'.($def['max'] ?? 2048)],
                 'textarea' => ['nullable', 'string', 'max:2000'],
                 default => ['nullable', 'string', 'max:255'],
             };
@@ -88,7 +90,7 @@ class ConfiguracionController extends Controller
         return $reglas;
     }
 
-    private function guardarImagen(Request $request, string $clave): void
+    private function guardarImagen(Request $request, string $clave, array $def): void
     {
         $borrar = in_array($clave, $request->input('_borrar', []), true);
 
@@ -113,7 +115,12 @@ class ConfiguracionController extends Controller
         // en pantalla sin que haya nada mal en el CSS. Recortarlo acá lo
         // arregla para cualquier archivo que suban, sin depender de cómo lo
         // hayan exportado. No aborta la subida si falla.
-        app(RecorteImagen::class)->recortar(Storage::disk('public')->path($path));
+        //
+        // Las claves que declaran `recortar => false` se saltean: en una foto
+        // de fondo no hay margen que sacar, y el recorte se guarda re-comprimida.
+        if ($def['recortar'] ?? true) {
+            app(RecorteImagen::class)->recortar(Storage::disk('public')->path($path));
+        }
 
         $this->guardar($clave, $path);
 

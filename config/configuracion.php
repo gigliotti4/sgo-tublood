@@ -16,6 +16,13 @@
  *  - `texto`    → <input>
  *  - `textarea` → <textarea>
  *  - `imagen`   → subida de archivo al disco `public`
+ *
+ * Las claves de tipo `imagen` aceptan además dos opcionales:
+ *  - `max`      → peso máximo en KB (default 2048). Una foto de fondo pesa
+ *                 mucho más que un logo, así que no puede ser el mismo número.
+ *  - `recortar` → si se le sacan los márgenes transparentes al subirla (default
+ *                 true). Ver `App\Services\RecorteImagen`: existe para logos y
+ *                 no tiene sentido en una foto.
  */
 return [
 
@@ -110,6 +117,18 @@ return [
             'tipo' => 'textarea',
             'default' => "Registro y clasificación de observaciones\nGestión de no conformidades y CAPA\nTrazabilidad completa por expediente",
             'hint' => 'Uno por línea. Cada línea se dibuja con su tilde.',
+        ],
+        'login_fondo' => [
+            'grupo' => 'login',
+            'label' => 'Foto de fondo',
+            'tipo' => 'imagen',
+            'default' => null,
+            // 6 MB: una foto grande exportada sin optimizar ronda los 3-4 MB, y
+            // rebotarla obligaría a pasarla por un compresor antes de subirla.
+            'max' => 6144,
+            // Es una foto, no un logo: no hay margen transparente que sacarle.
+            'recortar' => false,
+            'hint' => 'La imagen del panel izquierdo. Se encuadra a la derecha y lleva un velo oscuro encima para que se lea el texto blanco, así que conviene una foto clara con el motivo hacia la derecha. Sin foto propia se usa la que viene con el sistema.',
         ],
         'login_footer' => [
             'grupo' => 'login',

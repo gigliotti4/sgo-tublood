@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Support\Configuracion;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
@@ -127,6 +128,28 @@ class ConfiguracionTest extends TestCase
         Storage::disk('public')->assertMissing($path);
     }
 
+    /**
+     * El peso máximo sale del catálogo, no es uno solo para todas las imágenes:
+     * una foto de fondo no entra en los 2 MB que le alcanzan a un logo.
+     */
+    public function test_la_foto_de_fondo_acepta_archivos_mas_pesados_que_el_logo(): void
+    {
+        Storage::fake('public');
+
+        $user = $this->userWith('configuracion.view', 'configuracion.edit');
+        $pesada = fn () => UploadedFile::fake()->image('fondo.jpg', 1920, 1080)->size(3000);
+
+        $this->actingAs($user)
+            ->post('/configuracion', ['login_fondo' => $pesada()])
+            ->assertSessionHasNoErrors();
+
+        $this->assertNotNull(Configuracion::get('login_fondo'));
+
+        $this->actingAs($user)
+            ->post('/configuracion', ['logo' => $pesada()])
+            ->assertSessionHasErrors('logo');
+    }
+
     /** Un texto vaciado a propósito queda vacío, no vuelve al default. */
     public function test_un_texto_vaciado_no_vuelve_al_default(): void
     {
@@ -144,6 +167,34 @@ class ConfiguracionTest extends TestCase
 
         $this->get('/login')->assertOk()->assertInertia(
             fn ($page) => $page->where('configuracion.empresa_nombre', 'Marca Nueva')
+        );
+    }
+
+    /**
+     * El login es público y lee la foto de fondo de las props compartidas, así
+     * que la subida tiene que llegar hasta ahí sin estar logueado.
+     */
+    public function test_la_foto_de_fondo_llega_al_login(): void
+    {
+        Storage::fake('public');
+
+        // Sin nada cargado la clave viaja en null y el layout cae en la foto
+        // que trae el sistema (el fallback vive en AuthLayout.vue: es un
+        // archivo de public/img, no del disco `public`).
+        $this->get('/login')->assertInertia(fn ($page) => $page->where('configuracion.login_fondo', null));
+
+        $this->actingAs($this->userWith('configuracion.view', 'configuracion.edit'))
+            ->post('/configuracion', ['login_fondo' => UploadedFile::fake()->image('fondo.jpg')]);
+
+        // `actingAs` deja al usuario logueado para el resto del test y /login
+        // redirige a un usuario autenticado: sin esto la respuesta es un 302 y
+        // no hay props de Inertia que mirar.
+        Auth::logout();
+
+        $url = Storage::disk('public')->url(Configuracion::get('login_fondo'));
+
+        $this->get('/login')->assertOk()->assertInertia(
+            fn ($page) => $page->where('configuracion.login_fondo', $url)
         );
     }
 
