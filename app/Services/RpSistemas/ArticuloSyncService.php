@@ -3,8 +3,8 @@
 namespace App\Services\RpSistemas;
 
 use App\Models\Articulo;
+use App\Services\VinculacionProveedores;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class ArticuloSyncService
@@ -27,14 +27,11 @@ class ArticuloSyncService
      * `whereNotNull` y por lo tanto nunca se desactiva por esta vía: no
      * vinieron de un feed del que puedan "dejar de venir".
      *
-     * Al final intenta vincular el proveedor: `codigo_proveedor` (el string
-     * suelto del ERP) casi nunca es un número de proveedor real — verificado
-     * a mano, de ~70 valores distintos solo un puñado coincide con
-     * `proveedores.numero` — pero cuando coincide, el dato es correcto (se
-     * confirmó contra un proveedor ya cargado a mano por Excel, y matcheaba).
-     * Vale la pena aprovechar esos casos aunque sean pocos. Nunca pisa un
-     * `proveedor_id` ya asignado: es un campo propio del panel, y esto es un
-     * intento best-effort de completarlo, no una fuente de verdad.
+     * Al final intenta vincular el proveedor por `codigo_proveedor`. Ese campo
+     * viene casi vacío (641 de 731 artículos) y de lo cargado la mayoría no son
+     * códigos de proveedor sino costos tipeados en el lugar equivocado — pero
+     * cuando trae un entero limpio, matchea el padrón el 100% de las veces.
+     * Qué puede pisar y qué no lo decide `VinculacionProveedores`.
      *
      * @return array{procesados: int, activos: int, desactivados: int, proveedores_vinculados: int}
      */
@@ -113,27 +110,11 @@ class ArticuloSyncService
                 ->update(['activo' => false, 'updated_at' => Carbon::now()]);
         }
 
-        // Subconsulta escalar y no un UPDATE...JOIN: SQLite (lo que usan los
-        // tests) no soporta join en un UPDATE, pero sí una subconsulta, y
-        // rinde igual de bien en MySQL. `proveedores.numero` tiene índice
-        // único (permite varios NULL, pero no un no-NULL repetido), así que
-        // la subconsulta nunca puede devolver más de una fila.
-        //
-        // Recorrer ~4000 filas en PHP para resolver cada una contra ~1900
-        // proveedores sería lento y no aporta nada que SQL no resuelva mejor.
-        // `whereNull('proveedor_id')` es lo que garantiza que nunca se pisa
-        // una asignación manual.
-        $vinculados = DB::table('articulos')
-            ->whereNull('proveedor_id')
-            ->whereNotNull('codigo_proveedor')
-            ->whereIn('codigo_proveedor', function ($query) {
-                $query->select('numero')->from('proveedores')->whereNotNull('numero');
-            })
-            ->update([
-                'proveedor_id' => DB::raw(
-                    '(select id from proveedores where proveedores.numero = articulos.codigo_proveedor)'
-                ),
-            ]);
+        // La regla de quién puede pisar el proveedor de un artículo vive en
+        // VinculacionProveedores, no acá: la comparten esta sync, el import de
+        // Excel y la edición manual del panel, y si se duplicara las tres
+        // podrían discrepar. Ver la tabla de precedencia ahí.
+        $vinculados = VinculacionProveedores::desdeCodigoProveedor();
 
         Log::info("RpSistemas: sincronización completada — {$total} artículos procesados, {$desactivados} desactivados, {$vinculados} proveedores vinculados");
 

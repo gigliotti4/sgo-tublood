@@ -6,6 +6,7 @@ use App\Models\Articulo;
 use App\Models\Proveedor;
 use App\Services\RpSistemas\ArticuloSyncService;
 use App\Services\RpSistemas\RpSistemasClient;
+use App\Services\VinculacionProveedores;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -347,11 +348,16 @@ class ArticuloSyncTest extends TestCase
     }
 
     /**
-     * El caso central: un proveedor ya asignado a mano (por Excel o desde la
-     * ficha) no se pisa aunque codigo_proveedor matchee con OTRO proveedor.
-     * proveedor_id sigue siendo un campo propio del panel.
+     * El caso central: un proveedor **corregido a mano** desde la ficha no se
+     * pisa aunque codigo_proveedor matchee con OTRO proveedor.
+     *
+     * ⚠️ Antes este test decía "a mano (por Excel o desde la ficha)" y trataba
+     * a los dos igual. Desde que existe `proveedor_origen` son cosas
+     * distintas: el dato del ERP **sí** corrige lo que adivinó el Excel por
+     * razón social, pero nunca una corrección de una persona. Ver
+     * `VinculacionProveedores::PRECEDENCIA` y el test de abajo.
      */
-    public function test_no_pisa_un_proveedor_ya_asignado_a_mano(): void
+    public function test_no_pisa_un_proveedor_corregido_a_mano(): void
     {
         $asignadoAMano = Proveedor::create(['numero' => '500', 'razon_social' => 'El que cargó Calidad']);
         $otro = Proveedor::create(['numero' => 'PRO1', 'razon_social' => 'El que coincide con el ERP']);
@@ -360,6 +366,7 @@ class ArticuloSyncTest extends TestCase
             'codigo' => 'RE-1631',
             'descripcion' => 'Descripción vieja',
             'proveedor_id' => $asignadoAMano->id,
+            'proveedor_origen' => VinculacionProveedores::ORIGEN_MANUAL,
         ]);
 
         Http::fake(['*articulos.php' => Http::response($this->respuesta([
@@ -371,5 +378,31 @@ class ArticuloSyncTest extends TestCase
         $this->assertSame($asignadoAMano->id, Articulo::first()->proveedor_id);
         $this->assertSame(0, $resultado['proveedores_vinculados']);
         $this->assertNotSame($otro->id, Articulo::first()->proveedor_id);
+    }
+
+    /**
+     * La contracara, y el motivo de todo el cambio: lo que el Excel adivinó por
+     * razón social **sí** lo corrige el dato del ERP cuando RP lo carga.
+     */
+    public function test_pisa_un_proveedor_que_habia_puesto_el_excel(): void
+    {
+        $adivinado = Proveedor::create(['numero' => '500', 'razon_social' => 'El que adivinó el Excel']);
+        $correcto = Proveedor::create(['numero' => 'PRO1', 'razon_social' => 'El que dice RP']);
+
+        Articulo::create([
+            'codigo' => 'RE-1631',
+            'descripcion' => 'Descripción vieja',
+            'proveedor_id' => $adivinado->id,
+            'proveedor_origen' => VinculacionProveedores::ORIGEN_EXCEL,
+        ]);
+
+        Http::fake(['*articulos.php' => Http::response($this->respuesta([
+            $this->articulo(['codigo_proveedor' => 'PRO1']),
+        ]))]);
+
+        $resultado = $this->sincronizar();
+
+        $this->assertSame($correcto->id, Articulo::first()->proveedor_id);
+        $this->assertSame(1, $resultado['proveedores_vinculados']);
     }
 }

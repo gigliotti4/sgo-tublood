@@ -16,7 +16,7 @@ import type { PaginatedData, Venta } from '@/types'
 
 const props = defineProps<{
     ventas: PaginatedData<Venta>
-    filters: { search: string; desde: string; hasta: string; vendedor: string }
+    filters: { search: string; desde: string; hasta: string; vendedor: string; lote: string }
     vendedores: string[]
     /** El backend ya sacó los importes de las props si es false: acá solo se ocultan las columnas. */
     puedeVerMontos: boolean
@@ -31,9 +31,11 @@ const filtros = reactive({
     desde: props.filters.desde ?? '',
     hasta: props.filters.hasta ?? '',
     vendedor: props.filters.vendedor ?? '',
+    lote: props.filters.lote ?? '',
 })
 
 let debounce: ReturnType<typeof setTimeout>
+let debounceLote: ReturnType<typeof setTimeout>
 
 const recargar = () => {
     router.get(route('ventas.index'), { search: search.value, ...filtros }, {
@@ -50,13 +52,21 @@ watch(search, () => {
     debounce = setTimeout(recargar, 350)
 })
 
-watch(filtros, recargar)
+// El lote es texto libre, igual que el buscador: espera a que dejes de tipear.
+// Los demás filtros son un solo click y recargan al toque.
+watch(() => filtros.lote, () => {
+    clearTimeout(debounceLote)
+    debounceLote = setTimeout(recargar, 350)
+})
+
+watch([() => filtros.desde, () => filtros.hasta, () => filtros.vendedor], recargar)
 
 const limpiar = () => {
     search.value = ''
     filtros.desde = ''
     filtros.hasta = ''
     filtros.vendedor = ''
+    filtros.lote = ''
 }
 
 const syncing = ref(false)
@@ -95,6 +105,19 @@ const formatCantidad = (v: string | null) => {
 
 /** El ERP usa 0 para "sin remito", no null. */
 const remito = (v: number | null) => (v ? String(v) : '—')
+
+/**
+ * El remito **con su serie** (`VR8-8500`).
+ *
+ * ⚠️ El número solo no identifica un remito: 7.395 de 25.320 números (29%)
+ * están repetidos entre series. La serie sale del movimiento del kardex, así
+ * que solo la tenemos cuando el renglón resolvió a un lote; si no, se cae al
+ * número pelado que ya traía `ventas`.
+ */
+const remitoDe = (venta: Venta) => {
+    const conSerie = venta.lotes?.find(l => l.remito)?.remito
+    return conSerie ?? remito(venta.remito_nro)
+}
 </script>
 
 <template>
@@ -131,7 +154,7 @@ const remito = (v: number | null) => (v ? String(v) : '—')
             </div>
 
             <!-- Filtros -->
-            <div class="grid grid-cols-1 gap-4 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03] sm:grid-cols-2 lg:grid-cols-5">
+            <div class="grid grid-cols-1 gap-4 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03] sm:grid-cols-2 lg:grid-cols-6">
                 <div class="lg:col-span-2">
                     <Input
                         v-model="search"
@@ -153,6 +176,13 @@ const remito = (v: number | null) => (v ? String(v) : '—')
                     <option value="">Todos</option>
                     <option v-for="v in vendedores" :key="v" :value="v">{{ v }}</option>
                 </Select>
+                <Input
+                    v-model="filtros.lote"
+                    type="text"
+                    label="Lote"
+                    placeholder="Ej. 160224"
+                    hint="Qué remitos y clientes recibieron esa partida."
+                />
             </div>
 
             <!-- Tabla -->
@@ -166,6 +196,7 @@ const remito = (v: number | null) => (v ? String(v) : '—')
                                 <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Remito</th>
                                 <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Cliente</th>
                                 <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Artículo</th>
+                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Lote</th>
                                 <th class="px-4 py-3 text-right text-theme-xs font-medium text-gray-500 dark:text-gray-400">Cant.</th>
                                 <th v-if="puedeVerMontos" class="px-4 py-3 text-right text-theme-xs font-medium text-gray-500 dark:text-gray-400">Subtotal</th>
                                 <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Vendedor</th>
@@ -173,8 +204,8 @@ const remito = (v: number | null) => (v ? String(v) : '—')
                         </thead>
                         <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
                             <tr v-if="ventas.data.length === 0">
-                                <td :colspan="puedeVerMontos ? 8 : 7" class="px-4 py-12 text-center text-sm text-gray-400">
-                                    <template v-if="search || filtros.desde || filtros.hasta || filtros.vendedor">
+                                <td :colspan="puedeVerMontos ? 9 : 8" class="px-4 py-12 text-center text-sm text-gray-400">
+                                    <template v-if="search || filtros.desde || filtros.hasta || filtros.vendedor || filtros.lote">
                                         No se encontraron ventas con esos filtros.
                                         <span class="mt-1 block text-theme-xs">
                                             Para cruzar cliente y artículo, combinalos con un guion:
@@ -198,7 +229,8 @@ const remito = (v: number | null) => (v ? String(v) : '—')
                                         {{ venta.grupo_compro_descrip }}
                                     </span>
                                 </td>
-                                <td class="px-4 py-3.5 font-mono text-theme-xs text-gray-500 dark:text-gray-400">{{ remito(venta.remito_nro) }}</td>
+                                <!-- Con la serie: el número pelado es ambiguo, el 29% se repite entre series. -->
+                                <td class="px-4 py-3.5 font-mono text-theme-xs text-gray-500 dark:text-gray-400">{{ remitoDe(venta) }}</td>
                                 <td class="max-w-52 px-4 py-3.5 text-theme-sm text-gray-800 dark:text-white/90">
                                     <span class="block truncate">{{ venta.razon_social ?? '—' }}</span>
                                     <span class="block font-mono text-theme-xs font-normal text-gray-400">N° {{ venta.cliente ?? '—' }}</span>
@@ -206,6 +238,28 @@ const remito = (v: number | null) => (v ? String(v) : '—')
                                 <td class="max-w-60 px-4 py-3.5 text-theme-xs text-gray-600 dark:text-gray-300">
                                     <span class="block truncate">{{ venta.descrip_arti ?? '—' }}</span>
                                     <span class="block font-mono text-theme-xs text-gray-400">{{ venta.articulo ?? '—' }}</span>
+                                </td>
+                                <td class="px-4 py-3.5 text-theme-xs">
+                                    <!--
+                                        El 11% de los renglones no tiene lote: son artículos sin
+                                        trazabilidad (servicios, ajustes de cambio). Es un resultado
+                                        normal, no un dato faltante, por eso va como guion y no como
+                                        advertencia.
+                                    -->
+                                    <span v-if="!venta.lotes?.length" class="text-gray-400">—</span>
+                                    <template v-else>
+                                        <span
+                                            v-for="l in venta.lotes"
+                                            :key="l.id"
+                                            class="block font-mono text-gray-600 dark:text-gray-300"
+                                        >
+                                            {{ l.codigo_partida }}
+                                            <!-- Solo cuando salió partido: si es uno solo, la cantidad ya está en su columna. -->
+                                            <span v-if="(venta.lotes?.length ?? 0) > 1" class="font-sans text-gray-400">
+                                                ×{{ formatCantidad(l.cantidad) }}
+                                            </span>
+                                        </span>
+                                    </template>
                                 </td>
                                 <td class="whitespace-nowrap px-4 py-3.5 text-right text-theme-xs text-gray-600 dark:text-gray-300">{{ formatCantidad(venta.cantidad) }}</td>
                                 <td v-if="puedeVerMontos" class="whitespace-nowrap px-4 py-3.5 text-right text-theme-xs text-gray-800 dark:text-white/90">{{ formatMoneda(venta.sub_total) }}</td>
@@ -225,7 +279,14 @@ const remito = (v: number | null) => (v ? String(v) : '—')
                         <template #body>
                             <DataRow label="Artículo">{{ venta.descrip_arti ?? '—' }}</DataRow>
                             <DataRow label="Código">{{ venta.articulo ?? '—' }}</DataRow>
-                            <DataRow label="Remito">{{ remito(venta.remito_nro) }}</DataRow>
+                            <DataRow label="Remito">{{ remitoDe(venta) }}</DataRow>
+                            <DataRow label="Lote">
+                                <span v-if="!venta.lotes?.length">—</span>
+                                <span v-for="l in venta.lotes" :key="l.id" class="block font-mono">
+                                    {{ l.codigo_partida }}
+                                    <span v-if="(venta.lotes?.length ?? 0) > 1">×{{ formatCantidad(l.cantidad) }}</span>
+                                </span>
+                            </DataRow>
                             <DataRow label="Cantidad">{{ formatCantidad(venta.cantidad) }}</DataRow>
                             <DataRow v-if="puedeVerMontos" label="Subtotal">{{ formatMoneda(venta.sub_total) }}</DataRow>
                             <DataRow label="Vendedor">{{ venta.vendedor ?? '—' }}</DataRow>
@@ -245,7 +306,7 @@ const remito = (v: number | null) => (v ? String(v) : '—')
                     <span class="flex items-center gap-3">
                         {{ ventas.total }} renglón{{ ventas.total !== 1 ? 'es' : '' }}
                         <button
-                            v-if="search || filtros.desde || filtros.hasta || filtros.vendedor"
+                            v-if="search || filtros.desde || filtros.hasta || filtros.vendedor || filtros.lote"
                             type="button"
                             class="cursor-pointer text-theme-xs text-brand-500 hover:underline dark:text-brand-300"
                             @click="limpiar"

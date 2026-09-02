@@ -128,10 +128,23 @@ class ArticuloImportService
                 'link_registro' => $indices['link_registro'] !== null
                     ? ($this->limpiar($fila[$indices['link_registro']] ?? null) ?? $articulo->link_registro)
                     : $articulo->link_registro,
-                'proveedor_id' => $indices['proveedor'] !== null
-                    ? ($this->proveedorId($fila[$indices['proveedor']] ?? null, $padron, $crearFaltantes) ?? $articulo->proveedor_id)
-                    : $articulo->proveedor_id,
             ]);
+
+            // El proveedor va aparte del update de arriba porque no siempre se
+            // puede escribir: si el artículo ya tiene un proveedor de una
+            // fuente con más autoridad (el ERP, o una corrección a mano), la
+            // planilla no lo pisa. Ver VinculacionProveedores::PRECEDENCIA.
+            if ($indices['proveedor'] !== null) {
+                $proveedorId = $this->proveedorId($fila[$indices['proveedor']] ?? null, $padron, $crearFaltantes);
+
+                if ($proveedorId !== null
+                    && VinculacionProveedores::puedePisar($articulo->proveedor_origen, VinculacionProveedores::ORIGEN_EXCEL)) {
+                    $articulo->update([
+                        'proveedor_id' => $proveedorId,
+                        'proveedor_origen' => VinculacionProveedores::ORIGEN_EXCEL,
+                    ]);
+                }
+            }
         }
 
         return [

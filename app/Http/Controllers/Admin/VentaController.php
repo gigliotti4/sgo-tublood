@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Jobs\SyncVentasJob;
 use App\Models\Venta;
+use App\Models\VentaPartida;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Response;
@@ -25,6 +26,7 @@ class VentaController extends Controller
         $desde = $request->string('desde')->trim()->value();
         $hasta = $request->string('hasta')->trim()->value();
         $vendedor = $request->string('vendedor')->trim()->value();
+        $lote = $request->string('lote')->trim()->value();
 
         // Los importes son de la Direccion: cualquiera con `ventas.view` puede
         // consultar qué se vendió, pero no por cuánta plata. Se decide acá y no
@@ -37,6 +39,15 @@ class VentaController extends Controller
             ->when($desde, fn ($q, $desde) => $q->whereDate('fecha', '>=', $desde))
             ->when($hasta, fn ($q, $hasta) => $q->whereDate('fecha', '<=', $hasta))
             ->when($vendedor, fn ($q, $vendedor) => $q->where('vendedor', $vendedor))
+            // Filtro propio y no parte de scopeBuscar(): ese scope cruza dos
+            // términos entre sí y meterle el lote enturbiaría esa semántica.
+            ->when($lote, fn ($q, $lote) => $q->whereExists(
+                fn ($sub) => $sub->selectRaw('1')
+                    ->from('venta_partidas as vp')
+                    ->whereColumn('vp.compro_nro', 'ventas.compro_nro')
+                    ->whereColumn('vp.codigo_articulo', 'ventas.articulo')
+                    ->where('vp.codigo_partida', 'like', '%'.mb_strtoupper($lote).'%')
+            ))
             ->orderByDesc('fecha')
             ->orderByDesc('id')
             ->paginate(50)
@@ -46,6 +57,11 @@ class VentaController extends Controller
             $ventas->through(fn (Venta $venta) => $venta->makeHidden(Venta::COLUMNAS_DE_IMPORTE));
         }
 
+        // Qué lote salió en cada renglón. Se resuelve acá y no con un eager
+        // load porque la clave es compuesta (`compro_nro` + `articulo`) — ver
+        // `VentaPartida::adjuntarAVentas()`. Una sola query para la página.
+        VentaPartida::adjuntarAVentas($ventas->getCollection());
+
         return inertia('Admin/Ventas/Index', [
             'ventas' => $ventas,
             'filters' => [
@@ -53,6 +69,7 @@ class VentaController extends Controller
                 'desde' => $desde,
                 'hasta' => $hasta,
                 'vendedor' => $vendedor,
+                'lote' => $lote,
             ],
             // Para el select de vendedores: son pocos y salen de los datos
             // mismos, así que no hace falta una tabla aparte.

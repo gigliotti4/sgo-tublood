@@ -18,19 +18,24 @@ import type { Articulo, PaginatedData } from '@/types'
 
 const props = defineProps<{
     articulos: PaginatedData<Articulo>
-    filters: { search: string; estado: string }
+    filters: { search: string; estado: string; proveedor: string }
     lastSync: string | null
     total: number
     totalInactivos: number
+    /** Cuántos artículos siguen sin proveedor, para seguir el avance de la carga en RP. */
+    totalSinProveedor: number
+    /** Valores de `codigo_proveedor` que el ERP tiene cargados pero no sirven. */
+    codigosInvalidos: { codigo_proveedor: string; articulos: number; motivo: string }[]
 }>()
 
 const { hasPermission } = usePermissions()
 
 const search = ref(props.filters.search ?? '')
 const estado = ref(props.filters.estado ?? '')
+const proveedor = ref(props.filters.proveedor ?? '')
 
 const recargar = () => {
-    router.get(route('articulos.index'), { search: search.value, estado: estado.value }, {
+    router.get(route('articulos.index'), { search: search.value, estado: estado.value, proveedor: proveedor.value }, {
         preserveState: true,
         preserveScroll: true,
         replace: true,
@@ -45,12 +50,21 @@ watch(search, () => {
     debounce = setTimeout(recargar, 350)
 })
 
-watch(estado, recargar)
+watch([estado, proveedor], recargar)
 
 const urlExportar = computed(() => route('articulos.export', {
     search: search.value || undefined,
     estado: estado.value || undefined,
+    proveedor: proveedor.value || undefined,
 }))
+
+// El reporte de códigos mal cargados se abre a pedido: es para mandarle a RP,
+// no algo que haga falta ver todos los días.
+const verCodigosInvalidos = ref(false)
+
+const articulosAfectados = computed(() =>
+    props.codigosInvalidos.reduce((total, c) => total + c.articulos, 0),
+)
 
 const syncing = ref(false)
 
@@ -112,6 +126,7 @@ const submitImport = () => {
                     <p class="mt-0.5 text-theme-sm text-gray-500 dark:text-gray-400">
                         Última sincronización: {{ formatDate(lastSync) }}
                         <span v-if="totalInactivos > 0">· {{ totalInactivos }} discontinuado{{ totalInactivos !== 1 ? 's' : '' }}</span>
+                        <span v-if="totalSinProveedor > 0">· {{ totalSinProveedor }} sin proveedor</span>
                     </p>
                 </div>
 
@@ -159,6 +174,39 @@ const submitImport = () => {
                         <option value="inactivos">Discontinuados</option>
                     </Select>
                 </div>
+                <div class="w-52">
+                    <Select v-model="proveedor">
+                        <option value="">Con y sin proveedor</option>
+                        <option value="sin">Sin proveedor</option>
+                        <option value="con">Con proveedor</option>
+                    </Select>
+                </div>
+            </div>
+
+            <!--
+                Aviso de códigos mal cargados en RP. No es un error del sistema:
+                es un dato sucio del ERP (costos tipeados en el campo de
+                proveedor) que hay que pedirle a RP que limpie, y por eso el
+                bloque existe — para poder mandarles la lista concreta.
+            -->
+            <div
+                v-if="codigosInvalidos.length"
+                class="flex flex-col gap-3 rounded-2xl border border-warning-200 bg-warning-50 p-4 dark:border-warning-500/30 dark:bg-warning-500/10 sm:flex-row sm:items-center sm:justify-between"
+            >
+                <p class="text-theme-sm text-warning-700 dark:text-warning-400">
+                    <strong>{{ codigosInvalidos.length }}</strong>
+                    valor{{ codigosInvalidos.length !== 1 ? 'es' : '' }} de código de proveedor
+                    en RP no sirve{{ codigosInvalidos.length !== 1 ? 'n' : '' }} para vincular,
+                    y afecta{{ articulosAfectados !== 1 ? 'n' : '' }} a {{ articulosAfectados }}
+                    artículo{{ articulosAfectados !== 1 ? 's' : '' }}.
+                </p>
+                <button
+                    type="button"
+                    class="shrink-0 cursor-pointer text-theme-xs font-medium text-warning-700 underline dark:text-warning-400"
+                    @click="verCodigosInvalidos = true"
+                >
+                    Ver la lista
+                </button>
             </div>
 
             <!-- Tabla -->
@@ -326,5 +374,42 @@ const submitImport = () => {
                 </div>
             </form>
         </Modal>
+
+        <Modal :show="verCodigosInvalidos" size="lg" @close="verCodigosInvalidos = false">
+            <div class="p-6">
+                <h2 class="text-lg font-semibold text-gray-800 dark:text-white/90">
+                    Códigos de proveedor mal cargados en RP
+                </h2>
+                <p class="mt-1 text-theme-sm text-gray-500 dark:text-gray-400">
+                    Estos valores están en el campo <span class="font-mono">codigo_proveedor</span>
+                    del ERP pero no son un número de proveedor del padrón, así que no vinculan nada.
+                    La mayoría parecen costos tipeados en el campo equivocado.
+                </p>
+
+                <div class="mt-4 max-h-96 overflow-y-auto rounded-xl border border-gray-200 dark:border-gray-800">
+                    <table class="w-full text-theme-xs">
+                        <thead class="sticky top-0 bg-gray-50 dark:bg-gray-900">
+                            <tr>
+                                <th class="px-4 py-2.5 text-left font-medium text-gray-500 dark:text-gray-400">Valor cargado</th>
+                                <th class="px-4 py-2.5 text-left font-medium text-gray-500 dark:text-gray-400">Problema</th>
+                                <th class="px-4 py-2.5 text-right font-medium text-gray-500 dark:text-gray-400">Artículos</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+                            <tr v-for="c in codigosInvalidos" :key="c.codigo_proveedor">
+                                <td class="px-4 py-2 font-mono text-gray-800 dark:text-white/90">{{ c.codigo_proveedor }}</td>
+                                <td class="px-4 py-2 text-gray-500 dark:text-gray-400">{{ c.motivo }}</td>
+                                <td class="px-4 py-2 text-right text-gray-500 dark:text-gray-400">{{ c.articulos }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="mt-5 flex justify-end">
+                    <Button variant="outline" @click="verCodigosInvalidos = false">Cerrar</Button>
+                </div>
+            </div>
+        </Modal>
+
     </AppLayout>
 </template>

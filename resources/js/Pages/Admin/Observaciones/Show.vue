@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { Head, Link } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import AdjuntosObservacion from '@/Components/AdjuntosObservacion.vue'
@@ -7,6 +8,7 @@ import Badge from '@/Components/Badge.vue'
 import Icon from '@/Components/Icon.vue'
 import type { Observacion } from '@/types'
 import { proveedorDeProducto } from '@/lib/productos'
+import { partidaDeProducto, vencimientoDiscrepa } from '@/lib/partidas'
 
 const props = defineProps<{
     observacion: Observacion
@@ -43,6 +45,14 @@ const formatFecha = (d: string | null) =>
 // El cliente ingresó un N° que no matcheó ningún cliente cargado (dato para revisar).
 const clienteNoEncontrado =
     !props.observacion.cliente && !!props.observacion.contacto_numero_cliente
+
+/**
+ * Productos con lote declarado: los únicos que se pueden rastrear contra el
+ * padrón de partidas. Si ninguno lo trae, el bloque no se muestra.
+ */
+const productosConLote = computed(() =>
+    props.observacion.productos.filter(p => p.lote?.trim()),
+)
 
 /** Las claves del bloque JSON vienen en snake_case desde config/incidencias.php. */
 const humanizar = (clave: string) =>
@@ -179,6 +189,61 @@ const humanizar = (clave: string) =>
                                     <td class="py-2 pr-4">{{ formatFecha(p.fecha_vencimiento) }}</td>
                                     <td class="py-2 pr-4">{{ p.numero_remito ?? '—' }}</td>
                                     <td class="py-2 capitalize">{{ p.tipo_comprobante ?? '—' }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!--
+                    Trazabilidad contra el padrón de partidas (espejo de COMPRO_PARTIDAS
+                    del ERP). Va aparte y no como columnas de la tabla de arriba porque
+                    son dos fuentes distintas: arriba está lo que declaró el cliente,
+                    acá lo que sabe el ERP de ese lote. Verlas mezcladas escondía
+                    justamente la discrepancia, que es el dato que importa.
+                -->
+                <div v-if="productosConLote.length" class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
+                    <p class="mb-1 text-theme-xs font-medium uppercase tracking-wide text-gray-400">
+                        Trazabilidad de partida
+                    </p>
+                    <p class="mb-3 text-theme-xs text-gray-400">
+                        Lo que el padrón del ERP sabe de los lotes declarados.
+                    </p>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-theme-xs">
+                            <thead>
+                                <tr class="text-left text-gray-400">
+                                    <th class="py-1.5 pr-4 font-medium">Lote declarado</th>
+                                    <th class="py-1.5 pr-4 font-medium">Partida</th>
+                                    <th class="py-1.5 pr-4 font-medium">Artículo del padrón</th>
+                                    <th class="py-1.5 pr-4 font-medium">Proveedor de la partida</th>
+                                    <th class="py-1.5 pr-4 font-medium">Vence (padrón)</th>
+                                    <th class="py-1.5 pr-4 font-medium">Ubicación</th>
+                                    <th class="py-1.5 font-medium">Último movimiento</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+                                <tr v-for="p in productosConLote" :key="p.id" class="text-gray-600 dark:text-gray-300">
+                                    <td class="py-2 pr-4">{{ p.lote }}</td>
+                                    <td class="py-2 pr-4">
+                                        <span :class="partidaDeProducto(p).atribuida ? '' : 'italic text-gray-400'">
+                                            {{ partidaDeProducto(p).texto }}
+                                        </span>
+                                    </td>
+                                    <td class="py-2 pr-4">{{ p.partida?.articulo?.descripcion ?? '—' }}</td>
+                                    <td class="py-2 pr-4">{{ p.partida?.proveedor?.razon_social ?? '—' }}</td>
+                                    <td class="py-2 pr-4">
+                                        <span v-if="p.partida?.fecha_vencimiento" class="inline-flex items-center gap-1.5">
+                                            {{ formatFecha(p.partida.fecha_vencimiento) }}
+                                            <!-- El cliente declaró otro vencimiento: uno de los dos está mal. -->
+                                            <Badge v-if="vencimientoDiscrepa(p)" variant="amber">
+                                                ≠ declarado
+                                            </Badge>
+                                        </span>
+                                        <span v-else>—</span>
+                                    </td>
+                                    <td class="py-2 pr-4">{{ p.partida?.ubicacion ?? '—' }}</td>
+                                    <td class="py-2">{{ formatFecha(p.partida?.ultimo_movimiento_at ?? null) }}</td>
                                 </tr>
                             </tbody>
                         </table>

@@ -24,6 +24,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'articulos.view', 'articulos.edit', 'articulos.sync', 'articulos.import',
             'proveedores.view', 'proveedores.edit', 'proveedores.import', 'proveedores.sync',
             'ventas.view', 'ventas.sync', 'ventas.montos',
+            'partidas.view', 'partidas.sync',
             'configuracion.view', 'configuracion.edit',
         ];
 
@@ -50,13 +51,14 @@ class RolesAndPermissionsSeeder extends Seeder
             'articulos.view', 'articulos.edit', 'articulos.sync', 'articulos.import',
             'proveedores.view', 'proveedores.edit', 'proveedores.import', 'proveedores.sync',
             'ventas.view', 'ventas.sync',
+            'partidas.view', 'partidas.sync',
             'configuracion.view', 'configuracion.edit',
         ]);
 
         $viewer = Role::firstOrCreate(['name' => 'viewer']);
         $viewer->syncPermissions([
             'users.view', 'roles.view', 'clientes.view', 'observaciones.view',
-            'articulos.view', 'proveedores.view', 'ventas.view',
+            'articulos.view', 'proveedores.view', 'ventas.view', 'partidas.view',
         ]);
 
         $usuarioInterno = Role::firstOrCreate(['name' => 'usuario_interno']);
@@ -66,6 +68,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'articulos.view', 'articulos.edit', 'articulos.sync', 'articulos.import',
             'proveedores.view', 'proveedores.edit', 'proveedores.import', 'proveedores.sync',
             'ventas.view', 'ventas.sync',
+            'partidas.view', 'partidas.sync',
         ]);
 
         $soloLectura = Role::firstOrCreate(['name' => 'solo_lectura']);

@@ -23,5 +23,12 @@ $erpConfigurado = fn () => filled(config('database.connections.erp.host'));
 
 Schedule::command('proveedores:sync')->hourly()->when($erpConfigurado);
 Schedule::command('ventas:sync')->dailyAt('04:00')->when($erpConfigurado);
+// Los lotes despachados salen del mismo kardex que las partidas, pero conservan
+// el comprobante. Va después de ventas porque se consulta joineado con ellas.
+Schedule::command('venta-partidas:sync')->dailyAt('04:15')->when($erpConfigurado);
+// Las partidas salen de agregar el kardex de COMPRO_PARTIDAS: cambia cada vez
+// que se mueve stock, pero sirven para rastrear el lote de un reclamo, que se
+// carga con horas o días de diferencia. Una vez por día alcanza.
+Schedule::command('partidas:sync')->dailyAt('04:30')->when($erpConfigurado);
 
 Schedule::command('observaciones:alertas')->hourly();

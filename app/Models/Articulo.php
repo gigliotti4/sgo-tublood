@@ -17,12 +17,15 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * `ArticuloSyncService`.
  *
  * `proveedor_id` es un caso mixto: sigue siendo propio del panel (el
- * `upsert()` tampoco lo toca), pero después de sincronizar, un paso aparte
- * intenta **completarlo solo si está vacío** cuando `codigo_proveedor`
- * coincide con un `proveedores.numero` real — nunca pisa una asignación ya
- * hecha a mano. `codigo_proveedor` (string suelto del ERP) casi nunca es un
- * número de proveedor válido, pero cuando sí lo es, el dato es correcto. Ver
- * `ArticuloSyncService::sync()`.
+ * `upsert()` tampoco lo toca), pero lo escriben tres fuentes automáticas —
+ * el feed de RP, el import de Excel y el kardex de compras — más la edición
+ * manual. `proveedor_origen` guarda cuál de las cuatro lo puso, y
+ * `App\Services\VinculacionProveedores` decide cuál puede pisar a cuál: nada
+ * automático pisa una corrección hecha a mano.
+ *
+ * ⚠️ `proveedor_origen` **no es** la columna "Origen" del export, que dice si
+ * el artículo vino de RP o lo creó el Excel de Calidad. Son dos preguntas
+ * distintas sobre la misma fila.
  *
  * `activo` también lo pisa la sync, aunque no viaje en el body de RP: se
  * deriva de si el artículo vino en el feed de la última corrida. Ver
@@ -48,6 +51,7 @@ class Articulo extends Model
         'stock_disponible',
         'codigo_proveedor',
         'proveedor_id',
+        'proveedor_origen',
         'modificado_en',
         'synced_at',
         'activo',

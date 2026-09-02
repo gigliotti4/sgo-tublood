@@ -7,6 +7,7 @@ use App\Jobs\SyncArticulosJob;
 use App\Models\Articulo;
 use App\Services\ArticuloExportService;
 use App\Services\ArticuloImportService;
+use App\Services\VinculacionProveedores;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -22,6 +23,8 @@ class ArticuloController extends Controller
         $search = $request->string('search')->trim()->value();
         $estado = $request->string('estado')->trim()->value();
 
+        $proveedor = $request->string('proveedor')->trim()->value();
+
         $articulos = $this->filtrados($request)
             ->orderBy('descripcion')
             ->paginate(50)
@@ -31,11 +34,15 @@ class ArticuloController extends Controller
 
         return inertia('Admin/Articulos/Index', [
             'articulos' => $articulos,
-            'filters' => ['search' => $search, 'estado' => $estado],
+            'filters' => ['search' => $search, 'estado' => $estado, 'proveedor' => $proveedor],
             'lastSync' => $lastSync,
             // Sin filtrar: el paginador ya trae el total de la búsqueda vigente.
             'total' => Articulo::count(),
             'totalInactivos' => Articulo::where('activo', false)->count(),
+            // Para seguir el avance de la carga de `codigo_proveedor` en RP.
+            'totalSinProveedor' => Articulo::whereNull('proveedor_id')->count(),
+            // La lista concreta de valores mal cargados, para mandarle a RP.
+            'codigosInvalidos' => VinculacionProveedores::codigosInvalidos(),
         ]);
     }
 
@@ -61,13 +68,20 @@ class ArticuloController extends Controller
     {
         $search = $request->string('search')->trim()->value();
         $estado = $request->string('estado')->trim()->value();
+        $proveedor = $request->string('proveedor')->trim()->value();
 
         return Articulo::query()
             ->with('proveedor:id,numero,razon_social')
             ->when($search, fn ($q) => $q->buscar($search))
             // Encadenado después del buscador: buscar "AGUJA" dentro de los
             // discontinuados tiene que funcionar.
-            ->when($estado, fn ($q) => $q->where('activo', $estado === 'activos'));
+            ->when($estado, fn ($q) => $q->where('activo', $estado === 'activos'))
+            // Encadenado igual que `estado`: buscar dentro de los que no tienen
+            // proveedor tiene que funcionar. Como vive acá, el export hereda el
+            // filtro solo — bajar la lista de pendientes sale gratis.
+            ->when($proveedor, fn ($q) => $proveedor === 'sin'
+                ? $q->whereNull('proveedor_id')
+                : $q->whereNotNull('proveedor_id'));
     }
 
     public function sync(): RedirectResponse
@@ -101,6 +115,14 @@ class ArticuloController extends Controller
             'link_registro' => ['nullable', 'url', 'max:500'],
             'proveedor_id' => ['nullable', 'integer', 'exists:proveedores,id'],
         ]);
+
+        // Marcar el origen solo si el proveedor cambió de verdad: guardar la
+        // ficha sin tocarlo no debería blindarlo contra el dato del ERP.
+        if (array_key_exists('proveedor_id', $data) && $data['proveedor_id'] !== $articulo->proveedor_id) {
+            $data['proveedor_origen'] = $data['proveedor_id'] === null
+                ? null
+                : VinculacionProveedores::ORIGEN_MANUAL;
+        }
 
         $articulo->update($data);
 

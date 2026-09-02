@@ -8,6 +8,7 @@ use App\Models\Observacion;
 use App\Models\ObservationAttachment;
 use App\Models\ObservationHistory;
 use App\Models\ObservationProduct;
+use App\Models\Partida;
 use App\Models\Sector;
 use App\Models\User;
 use App\Notifications\ObservacionSeguimientoNotification;
@@ -191,15 +192,21 @@ class ObservacionController extends Controller
     {
         $this->authorize('observaciones.view');
 
+        $observacion->load([
+            'responsable:id,name,apellido',
+            'sector:id,nombre,dias_gestion',
+            'cliente:id,numero,razon_social,mail,telefono',
+            ...self::EAGER_PRODUCTOS,
+            'baja.user:id,name,apellido',
+            ...$this->eagerLoadsDeGestion(),
+        ]);
+
+        // Se resuelve acá y no con un eager load porque la clave es compuesta
+        // (`codigo` + `lote`) — ver `Partida::adjuntarAProductos()`.
+        Partida::adjuntarAProductos($observacion->productos);
+
         return inertia('Admin/Observaciones/Show', [
-            'observacion' => $observacion->load([
-                'responsable:id,name,apellido',
-                'sector:id,nombre,dias_gestion',
-                'cliente:id,numero,razon_social,mail,telefono',
-                ...self::EAGER_PRODUCTOS,
-                'baja.user:id,name,apellido',
-                ...$this->eagerLoadsDeGestion(),
-            ]),
+            'observacion' => $observacion,
             'presentaciones' => ObservationProduct::PRESENTACIONES,
             'tipoLabels' => TaxonomiaIncidencias::etiquetasTipos(),
             'prioridades' => config('incidencias.prioridades'),

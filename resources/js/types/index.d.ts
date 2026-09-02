@@ -156,6 +156,13 @@ export interface Venta {
     transportista: string | null
     condi_venta: string | null
     synced_at: string | null
+    /**
+     * Lotes despachados en este renglón. Los resuelve el backend en vivo contra
+     * `venta_partidas` (clave compuesta `compro_nro` + `articulo`).
+     * Vacío es normal: el 11% de los renglones son artículos sin trazabilidad
+     * de lote (servicios, ajustes de cambio).
+     */
+    lotes?: VentaPartida[]
 }
 
 export interface ClienteVencimiento {
@@ -358,6 +365,80 @@ export interface ObservationProduct {
         /** De quién es el producto. Sale del padrón en vivo, no de una copia. */
         proveedor?: { id: number; razon_social: string } | null
     } | null
+    /**
+     * La partida del padrón que matchea el `lote` declarado, o `null` si no se
+     * pudo atribuir ninguna. La resuelve el backend en vivo contra `partidas`
+     * (clave compuesta `codigo` + `lote`), no es una copia guardada en la
+     * observación — ver `Partida::adjuntarAProductos()`.
+     */
+    partida?: PartidaDeProducto | null
+}
+
+/** Lote despachado en un renglón de venta. */
+export interface VentaPartida {
+    id: number
+    compro_nro: string
+    codigo_articulo: string
+    codigo_partida: string
+    cantidad: string | null
+    remito_tipo: string | null
+    remito_numero: number | null
+    /** Derivado: el remito con su serie (`VR8-8500`). El número solo es ambiguo. */
+    remito: string | null
+    fecha: string | null
+}
+
+/**
+ * Un despacho en la ficha de una partida: el renglón de venta más los datos
+ * del cliente, que salen de `ventas` por LEFT JOIN.
+ */
+export interface DespachoPartida {
+    id: number
+    compro_nro: string
+    cantidad: string | null
+    remito_tipo: string | null
+    remito_numero: number | null
+    fecha: string | null
+    /** `null` en los despachos anteriores a la ventana que cubre `ventas`. */
+    cliente: number | null
+    razon_social: string | null
+    provincia: string | null
+    vendedor: string | null
+}
+
+/**
+ * Fila del listado de partidas. Es el mismo registro que `PartidaDeProducto`
+ * pero con el artículo y el proveedor siempre presentes como claves (aunque su
+ * valor sea `null`), porque el listado los eager-loadea de entrada.
+ */
+export interface Partida {
+    id: number
+    codigo_articulo: string
+    codigo_partida: string
+    fecha_vencimiento: string | null
+    ubicacion: string | null
+    ultimo_movimiento_at: string | null
+    proveedor_numero: string | null
+    synced_at: string | null
+    /** `null` si el código del ERP no está en el catálogo local de artículos. */
+    articulo: { codigo: string; descripcion: string } | null
+    /** `null` si ningún movimiento del kardex trae el proveedor cargado. */
+    proveedor: { id: number; numero: string | null; razon_social: string } | null
+}
+
+/** Lo que el padrón de partidas sabe del lote que declaró el cliente. */
+export interface PartidaDeProducto {
+    id: number
+    codigo_articulo: string
+    codigo_partida: string
+    /** Vencimiento según el ERP, que puede no coincidir con el que declaró el cliente. */
+    fecha_vencimiento: string | null
+    ubicacion: string | null
+    /** Fecha del último movimiento de la partida en el ERP. */
+    ultimo_movimiento_at: string | null
+    /** De quién se compró la partida. Sale del padrón de proveedores. */
+    proveedor?: { id: number; numero: string | null; razon_social: string } | null
+    articulo?: { codigo: string; descripcion: string } | null
 }
 
 export interface Observacion {

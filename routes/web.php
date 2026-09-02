@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\BitacoraController;
 use App\Http\Controllers\Admin\ClienteController;
 use App\Http\Controllers\Admin\ConfiguracionController;
 use App\Http\Controllers\Admin\ObservacionController as AdminObservacionController;
+use App\Http\Controllers\Admin\PartidaController;
 use App\Http\Controllers\Admin\ProveedorController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\SectorController;
@@ -158,6 +159,17 @@ Route::middleware(['auth'])->group(function () {
     });
     Route::middleware('can:ventas.sync')->group(function () {
         Route::post('/ventas/sync', [VentaController::class, 'sync'])->name('ventas.sync');
+    });
+
+    // Partidas (lotes). Espejo de solo lectura de COMPRO_PARTIDAS del ERP,
+    // agregado a una fila por (artículo, partida). Mismo contrato que Ventas:
+    // no hay alta, edición ni borrado, la tabla se reemplaza en cada sync.
+    Route::middleware('can:partidas.view')->group(function () {
+        Route::get('/partidas', [PartidaController::class, 'index'])->name('partidas.index');
+        Route::get('/partidas/{partida}', [PartidaController::class, 'show'])->name('partidas.show');
+    });
+    Route::middleware('can:partidas.sync')->group(function () {
+        Route::post('/partidas/sync', [PartidaController::class, 'sync'])->name('partidas.sync');
     });
 
     // Observaciones
