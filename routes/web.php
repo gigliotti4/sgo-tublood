@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\ArticuloController as AdminArticuloController;
 use App\Http\Controllers\Admin\BajaController;
 use App\Http\Controllers\Admin\BitacoraController;
 use App\Http\Controllers\Admin\ClienteController;
+use App\Http\Controllers\Admin\ComprasController;
 use App\Http\Controllers\Admin\ConfiguracionController;
 use App\Http\Controllers\Admin\ObservacionController as AdminObservacionController;
 use App\Http\Controllers\Admin\PartidaController;
@@ -170,6 +171,20 @@ Route::middleware(['auth'])->group(function () {
     });
     Route::middleware('can:partidas.sync')->group(function () {
         Route::post('/partidas/sync', [PartidaController::class, 'sync'])->name('partidas.sync');
+    });
+
+    // Compras. Tablero de reposición de stock: qué hay que comprar y cuánto.
+    // Es la única pantalla del panel que manda el dataset entero en las props
+    // (~185 KB gzip) en vez de paginar — los KPIs, el TOTAL y el Pareto se
+    // calculan sobre todo el conjunto filtrado. Ver ComprasController.
+    //
+    // La URL tiene que ser /compras a secas: AppLayout::isActive() compara el
+    // primer segmento del nombre de ruta contra la URL para marcar el menú.
+    Route::middleware('can:compras.view')->group(function () {
+        Route::get('/compras', [ComprasController::class, 'index'])->name('compras.index');
+    });
+    Route::middleware('can:compras.sync')->group(function () {
+        Route::post('/compras/sync', [ComprasController::class, 'sync'])->name('compras.sync');
     });
 
     // Observaciones

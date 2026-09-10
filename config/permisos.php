@@ -28,6 +28,7 @@ return [
         'articulos' => 'Artículos',
         'proveedores' => 'Proveedores',
         'ventas' => 'Ventas',
+        'compras' => 'Compras',
     ],
 
     'etiquetas' => [
@@ -73,6 +74,9 @@ return [
         'ventas.view' => ['grupo' => 'ventas', 'label' => 'Ver ventas'],
         'ventas.sync' => ['grupo' => 'ventas', 'label' => 'Sincronizar con RP Sistemas'],
         'ventas.montos' => ['grupo' => 'ventas', 'label' => 'Ver los importes de las ventas'],
+
+        'compras.view' => ['grupo' => 'compras', 'label' => 'Ver el tablero de reposición'],
+        'compras.sync' => ['grupo' => 'compras', 'label' => 'Sincronizar con RP Sistemas'],
     ],
 
 ];

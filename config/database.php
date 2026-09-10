@@ -152,6 +152,43 @@ return [
             'trust_server_certificate' => env('ERP_DB_TRUST_SERVER_CERTIFICATE', 'true'),
         ],
 
+        /*
+         * RP Sistemas (ERP) — segundo login, para el módulo Compras.
+         *
+         * ⚠️ Es el MISMO servidor y la MISMA base que `erp` de arriba: lo único
+         * distinto son las credenciales. Hay dos conexiones porque los dos
+         * usuarios que nos dio RP tienen permisos COMPLEMENTARIOS, no
+         * solapados — medido el 8/9/2026:
+         *
+         *   objeto                            api_lucas   powerbi_tublood
+         *   ARTICULOS                            ✗              ✓
+         *   COMPRO_PARTIDAS                      ✓              ✗
+         *   powerbi_ordenescompra_pend_vista     ✗              ✓
+         *   powerbi_pedidos_vista                ✗              ✓
+         *   powerbi_ventas_vista                 ✓              ✓
+         *   powerbi_proveedores_vista            ✓              ✓
+         *
+         * Por eso NO se puede unificar moviendo las credenciales: pisar
+         * `ERP_DB_*` con este usuario rompe `partidas:sync` y
+         * `venta-partidas:sync`, que leen el kardex `COMPRO_PARTIDAS`.
+         *
+         * Pendiente con RP: pedir un único usuario con los dos conjuntos de
+         * grants para poder colapsar las dos conexiones en una.
+         */
+        'erp_compras' => [
+            'driver' => 'sqlsrv',
+            'host' => env('ERP_COMPRAS_DB_HOST'),
+            'port' => env('ERP_COMPRAS_DB_PORT'),
+            'database' => env('ERP_COMPRAS_DB_DATABASE'),
+            'username' => env('ERP_COMPRAS_DB_USERNAME'),
+            'password' => env('ERP_COMPRAS_DB_PASSWORD'),
+            'charset' => 'utf8',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'encrypt' => env('ERP_COMPRAS_DB_ENCRYPT', 'yes'),
+            'trust_server_certificate' => env('ERP_COMPRAS_DB_TRUST_SERVER_CERTIFICATE', 'true'),
+        ],
+
     ],
 
     /*

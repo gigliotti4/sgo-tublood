@@ -31,4 +31,13 @@ Schedule::command('venta-partidas:sync')->dailyAt('04:15')->when($erpConfigurado
 // carga con horas o días de diferencia. Una vez por día alcanza.
 Schedule::command('partidas:sync')->dailyAt('04:30')->when($erpConfigurado);
 
+// Compras lee por un segundo login SQL (`erp_compras`), con otros permisos:
+// tiene el catálogo maestro y las vistas de compras, pero NO el kardex. Por eso
+// el guard mira su propio host y no el de `erp` — una puede estar configurada y
+// la otra no. Corre después de `ventas:sync` (04:00) para que el tablero abra
+// con las ventas del día ya cargadas.
+$comprasConfigurado = fn () => filled(config('database.connections.erp_compras.host'));
+
+Schedule::command('compras:sync')->dailyAt('05:00')->when($comprasConfigurado);
+
 Schedule::command('observaciones:alertas')->hourly();

@@ -514,3 +514,52 @@ export interface PaginatedData<T> {
     total: number
     links: { url: string | null; label: string; active: boolean }[]
 }
+
+/**
+ * Un artículo dentro de un grupo del tablero de reposición.
+ *
+ * ⚠️ Las claves son de una letra a propósito: el dataset son ~4.800 grupos con
+ * ~5.200 artículos y 25 meses cada uno, y viaja entero en las props. Con nombres
+ * largos el payload pasaría de ~1 MB a más de 2 MB. Ver ReposicionService.
+ */
+export interface ArticuloReposicion {
+    /** Código. */
+    c: string
+    /** Descripción. */
+    d: string
+    /** Activo: 1 / 0. */
+    a: 0 | 1
+    /** Unidades por envase. 1 = se cuenta de a uno (la pantalla muestra "–"). */
+    u: number
+    /** Categoría (código de AGRU_1, o SERVICIOS / SIN_CAT). */
+    k: string
+    /** Stock en envases, CRUDO del ERP: puede venir negativo. */
+    s: number
+    /** Reservado, en envases. */
+    r: number
+    /** OC pendiente, en envases. */
+    o: number
+    /** Unidades vendidas por mes. Ausente si el artículo nunca vendió. */
+    v?: number[]
+    /** Importe neto vendido por mes. Ausente si el artículo nunca vendió. */
+    m?: number[]
+}
+
+/** Producto unificado del tablero: uno o varios artículos con el mismo GTIN. */
+export interface GrupoReposicion {
+    /**
+     * Clave estable y única del grupo.
+     *
+     * ⚠️ El nombre no sirve como clave: 73 descripciones se repiten entre 166
+     * artículos distintos sin GTIN. Usar `id` en `:key` y en cualquier Set.
+     */
+    id: string
+    /** Nombre: el GTIN si unifica, la descripción del artículo si va solo. */
+    n: string
+    /** Categorías presentes en el grupo. Puede haber más de una. */
+    c: string[]
+    /** Envase común para mostrar. 0 = "varios" (los artículos difieren). */
+    u: number
+    /** Artículos que unifica. */
+    i: ArticuloReposicion[]
+}

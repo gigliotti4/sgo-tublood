@@ -191,6 +191,59 @@ Qué lote salió en cada renglón de venta. Sale del **mismo kardex** que `parti
 - El filtro por lote del listado de Ventas es **propio y no parte de `Venta::scopeBuscar()`**: ese scope cruza dos términos entre sí y meterle el lote enturbiaría esa semántica.
 - `venta-partidas:sync` (job + comando, con `--sync`), agendado `dailyAt('04:15')` — después de `ventas:sync` — con el mismo guard `->when($erpConfigurado)`. Son ~166.400 filas, refresh completo.
 
+### Compras — tablero de reposición de stock
+
+`/compras` responde una sola pregunta: **qué hay que comprar y cuánto**. Es un puerto del prototipo `docs/Dashboard_Compras_TUBLOOD_9.html` (un HTML autocontenido que Compras usaba a mano) al panel, con las mismas reglas de negocio. `docs/PROMPT_replicar_dashboard.md` es la especificación escrita; el pie del HTML tiene las fórmulas.
+
+⚠️ **Hay una SEGUNDA conexión al ERP, `erp_compras`, contra el mismo servidor y la misma base que `erp`.** No es duplicación: los dos usuarios que dio RP tienen permisos **complementarios, no solapados** (medido el 8/9/2026).
+
+| objeto | `api_lucas` (`erp`) | `powerbi_tublood` (`erp_compras`) |
+|---|---|---|
+| `ARTICULOS` | ✗ | ✓ |
+| `COMPRO_PARTIDAS` | ✓ | ✗ |
+| `powerbi_ordenescompra_pend_vista` | ✗ | ✓ |
+| `powerbi_pedidos_vista` | ✗ | ✓ |
+| `powerbi_ventas_vista`, `powerbi_proveedores_vista` | ✓ | ✓ |
+
+Mover las credenciales de una a la otra rompe `partidas:sync` y `venta-partidas:sync`, que leen el kardex. Pendiente con RP: pedir un único usuario con los dos conjuntos de grants. Por eso `routes/console.php` tiene un guard propio (`$comprasConfigurado`) que mira `connections.erp_compras.host` y no el de `erp`.
+
+**Tres tablas espejo, refresh completo** (`compras:sync`, job + comando con `--sync`, agendado `dailyAt('05:00')` — después de `ventas:sync` de las 04:00 para que el tablero abra con las ventas del día):
+
+- `compras_articulos` ← `ARTICULOS` (5.229 filas). ⚠️ Es una **tabla aparte de `articulos`, no un reemplazo**: `articulos` (734 filas) viene de la API HTTP y es el catálogo "vendible" que usan observaciones, el portal público y la vinculación de proveedores; Compras necesita el catálogo completo, discontinuados incluidos. El local es subconjunto exacto del ERP (734 de 734 matchean), así que unificarlas es posible más adelante — cambiaría el buscador del portal y los contadores del listado de Artículos.
+- `compras_ordenes_pendientes` ← `powerbi_ordenescompra_pend_vista`, **con `CANT_PEND > 0`**. ⚠️ La vista es histórica: 21.502 renglones de los cuales **solo 228 tienen saldo** (hay OC entregadas desde 2016). El filtro es la regla, no una optimización.
+- `compras_pedidos_pendientes` ← `powerbi_pedidos_vista`, con `cant_pend > 0` (35.643 de 122.752). ⚠️ **No** se filtra por la regla de reserva: ver abajo.
+
+Las **ventas salen de la tabla `ventas` que ya existe**, sin sync nueva.
+
+⚠️ **`ARTICULOS` es una tabla base del ERP, no una vista `powerbi_*`.** Mismo riesgo que `COMPRO_PARTIDAS`: la leemos porque tenemos SELECT, sin contrato. Si el sync se rompe de golpe, empezar por ahí.
+
+⚠️ **`compras_articulos.codigo` va con colación `utf8mb4_bin`** (solo en MySQL; SQLite ya compara binario y no conoce esa colación). `utf8mb4_unicode_ci` ignora acentos y colapsaría dos códigos que el ERP considera distintos, y la sync perdería artículos en silencio. Hoy pasa con `CODIGO` vs `CÓDIGO` — dos filas de encabezado de planilla que alguien importó al ERP.
+
+**El cálculo vive en el cliente.** `app/Services/Compras/ReposicionService.php` arma el dataset (unificación por GTIN, cruce con ventas/OC/reservas) y lo manda **entero** en las props: ~1 MB, ~185 KB gzip. `resources/js/lib/compras.ts` hace filtros, orden, Pareto y las fórmulas. Es la única pantalla del panel que no pagina en el servidor, y es a propósito: los KPIs y la fila de TOTAL se calculan sobre todo el conjunto filtrado y el Pareto se recalcula sobre ese mismo conjunto, así que el servidor recorrería los 4.800 grupos igual, con un roundtrip por cada click de ordenamiento. Por lo mismo **el export es CSV generado en el navegador** (`lib/comprasCsv.ts`) y no un `.xlsx` con PhpSpreadsheet como el resto: un export server-side obligaría a duplicar en PHP filtros, orden y fórmulas, que es donde se desincronizarían de lo que se ve.
+
+⚠️ **`deploy/nginx-sgo.conf` declara `gzip on` por esta pantalla.** Es la respuesta más pesada de la app por lejos (1,1 MB sin comprimir). Ubuntu ya trae gzip activo, pero que esta pantalla sea usable no puede depender de un default de la distro.
+
+El dataset usa **claves de una letra** (`n`, `c`, `u`, `i[]{c,d,a,u,k,s,r,o,v,m}`): con nombres largos el payload pasa de 1 MB a más de 2. Y ⚠️ **cada grupo lleva un `id` estable**, que es lo que va en `:key` y lo que indexa las filas desplegadas: **el nombre no sirve como clave**, hay 73 descripciones repetidas entre 166 artículos distintos sin GTIN, y usarlo hacía que desplegar un producto desplegara otro.
+
+**Las reglas de negocio, y por qué son así:**
+
+- **Se MULTIPLICA por el envase, nunca se divide.** El ERP cuenta en envases y `CODIGO_REFERENCIA` dice cuántas unidades trae cada uno; el tablero entero está en unidades. Vacío o 0 valen 1 y la pantalla muestra "–", no "1". ⚠️ **El envase es por ARTÍCULO, no por grupo**: un grupo puede mezclar un x500 con un x150 (hoy 8 grupos), cada uno convierte con el suyo y el grupo suma en unidades; la columna muestra "varios". RP está completando el dato — eran 13 artículos el 8/9/2026 y 33 el 10/9.
+- **La categoría también es por artículo** (`AGRU_1`): un grupo puede mezclar DISTRIBUCIÓN e IMPORTACIÓN (hoy 33), muestra las dos y aparece si **cualquiera** está filtrada.
+- **Unificación multimarca por GTIN.** ⚠️ `GTIN` **no es un código de barras**: es una clasificación de texto cargada a mano ("AGUJA 25/6 (23GX1)"), llena de comodines — "NO APLICA" (559), "N/A" (27), "0" (27), más typos. Se descartan **por patrón y no por lista fija** (`config('compras.gtin_comodin')`) porque van a aparecer typos nuevos, y el patrón se aplica al armar el dataset y no al sincronizar, así que corregirlo es editar config sin esperar la sync del día siguiente.
+- **Notas de crédito: ya vienen en negativo** del ERP (CEA/CEB/CA1/CNN/CEE/CNA) y se suman **tal cual**. Negarlas las pasa a positivo y suman ventas en vez de restarlas — ese error infló la facturación un 35% en el prototipo.
+- **Stock negativo = error del ERP** (hoy 15 artículos, el peor en −4.296.450). Viaja **crudo** desde el servidor y lo cuenta como 0 la pantalla, que además marca el producto con ⚠. Corregirlo en la sync escondería el error de carga. Sin esto, ordenar por "cantidad a comprar" llena el tope de basura.
+- **`SIN_STOCK = 'S'`** (41 artículos) van a una categoría propia SERVICIOS y quedan fuera del cálculo salvo que se los pida. Un grupo se excluye solo si **todos** sus artículos lo son.
+- **Cobertura: TRES estados, no dos.** Un producto sin ventas en el período **no es** un "NO cubre": es SIN VENTA y muestra "–", nunca 0. En el prototipo los "NO" bajaron de 342 a 166 reales al separarlos.
+- **Pareto ABC sobre `sub_total`** (el total de línea, no el precio unitario), recalculado **sobre el conjunto ya filtrado**: si se filtra una categoría, da el 80/20 de esa categoría. El producto que **cruza** el 80% va en A. Sin facturación queda sin clase y afuera de los dos filtros.
+
+⚠️ **`Reservado` NO está conciliado con el ERP.** La regla (`reser='S'` + depósito "Deposito unico" + `cant_pend>0`) vive en `config('compras.reserva')` y no hardcodeada justamente por eso: el campo que decide la reserva **no está en la vista**, las líneas que el ERP cuenta y las que no son idénticas en `reser`, depósito y `estado`. Por eso `compras_pedidos_pendientes` guarda **todos** los renglones con saldo y no solo los reservados — filtrar en la sync congelaría la regla. Pista medida: de las 511 líneas que hoy cuentan, **160 en estado `ADMINISTRACION` explican 122.928 de las 170.990 unidades (72%)**; si al conciliar sobra ese volumen, agregarlo a `estados_excluidos`. La pantalla lo avisa mientras `estados_excluidos` esté vacío.
+
+⚠️ **`UM_COMPRA` es inservible**: 64% NULL y el resto es ruido (`1`, `36,`, `5/1`, `GRS`). Se guarda para poder auditarlo, pero el cálculo **asume que `cant_pend` viene en la misma unidad que el stock**. Es el supuesto más frágil del módulo y el primero a validar contra la pantalla del ERP.
+
+**Equivalencia con el prototipo**: `lib/compras.ts` se verificó contra la implementación original del HTML corriendo las dos sobre el mismo dataset — 18 escenarios de filtros, 14 campos por fila y 6 criterios de orden, sin una sola diferencia. Cualquier cambio en las fórmulas debería repetir esa comparación antes que confiar en los tests unitarios.
+
+**Todavía pendiente**: conciliar `Reservado` contra el ERP; validar 4-5 artículos concretos (stock, reservado, OC y ventas del mes) contra la pantalla del ERP —así aparecieron todos los errores del prototipo—; y las mejoras que hoy no están: stock de seguridad estadístico con el desvío de la demanda, lead time por proveedor, fecha proyectada de quiebre y comparación interanual. El objetivo de cobertura es **fijo para todos los productos**, que es la simplificación más fuerte que quedó del prototipo.
+
 ### Productos por observación (Falla de Producto)
 - Una observación de tipo `falla_producto` puede tener **varios productos**, cada uno con su propio `producto`, `cantidad_afectada`, `lote`, `fecha_vencimiento`, `numero_remito` y `tipo_comprobante` — tabla hija `observation_products` / modelo `ObservationProduct` / relación `Observacion::productos()`. Campos que siguen siendo **únicos por observación** (no por producto): `institucion`, `provincia`, `equipamiento`, `ejecutivo_cuenta`.
 - El type `disconformidad_servicio` no usa productos.
@@ -271,7 +324,7 @@ Los dos últimos salen de `config('incidencias.roles_por_tipo')` — son el repa
 Nota: tener el permiso `observaciones.edit` (roles `admin`, `usuario_interno`, `garantia_calidad`, `calidad_producto`, `calidad_servicio`) ya **no** alcanza para editar cualquier observación — ver autorización por objeto (`ObservacionPolicy`) más arriba.
 
 ### Permisos existentes (notación de punto)
-`users.view`, `users.create`, `users.edit`, `users.delete`, `roles.view`, `roles.create`, `roles.edit`, `roles.delete`, `permissions.view`, `clientes.view`, `clientes.sync`, `clientes.edit`, `clientes.vencimientos`, `clientes.import`, `observaciones.view`, `observaciones.edit`, `observaciones.delete`, `bitacora.view`, `articulos.view`, `articulos.edit`, `articulos.sync`, `articulos.import`, `proveedores.view`, `proveedores.edit`, `proveedores.import`, `partidas.view`, `partidas.sync`
+`users.view`, `users.create`, `users.edit`, `users.delete`, `roles.view`, `roles.create`, `roles.edit`, `roles.delete`, `permissions.view`, `clientes.view`, `clientes.sync`, `clientes.edit`, `clientes.vencimientos`, `clientes.import`, `observaciones.view`, `observaciones.edit`, `observaciones.delete`, `bitacora.view`, `articulos.view`, `articulos.edit`, `articulos.sync`, `articulos.import`, `proveedores.view`, `proveedores.edit`, `proveedores.import`, `partidas.view`, `partidas.sync`, `compras.view`, `compras.sync`
 
 Los **sectores** no tienen permisos propios: reusan `users.view`/`users.edit`.
 
