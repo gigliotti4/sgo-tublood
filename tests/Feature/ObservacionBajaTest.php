@@ -338,9 +338,10 @@ class ObservacionBajaTest extends TestCase
     /**
      * `observaciones.show` sí lleva `withTrashed()` (se puede abrir el detalle
      * desde Bajas), así que ahí es donde la Policy tiene que devolver `false`
-     * de verdad y apagar los botones de editar/comentar.
+     * de verdad y apagar el botón de editar (que también gatea comentar,
+     * ambos autorizan con la misma habilidad `update`).
      */
-    public function test_el_detalle_de_una_borrada_no_ofrece_editar_ni_comentar(): void
+    public function test_el_detalle_de_una_borrada_no_ofrece_editar(): void
     {
         $user = $this->userWith('observaciones.view', 'observaciones.delete');
         $observacion = $this->observacion(['responsable_id' => $user->id]);
@@ -352,7 +353,6 @@ class ObservacionBajaTest extends TestCase
             ->assertStatus(200)
             ->assertInertia(fn ($page) => $page
                 ->where('puedeEditar', false)
-                ->where('puedeComentar', false)
             );
     }
 }

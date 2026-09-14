@@ -8,15 +8,22 @@ use App\Models\User;
 class ObservacionPolicy
 {
     /**
-     * Puede gestionar el caso el responsable asignado, o cualquiera del sector
-     * al que está asignada la observación.
+     * Puede gestionar el caso (reasignar, reclasificar, cambiar estado, subir
+     * o borrar archivos sueltos, comentar en la bitácora) **solo** el
+     * responsable asignado. Es la única habilidad de la Policy: hasta acá
+     * también existía `comentar`, más amplia (sumaba a los notificados y a
+     * cualquiera del sector), pero se decidió que gestionar un caso —
+     * incluido dejar constancia en su bitácora— quede exclusivamente en
+     * manos de quien lo tiene asignado. Notificados y gente del mismo sector
+     * pasan a solo lectura.
      *
-     * Lo segundo hace falta porque al derivar el responsable anterior queda
-     * liberado ("sin asignar"): sin esta regla, una observación recién
-     * derivada quedaría bloqueada hasta que alguien del sector destino se
-     * autoasignara, y nadie de ese sector podría hacerlo porque justamente no
-     * puede editarla. `sector_id === null` no cuenta como match aunque el
-     * usuario tampoco tenga sector: dos nulls no son "el mismo sector".
+     * ⚠️ Consecuencia: una observación **sin responsable** (recién entrada
+     * por el portal cuando nadie tiene el rol del tipo, o a la que se le
+     * quitó el responsable) solo la puede tocar un super-admin, vía
+     * `Gate::before`. Antes la regla del sector destrababa este caso — al
+     * derivar, el responsable anterior queda liberado y cualquiera del
+     * sector destino podía autoasignarse. Queda anotado para revisar cuando
+     * se implemente la derivación entre sectores.
      */
     public function update(User $user, Observacion $observacion): bool
     {
@@ -26,28 +33,6 @@ class ObservacionPolicy
             return false;
         }
 
-        if ($user->id === $observacion->responsable_id) {
-            return true;
-        }
-
-        return $observacion->sector_id !== null && $user->sector_id === $observacion->sector_id;
-    }
-
-    /**
-     * Dejar un comentario (con adjuntos) en la bitácora del caso.
-     *
-     * Más amplio que `update`: además de quien lo gestiona, pueden comentar los
-     * usuarios sumados como "a notificar". Se les pide opinión o datos sobre el
-     * caso, así que tienen que poder responder por el mismo canal donde queda
-     * registrado — pero no reasignar, reclasificar ni cambiar el estado.
-     */
-    public function comentar(User $user, Observacion $observacion): bool
-    {
-        if ($observacion->trashed()) {
-            return false;
-        }
-
-        return $this->update($user, $observacion)
-            || $observacion->notificados()->whereKey($user->id)->exists();
+        return $user->id === $observacion->responsable_id;
     }
 }

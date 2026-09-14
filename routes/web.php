@@ -198,23 +198,24 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/observaciones/{observacion}/pdf', [AdminObservacionController::class, 'pdf'])
             ->name('observaciones.pdf');
         // Subir y borrar archivos es gestionar el caso: lo autoriza la Policy
-        // (responsable asignado o del sector), no el permiso global observaciones.edit.
+        // (solo el responsable asignado), no el permiso global observaciones.edit.
         Route::post('/observaciones/{observacion}/archivos', [AdminObservacionController::class, 'uploadArchivo'])
             ->middleware('can:update,observacion')->name('observaciones.archivos.store');
         Route::delete('/observaciones/{observacion}/archivos/{attachment}', [AdminObservacionController::class, 'destroyArchivo'])
             ->middleware('can:update,observacion')->name('observaciones.archivos.destroy')->scopeBindings();
-        // Comentario de bitácora (con adjuntos opcionales). Autorización más
-        // amplia que la de arriba: también comentan los usuarios sumados como
-        // "a notificar" (ObservacionPolicy::comentar). No hay ruta de
-        // edición/borrado — el historial es inmutable.
+        // Comentario de bitácora (con adjuntos opcionales). Misma autorización
+        // que arriba (solo el responsable): notificados y gente del sector
+        // quedan en solo lectura. No hay ruta de edición/borrado — el
+        // historial es inmutable.
         Route::post('/observaciones/{observacion}/bitacora', [AdminObservacionController::class, 'comentar'])
-            ->middleware('can:comentar,observacion')->name('observaciones.bitacora.store');
+            ->middleware('can:update,observacion')->name('observaciones.bitacora.store');
         // Va después de /observaciones/nuevo y /observaciones/crear en el archivo,
         // pero igual se restringe a numérico para que no se las coma.
         // withTrashed(): tiene que poder abrirse desde la pantalla de Bajas.
         Route::get('/observaciones/{observacion}', [AdminObservacionController::class, 'show'])
             ->whereNumber('observacion')->withTrashed()->name('observaciones.show');
         // Editar: solo el responsable asignado (o super-admin, vía Gate::before) — ver ObservacionPolicy.
+        // Comentar en la bitácora usa la misma regla, sin excepción para notificados ni sector.
         Route::put('/observaciones/{observacion}', [AdminObservacionController::class, 'update'])
             ->middleware('can:update,observacion')->name('observaciones.update');
     });

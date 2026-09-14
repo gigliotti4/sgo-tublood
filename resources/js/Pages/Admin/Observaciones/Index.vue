@@ -22,6 +22,7 @@ import SelectorMultipleAsync, { type OpcionAsync } from '@/Components/SelectorMu
 import Textarea from '@/Components/Textarea.vue'
 import type { Observacion, PaginatedData } from '@/types'
 import { proveedorDeProducto } from '@/lib/productos'
+import { badgeEstado, estadoLabels } from '@/lib/estados'
 
 interface UsuarioOption {
     id: number
@@ -61,13 +62,10 @@ const props = defineProps<{
 
 const { isSuperAdmin, user, hasPermission } = usePermissions()
 
-// Refleja ObservacionPolicy::update(): responsable asignado, o cualquiera del
-// sector de la observación (para que el sector destino de una derivación
-// pueda tomarla apenas queda "sin asignar"). Dos sectores null no cuentan.
+// Refleja ObservacionPolicy::update(): solo el responsable asignado. Una
+// observación sin responsable no la edita nadie salvo super-admin.
 const puedeEditar = (o: Observacion) =>
-    isSuperAdmin.value
-    || o.responsable_id === user.value?.id
-    || (o.sector_id !== null && o.sector_id === user.value?.sector_id)
+    isSuperAdmin.value || o.responsable_id === user.value?.id
 
 // ── Buscador ──────────────────────────────────────────────────────────────
 // Los filtros viven en la URL (el backend los valida y los devuelve como
@@ -134,24 +132,6 @@ const clienteNoEncontrado = (o: Observacion) => !o.cliente && !!o.contacto_numer
 const origenLabels: Record<string, string> = {
     interna: 'Interna',
     externa: 'Externa',
-}
-
-const estadoLabels: Record<string, string> = {
-    pendiente_clasificacion: 'Pendiente de clasificación',
-    clasificada: 'Clasificada',
-    en_proceso: 'En proceso',
-    derivada: 'Derivada',
-    cerrada: 'Cerrada',
-    cancelada: 'Cancelada',
-}
-
-const estadoVariant: Record<string, 'amber' | 'blue' | 'indigo' | 'purple' | 'emerald' | 'slate' | 'red'> = {
-    pendiente_clasificacion: 'amber',
-    clasificada: 'blue',
-    en_proceso: 'indigo',
-    derivada: 'purple',
-    cerrada: 'emerald',
-    cancelada: 'red',
 }
 
 const formatFecha = (d: string) =>
@@ -495,7 +475,7 @@ const guardar = () => {
                                 <td class="px-5 py-3.5 text-theme-sm text-gray-600 dark:text-gray-300">{{ o.sector?.nombre ?? '—' }}</td>
                                 <td class="px-5 py-3.5 text-theme-sm text-gray-600 dark:text-gray-300">{{ o.responsable?.name ?? '—' }}</td>
                                 <td class="px-5 py-3.5">
-                                    <Badge :variant="estadoVariant[o.estado] ?? 'slate'">{{ estadoLabels[o.estado] ?? o.estado }}</Badge>
+                                    <Badge :variant="badgeEstado(o, prioridades).variant">{{ badgeEstado(o, prioridades).label }}</Badge>
                                     <Badge v-if="estadoPlazo(o)" :variant="estadoPlazo(o)!.variant">
                                         {{ estadoPlazo(o)!.label }}
                                     </Badge>
@@ -588,7 +568,7 @@ const guardar = () => {
                             <DataRow label="Sector">{{ o.sector?.nombre ?? '—' }}</DataRow>
                             <DataRow label="Responsable">{{ o.responsable?.name ?? '—' }}</DataRow>
                             <DataRow label="Estado">
-                                <Badge :variant="estadoVariant[o.estado] ?? 'slate'">{{ estadoLabels[o.estado] ?? o.estado }}</Badge>
+                                <Badge :variant="badgeEstado(o, prioridades).variant">{{ badgeEstado(o, prioridades).label }}</Badge>
                                 <Badge v-if="estadoPlazo(o)" :variant="estadoPlazo(o)!.variant">{{ estadoPlazo(o)!.label }}</Badge>
                             </DataRow>
                             <DataRow label="Fecha">{{ formatFecha(o.created_at) }}</DataRow>
@@ -614,7 +594,7 @@ const guardar = () => {
                 <div class="mb-6 flex flex-wrap items-center gap-3">
                     <span class="font-mono text-sm text-gray-500 dark:text-gray-400">{{ observacionEnEdicion.numero }}</span>
                     <Badge variant="slate">{{ origenLabels[observacionEnEdicion.origen] ?? observacionEnEdicion.origen }}</Badge>
-                    <Badge :variant="estadoVariant[observacionEnEdicion.estado] ?? 'slate'">{{ estadoLabels[observacionEnEdicion.estado] ?? observacionEnEdicion.estado }}</Badge>
+                    <Badge :variant="badgeEstado(observacionEnEdicion, prioridades).variant">{{ badgeEstado(observacionEnEdicion, prioridades).label }}</Badge>
                     <span class="ml-auto text-theme-xs text-gray-400">Creada el {{ formatFecha(observacionEnEdicion.created_at) }}</span>
                 </div>
 
@@ -758,7 +738,7 @@ const guardar = () => {
                                 v-if="observacionEnEdicion.estado === 'pendiente_clasificacion' && form.prioridad && form.tipo_caso"
                                 class="text-theme-xs text-warning-600 dark:text-warning-400"
                             >
-                                Al guardar, la observación pasará a <strong>Clasificada</strong>.
+                                Al guardar, queda clasificada con prioridad <strong>{{ prioridades[form.prioridad ?? ''] ?? form.prioridad }}</strong>.
                             </p>
                         </FormSection>
 
@@ -804,7 +784,7 @@ const guardar = () => {
                             <SelectorUsuarios
                                 v-model="form.notificados"
                                 label="Usuarios a notificar"
-                                hint="Reciben el aviso y pueden comentar en la bitácora, pero no reasignan ni reclasifican."
+                                hint="Reciben el aviso y pueden ver el caso, pero no lo gestionan (eso lo hace solo el responsable)."
                                 :usuarios="usuarios"
                                 :excluir-id="form.responsable_id"
                                 :error="form.errors.notificados"

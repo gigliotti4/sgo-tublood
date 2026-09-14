@@ -44,7 +44,9 @@ class ObservacionExportService
                 $observacion->responsable?->name ?? '',
                 $observacion->creador?->name ?? '',
                 $observacion->prioridad ? ($prioridades[$observacion->prioridad] ?? $observacion->prioridad) : '',
-                Observacion::ESTADOS[$observacion->estado] ?? $observacion->estado,
+                // "Clasificada" no dice nada de la urgencia: en ese estado la
+                // columna muestra la prioridad — ver Observacion::etiquetaEstado().
+                $observacion->etiquetaEstado(),
                 $observacion->created_at?->format('d/m/Y'),
                 $observacion->vence_at?->format('d/m/Y'),
                 $this->proveedores($observacion),

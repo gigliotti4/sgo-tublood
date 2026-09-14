@@ -52,6 +52,24 @@ class ObservationHistory extends Model
         self::ACCION_RESTAURACION,
     ];
 
+    /**
+     * Etiquetas en español de cada acción, para el PDF del detalle (la
+     * pantalla usa `accionLabels` en resources/js/lib/bitacora.ts — mismo
+     * contenido, mantenerlos sincronizados si se agrega una acción).
+     */
+    public const ACCION_LABELS = [
+        self::ACCION_COMENTARIO => 'Comentario',
+        self::ACCION_ESTADO => 'Cambio de estado',
+        self::ACCION_RESPONSABLE => 'Cambio de responsable',
+        self::ACCION_SECTOR => 'Derivación de sector',
+        self::ACCION_CLASIFICACION => 'Clasificación',
+        self::ACCION_ADJUNTO => 'Archivo adjunto',
+        self::ACCION_NOTIFICADOS => 'Usuarios a notificar',
+        self::ACCION_SISTEMA => 'Sistema',
+        self::ACCION_BAJA => 'Baja',
+        self::ACCION_RESTAURACION => 'Restauración',
+    ];
+
     /** Sin `updated_at`: una entrada no se modifica. Eloquent sigue completando `created_at` solo. */
     const UPDATED_AT = null;
 

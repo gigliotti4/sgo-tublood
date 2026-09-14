@@ -103,6 +103,24 @@ class Observacion extends Model
     }
 
     /**
+     * Texto para mostrar en vez del estado crudo. "Clasificada" no dice nada
+     * de la urgencia del caso, así que en ese estado se muestra la prioridad
+     * asignada; el resto de los estados usa ESTADOS tal cual.
+     *
+     * Mismo criterio que `resources/js/lib/estados.ts` en el front (usado en
+     * el listado y el detalle) — mantenerlos sincronizados si cambia la regla.
+     * Lo usan el PDF y el Excel, que no pueden reusar el helper de TypeScript.
+     */
+    public function etiquetaEstado(): string
+    {
+        if ($this->estado === 'clasificada' && $this->prioridad) {
+            return config('incidencias.prioridades')[$this->prioridad] ?? self::ESTADOS['clasificada'];
+        }
+
+        return self::ESTADOS[$this->estado] ?? $this->estado;
+    }
+
+    /**
      * Casos abiertos que esta persona gestiona.
      *
      * Vive acá y no en el middleware porque lo consultan dos lugares: el modal

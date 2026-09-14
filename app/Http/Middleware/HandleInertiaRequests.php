@@ -42,6 +42,13 @@ class HandleInertiaRequests extends Middleware
             // son justamente los que más lo necesitan. Va cacheado, así que no
             // agrega una query por request. Ver App\Support\Configuracion.
             'configuracion' => Configuracion::paraCompartir(),
+            // Config de observaciones que necesita el layout (no una pantalla
+            // puntual): el modal de avisos muestra la prioridad de un caso
+            // clasificado ("Clasificada" no dice nada de la urgencia) en el
+            // subtítulo de "A tu cargo"/"En seguimiento" — ver AppLayout.vue.
+            'incidencias' => [
+                'prioridades' => config('incidencias.prioridades'),
+            ],
             // Solo son datos publicos del broadcaster. El App ID y el secret
             // permanecen siempre del lado del servidor.
             'broadcasting' => $this->broadcastingConfig(),

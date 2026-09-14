@@ -13,7 +13,8 @@ use Tests\TestCase;
 
 /**
  * Usuarios a notificar de una observación: reciben el aviso al ser sumados y
- * pueden comentar en la bitácora, pero no gestionar el caso.
+ * pueden ver el caso, pero no gestionarlo (ni siquiera comentar en su
+ * bitácora) — ver ObservacionPolicy::update().
  */
 class ObservacionNotificadosTest extends TestCase
 {
@@ -99,7 +100,8 @@ class ObservacionNotificadosTest extends TestCase
         Notification::assertNotSentTo($viejo, ObservacionSeguimientoNotification::class);
     }
 
-    public function test_un_usuario_a_notificar_puede_comentar_en_la_bitacora(): void
+    /** Ver ObservacionPolicy::update(): ahora solo el responsable comenta, ni siquiera un notificado. */
+    public function test_un_usuario_a_notificar_no_puede_comentar_en_la_bitacora(): void
     {
         $observacion = $this->observacion();
         $notificado = $this->userWith('observaciones.view');
@@ -107,9 +109,9 @@ class ObservacionNotificadosTest extends TestCase
 
         $this->actingAs($notificado)
             ->post("/observaciones/{$observacion->id}/bitacora", ['nota' => 'Reviso el lote y aviso.'])
-            ->assertSessionHasNoErrors();
+            ->assertStatus(403);
 
-        $this->assertDatabaseHas('observation_history', [
+        $this->assertDatabaseMissing('observation_history', [
             'observation_id' => $observacion->id,
             'user_id' => $notificado->id,
             'accion' => 'comentario',
@@ -188,8 +190,8 @@ class ObservacionNotificadosTest extends TestCase
         $this->assertSame(0, $observacion->historial()->where('accion', 'notificados')->count());
     }
 
-    /** Un usuario del sector de la observación ya podía editar: también comenta. */
-    public function test_alguien_del_sector_puede_comentar(): void
+    /** Compartir sector ya no alcanza: la Policy solo mira `responsable_id`. */
+    public function test_alguien_del_sector_no_puede_comentar(): void
     {
         $sector = Sector::create(['nombre' => 'Logística', 'slug' => 'logistica']);
         $observacion = $this->observacion(['sector_id' => $sector->id]);
@@ -199,6 +201,6 @@ class ObservacionNotificadosTest extends TestCase
 
         $this->actingAs($delSector)
             ->post("/observaciones/{$observacion->id}/bitacora", ['nota' => 'Lo veo yo.'])
-            ->assertSessionHasNoErrors();
+            ->assertStatus(403);
     }
 }

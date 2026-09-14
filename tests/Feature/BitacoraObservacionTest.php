@@ -174,7 +174,8 @@ class BitacoraObservacionTest extends TestCase
         $this->assertCount(0, $observacion->fresh()->historial);
     }
 
-    public function test_un_usuario_del_mismo_sector_puede_comentar_aunque_no_sea_el_responsable(): void
+    /** Compartir sector ya no alcanza: la Policy solo mira `responsable_id` (ver ObservacionPolicy::update). */
+    public function test_un_usuario_del_mismo_sector_no_puede_comentar_si_no_es_el_responsable(): void
     {
         $sector = Sector::create(['nombre' => 'Comercial', 'slug' => 'comercial']);
         $colega = $this->userWith('observaciones.view');
@@ -184,9 +185,9 @@ class BitacoraObservacionTest extends TestCase
 
         $this->actingAs($colega)
             ->post("/observaciones/{$observacion->id}/bitacora", ['nota' => 'Lo tomo yo.'])
-            ->assertRedirect();
+            ->assertStatus(403);
 
-        $this->assertCount(1, $observacion->fresh()->historial);
+        $this->assertCount(0, $observacion->fresh()->historial);
     }
 
     public function test_un_usuario_de_otro_sector_no_puede_comentar(): void

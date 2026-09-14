@@ -519,7 +519,7 @@ const submit = () => form.post(route('observaciones.store'), { forceFormData: tr
                         v-model="form.notificados"
                         full
                         label="Usuarios a notificar"
-                        hint="Reciben el aviso y pueden comentar en la bitácora, pero no reasignan ni reclasifican."
+                        hint="Reciben el aviso y pueden ver el caso, pero no lo gestionan (eso lo hace solo el responsable)."
                         :usuarios="usuarios"
                         :excluir-id="form.responsable_id"
                         :error="form.errors.notificados"

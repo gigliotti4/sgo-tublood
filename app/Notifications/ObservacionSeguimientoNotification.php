@@ -22,6 +22,6 @@ class ObservacionSeguimientoNotification extends ObservacionNotification
 
     protected function mensaje(): string
     {
-        return "Te sumaron al seguimiento de \"{$this->observacion->titulo}\". Podés ver el caso y dejar comentarios en su bitácora.";
+        return "Te sumaron al seguimiento de \"{$this->observacion->titulo}\". Podés ver el caso y su bitácora.";
     }
 }

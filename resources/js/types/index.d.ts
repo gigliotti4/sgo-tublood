@@ -212,6 +212,10 @@ export interface PageProps extends Record<string, unknown> {
         error?: string
     }
     configuracion: ConfiguracionMarca
+    /** Config de observaciones que necesita el layout, no una pantalla puntual. */
+    incidencias: {
+        prioridades: Record<string, string>
+    }
     broadcasting: {
         driver: 'pusher' | 'reverb' | 'null'
         key: string | null
@@ -469,7 +473,7 @@ export interface Observacion {
     attachments?: ObservationAttachment[]
     /** Bitácora del caso: comentarios y cambios, más reciente primero. */
     historial?: ObservationHistoryEntry[]
-    /** Usuarios a notificar: reciben el aviso y pueden comentar, pero no gestionar el caso. */
+    /** Usuarios a notificar: reciben el aviso y ven el caso, pero no lo gestionan (ver ObservacionPolicy::update). */
     notificados?: { id: number; name: string; apellido: string | null }[]
     created_at: string
     /** Solo tiene valor si está borrada (soft delete). El motivo de la baja está en `baja.nota`. */

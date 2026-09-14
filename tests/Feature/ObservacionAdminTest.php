@@ -6,9 +6,13 @@ use App\Models\Articulo;
 use App\Models\Cliente;
 use App\Models\Observacion;
 use App\Models\ObservationAttachment;
+use App\Models\ObservationHistory;
+use App\Models\ObservationProduct;
 use App\Models\Proveedor;
 use App\Models\Sector;
 use App\Models\User;
+use App\Support\Configuracion;
+use App\Support\TaxonomiaIncidencias;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Schema;
@@ -139,6 +143,74 @@ class ObservacionAdminTest extends TestCase
         $user = $this->userWith('observaciones.view', 'observaciones.edit');
 
         $this->actingAs($user)->put("/observaciones/{$observacion->id}", [])->assertStatus(403);
+    }
+
+    /**
+     * Hasta acá, compartir sector con la observación también alcanzaba para
+     * editar (útil para tomar un caso recién derivado). Se sacó a propósito:
+     * ahora edita solo quien tiene `responsable_id` — ver ObservacionPolicy.
+     */
+    public function test_update_rechaza_a_alguien_del_mismo_sector_que_no_es_el_responsable(): void
+    {
+        $sector = Sector::create(['nombre' => 'Comercial', 'slug' => 'comercial']);
+        $responsable = User::factory()->create();
+
+        $observacion = Observacion::create([
+            'numero' => '0001-26',
+            'anio' => 2026,
+            'tipo' => 'falla_producto',
+            'estado' => 'pendiente_clasificacion',
+            'contacto_nombre' => 'Cliente Test',
+            'contacto_email' => 'cliente@example.com',
+            'titulo' => 'Título de prueba',
+            'descripcion' => 'Descripción de prueba',
+            'sector_id' => $sector->id,
+            'responsable_id' => $responsable->id,
+        ]);
+
+        $delSector = $this->userWith('observaciones.view');
+        $delSector->update(['sector_id' => $sector->id]);
+
+        $this->actingAs($delSector)
+            ->put("/observaciones/{$observacion->id}", [
+                'responsable_id' => $delSector->id,
+                'estado' => 'en_proceso',
+            ])
+            ->assertStatus(403);
+
+        $this->assertSame($responsable->id, $observacion->fresh()->responsable_id);
+    }
+
+    /**
+     * Consecuencia de la regla estricta: sin responsable asignado (un reclamo
+     * recién entrado por el portal, o al que se le quitó el responsable),
+     * nadie salvo super-admin puede tocarla.
+     */
+    public function test_update_rechaza_sin_responsable_asignado_aunque_sea_del_mismo_sector(): void
+    {
+        $sector = Sector::create(['nombre' => 'Comercial', 'slug' => 'comercial']);
+
+        $observacion = Observacion::create([
+            'numero' => '0001-26',
+            'anio' => 2026,
+            'tipo' => 'falla_producto',
+            'estado' => 'pendiente_clasificacion',
+            'contacto_nombre' => 'Cliente Test',
+            'contacto_email' => 'cliente@example.com',
+            'titulo' => 'Título de prueba',
+            'descripcion' => 'Descripción de prueba',
+            'sector_id' => $sector->id,
+        ]);
+
+        $delSector = $this->userWith('observaciones.view');
+        $delSector->update(['sector_id' => $sector->id]);
+
+        $this->actingAs($delSector)
+            ->put("/observaciones/{$observacion->id}", [
+                'responsable_id' => $delSector->id,
+                'estado' => 'en_proceso',
+            ])
+            ->assertStatus(403);
     }
 
     public function test_update_permite_al_responsable_asignado(): void
@@ -926,6 +998,25 @@ class ObservacionAdminTest extends TestCase
         $this->assertSame('Incluida', $filas[1][3]);
     }
 
+    /** "Clasificada" no dice nada de la urgencia: la columna Estado muestra la prioridad — ver Observacion::etiquetaEstado(). */
+    public function test_export_muestra_la_prioridad_en_vez_de_clasificada(): void
+    {
+        $this->observacion(['titulo' => 'Clasificada', 'estado' => 'clasificada', 'prioridad' => 'alta']);
+
+        $user = $this->userWith('observaciones.view');
+
+        $response = $this->actingAs($user)->get('/observaciones/export');
+
+        $archivo = tempnam(sys_get_temp_dir(), 'xlsx');
+        file_put_contents($archivo, $response->streamedContent());
+
+        $filas = IOFactory::load($archivo)->getActiveSheet()->toArray();
+        unlink($archivo);
+
+        // Índice 9 = columna "Estado" (ver ObservacionExportService::COLUMNAS).
+        $this->assertSame('Alta', $filas[1][9]);
+    }
+
     public function test_export_requiere_permiso_observaciones_view(): void
     {
         $user = User::factory()->create();
@@ -1246,6 +1337,78 @@ class ObservacionAdminTest extends TestCase
             'size' => 2048,
         ]);
 
+        $this->actingAs($this->userWith('observaciones.view'))
+            ->get("/observaciones/{$observacion->id}/pdf")
+            ->assertOk();
+    }
+
+    /**
+     * El PDF tiene que incluir la bitácora del caso: un cambio de estado, un
+     * comentario con nota y un comentario con adjunto (con su nombre listado
+     * junto a la entrada, no repetido en "Archivos adjuntos").
+     *
+     * El endpoint devuelve bytes binarios de DomPDF, así que el contenido se
+     * verifica renderizando la misma vista directo, con el mismo eager-load
+     * que arma `ObservacionController::pdf()`.
+     */
+    public function test_el_pdf_incluye_la_bitacora(): void
+    {
+        Storage::fake('local');
+
+        $autor = User::factory()->create(['name' => 'Ana', 'apellido' => 'Gómez']);
+        $observacion = $this->observacion();
+
+        $observacion->update(['estado' => 'en_proceso']);
+
+        $observacion->historial()->create([
+            'user_id' => $autor->id,
+            'accion' => ObservationHistory::ACCION_COMENTARIO,
+            'nota' => 'Llamé al cliente y quedamos en reenviar la factura.',
+        ]);
+
+        $entradaConAdjunto = $observacion->historial()->create([
+            'user_id' => $autor->id,
+            'accion' => ObservationHistory::ACCION_COMENTARIO,
+            'nota' => 'Adjunto la nota de crédito.',
+        ]);
+
+        ObservationAttachment::create([
+            'observation_id' => $observacion->id,
+            'observation_history_id' => $entradaConAdjunto->id,
+            'path' => 'observaciones/'.$observacion->numero.'/bitacora/nota-credito.pdf',
+            'original_name' => 'nota-credito.pdf',
+            'mime_type' => 'application/pdf',
+            'size' => 51200,
+        ]);
+
+        $observacion->load([
+            'historial' => fn ($q) => $q->oldest()
+                ->with(['user:id,name,apellido', 'adjuntos:id,observation_history_id,original_name,size']),
+            'attachments:id,observation_id,original_name,size,path,mime_type,observation_history_id',
+        ]);
+
+        $html = view('pdf.observacion', [
+            'observacion' => $observacion,
+            'adjuntosSueltos' => $observacion->attachments->whereNull('observation_history_id'),
+            'presentaciones' => ObservationProduct::PRESENTACIONES,
+            'tipoLabels' => TaxonomiaIncidencias::etiquetasTipos(),
+            'prioridades' => config('incidencias.prioridades'),
+            'emitido' => now()->format('d/m/Y H:i'),
+            'marca' => Configuracion::valores(),
+            'logo' => null,
+            'imagenes' => [],
+            'imagenesOmitidas' => [],
+        ])->render();
+
+        $this->assertStringContainsString('Llamé al cliente y quedamos en reenviar la factura.', $html);
+        $this->assertStringContainsString('Cambio de estado', $html);
+        $this->assertStringContainsString('nota-credito.pdf', $html);
+        $this->assertStringContainsString('Ana Gómez', $html);
+
+        // No se repite en "Archivos adjuntos": ese listado es solo de sueltos.
+        $this->assertSame(0, $observacion->attachments->whereNull('observation_history_id')->count());
+
+        // Y el endpoint real sigue devolviendo el PDF sin romperse.
         $this->actingAs($this->userWith('observaciones.view'))
             ->get("/observaciones/{$observacion->id}/pdf")
             ->assertOk();

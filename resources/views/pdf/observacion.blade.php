@@ -125,9 +125,13 @@
 <h1>{{ $observacion->titulo }}</h1>
 <div>
     <span class="chip">{{ $observacion->origen === 'interna' ? 'Interna' : 'Externa' }}</span>
-    <span class="chip">{{ $estados[$observacion->estado] ?? $observacion->estado }}</span>
+    {{-- "Clasificada" no dice nada de la urgencia: en ese estado el chip
+         muestra la prioridad (ver Observacion::etiquetaEstado()). --}}
+    <span class="chip">{{ $observacion->etiquetaEstado() }}</span>
     <span class="chip">{{ $tipoLabels[$observacion->tipo] ?? $observacion->tipo }}</span>
-    @if ($observacion->prioridad === 'critica')
+    {{-- Si el chip de arriba ya dice "Crítica" (estado clasificada + prioridad
+         crítica), no se repite acá. --}}
+    @if ($observacion->prioridad === 'critica' && $observacion->estado !== 'clasificada')
         <span class="chip chip-alerta">Crítica</span>
     @endif
 </div>
@@ -275,15 +279,17 @@
 @endif
 
 <h2>Archivos adjuntos</h2>
-@if ($observacion->attachments->isNotEmpty())
-    {{-- Las imagenes ya se muestran arriba; acá se listan todos los adjuntos
-         con su peso, que es la referencia para descargarlos del sistema. --}}
+@if ($adjuntosSueltos->isNotEmpty())
+    {{-- Las imagenes ya se muestran arriba; acá se listan los adjuntos sueltos
+         con su peso, que es la referencia para descargarlos del sistema. Los
+         que cuelgan de un comentario de bitácora se listan junto a su entrada
+         en la sección Bitácora, no acá, para no repetirlos. --}}
     <table class="grilla">
         <thead>
             <tr><th>Archivo</th><th style="width: 20%;">Tamaño</th></tr>
         </thead>
         <tbody>
-            @foreach ($observacion->attachments as $adjunto)
+            @foreach ($adjuntosSueltos as $adjunto)
                 <tr>
                     <td>{{ $adjunto->original_name }}</td>
                     <td>{{ $adjunto->size < 1024 * 1024
@@ -300,7 +306,78 @@
         @endif
     </p>
 @else
-    <p class="vacio">Sin archivos adjuntos.</p>
+    <p class="vacio">
+        Sin archivos adjuntos sueltos.
+        @if (count($imagenesOmitidas))
+            No se incrustaron en el PDF: {{ implode(', ', $imagenesOmitidas) }}.
+        @endif
+    </p>
+@endif
+
+<h2>Bitácora</h2>
+@if ($observacion->historial->isNotEmpty())
+    {{--
+        Una fila por entrada, en el mismo orden cronológico en que se cargó
+        (`oldest()` en el controller). El detalle según `accion` replica
+        resources/js/Components/BitacoraObservacion.vue — mismas cuatro formas
+        de `cambios` (ver resources/js/lib/bitacora.ts), que acá se leen a
+        mano porque el PDF no puede importar el helper de TypeScript.
+    --}}
+    <table class="grilla">
+        <thead>
+            <tr>
+                <th style="width: 15%;">Fecha</th>
+                <th style="width: 17%;">Acción</th>
+                <th style="width: 18%;">Usuario</th>
+                <th>Detalle</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach ($observacion->historial as $entrada)
+                @php $cambios = $entrada->cambios; @endphp
+                <tr style="page-break-inside: avoid;">
+                    <td>{{ $entrada->created_at?->format('d/m/Y H:i') }}</td>
+                    <td>{{ \App\Models\ObservationHistory::ACCION_LABELS[$entrada->accion] ?? $entrada->accion }}</td>
+                    <td>{{ $entrada->user ? trim($entrada->user->name.' '.$entrada->user->apellido) : 'Sistema' }}</td>
+                    <td>
+                        @if ($entrada->accion === 'clasificacion' && isset($cambios['prioridad'], $cambios['tipo_caso']))
+                            Prioridad: de {{ $cambios['prioridad']['de'] }} a {{ $cambios['prioridad']['a'] }}<br>
+                            Tipo de caso: de {{ $cambios['tipo_caso']['de'] }} a {{ $cambios['tipo_caso']['a'] }}
+                        @elseif ($entrada->accion === 'notificados' && isset($cambios['sumados'], $cambios['sacados']))
+                            @if (!empty($cambios['sumados']))
+                                Se sumó a {{ implode(', ', $cambios['sumados']) }}<br>
+                            @endif
+                            @if (!empty($cambios['sacados']))
+                                Se sacó a {{ implode(', ', $cambios['sacados']) }}
+                            @endif
+                        @elseif ($entrada->accion === 'baja' && isset($cambios['tipo']))
+                            {{ $cambios['tipo'] === 'borrado' ? 'Observación borrada' : 'Observación cancelada' }}
+                        @elseif (isset($cambios['de'], $cambios['a']))
+                            De {{ $cambios['de'] }} a {{ $cambios['a'] }}
+                        @endif
+
+                        @if ($entrada->nota)
+                            <div class="descripcion" style="margin-top: 1mm; font-size: 8pt;">{{ $entrada->nota }}</div>
+                        @endif
+
+                        @if ($entrada->adjuntos->isNotEmpty())
+                            <div class="sub" style="margin-top: 1mm; font-size: 7pt;">
+                                @foreach ($entrada->adjuntos as $adjuntoBitacora)
+                                    Adjunto: {{ $adjuntoBitacora->original_name }}
+                                    ({{ $adjuntoBitacora->size < 1024 * 1024
+                                        ? number_format($adjuntoBitacora->size / 1024, 1, ',', '.') . ' KB'
+                                        : number_format($adjuntoBitacora->size / 1048576, 1, ',', '.') . ' MB' }})
+                                    @if (! $loop->last) <br> @endif
+                                @endforeach
+                            </div>
+                        @endif
+                    </td>
+                </tr>
+            @endforeach
+        </tbody>
+    </table>
+@else
+    <p class="vacio">Sin actividad registrada.</p>
 @endif
 
 </body>

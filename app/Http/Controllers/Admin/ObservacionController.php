@@ -211,8 +211,6 @@ class ObservacionController extends Controller
             'tipoLabels' => TaxonomiaIncidencias::etiquetasTipos(),
             'prioridades' => config('incidencias.prioridades'),
             'puedeEditar' => $request->user()?->can('update', $observacion) ?? false,
-            // Más amplio que puedeEditar: incluye a los usuarios a notificar.
-            'puedeComentar' => $request->user()?->can('comentar', $observacion) ?? false,
         ]);
     }
 
@@ -234,17 +232,28 @@ class ObservacionController extends Controller
             'cliente:id,numero,razon_social,mail,telefono',
             ...self::EAGER_PRODUCTOS,
             // `path` y `mime_type` hacen falta para incrustar las imagenes.
-            'attachments:id,observation_id,original_name,size,path,mime_type',
+            // `observation_history_id` no se selecciona para mostrar, solo para
+            // poder separar abajo los sueltos de los de un comentario — las
+            // imágenes de los dos se siguen incrustando todas en "Imágenes".
+            'attachments:id,observation_id,original_name,size,path,mime_type,observation_history_id',
+            // Bitácora completa del caso, para el expediente. Orden
+            // cronológico ascendente (al revés que la pantalla, que va de lo
+            // más nuevo a lo más viejo): un PDF se lee de arriba hacia abajo.
+            'historial' => fn ($q) => $q->oldest()
+                ->with(['user:id,name,apellido', 'adjuntos:id,observation_history_id,original_name,size']),
         ]);
 
         $imagenes = $this->imagenesParaPdf($observacion);
 
         $pdf = Pdf::loadView('pdf.observacion', [
             'observacion' => $observacion,
+            // La sección "Archivos adjuntos" lista solo los sueltos: los que
+            // cuelgan de un comentario ya aparecen junto a su entrada en la
+            // Bitácora, y listarlos dos veces confunde más de lo que ayuda.
+            'adjuntosSueltos' => $observacion->attachments->whereNull('observation_history_id'),
             'presentaciones' => ObservationProduct::PRESENTACIONES,
             'tipoLabels' => TaxonomiaIncidencias::etiquetasTipos(),
             'prioridades' => config('incidencias.prioridades'),
-            'estados' => Observacion::ESTADOS,
             'emitido' => now()->format('d/m/Y H:i'),
             'marca' => Configuracion::valores(),
             'logo' => $this->logoParaPdf(),
@@ -383,9 +392,10 @@ class ObservacionController extends Controller
      */
     public function comentar(Request $request, Observacion $observacion): RedirectResponse
     {
-        // `comentar` y no `update`: también comentan los usuarios sumados como
-        // "a notificar", que no pueden gestionar el caso.
-        $this->authorize('comentar', $observacion);
+        // Misma autorización que gestionar el caso: solo el responsable
+        // asignado. Los notificados y el resto del sector quedan en solo
+        // lectura — ver ObservacionPolicy::update().
+        $this->authorize('update', $observacion);
 
         $data = $request->validate([
             'nota' => ['nullable', 'string', 'max:5000'],

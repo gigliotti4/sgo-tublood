@@ -22,6 +22,7 @@ import { useDarkMode } from '@/composables/useDarkMode'
 import Modal, { modalesAbiertos } from '@/Components/Modal.vue'
 import FabSpeedDial, { type FabAction } from '@/Components/FabSpeedDial.vue'
 import type { ObservacionSinClasificar, PageProps } from '@/types'
+import { badgeEstado } from '@/lib/estados'
 
 const { user, hasPermission } = usePermissions()
 const { isDark, toggleTheme } = useDarkMode()
@@ -165,12 +166,10 @@ const marcarLeidas = () => router.post(route('notificaciones.leidas'), {}, { pre
 
 const origenLabels: Record<string, string> = { interna: 'Interna', externa: 'Externa' }
 
-const estadoLabels: Record<string, string> = {
-    pendiente_clasificacion: 'Pendiente de clasificación',
-    clasificada: 'Clasificada',
-    en_proceso: 'En proceso',
-    derivada: 'Derivada',
-}
+// "Clasificada" no dice nada de la urgencia: el subtítulo de "A tu cargo" y
+// "En seguimiento" muestra la prioridad en ese estado (ver lib/estados.ts).
+const subtituloEstado = (o: ObservacionSinClasificar) =>
+    badgeEstado(o, page.props.incidencias.prioridades).label
 
 /**
  * Modal de avisos al entrar al panel. Tiene tres bloques independientes, y se
@@ -224,14 +223,15 @@ const bloquesAvisos = computed(() => [
         titulo: 'A tu cargo',
         bajada: 'Siguen abiertas y sos el responsable. Tocá una para abrirla.',
         items: asignadas.value,
-        subtitulo: (o: ObservacionSinClasificar) => estadoLabels[o.estado ?? ''] ?? o.estado ?? '',
+        subtitulo: subtituloEstado,
     },
     {
         key: 'seguimiento',
         titulo: 'En seguimiento',
-        bajada: 'Te sumaron para que sigas el caso. Podés comentar en la bitácora, pero no gestionarlo.',
+        // Ya no pueden comentar en la bitácora (ver ObservacionPolicy::update): solo ven el caso.
+        bajada: 'Te sumaron para que sigas el caso. Tocá una para verla.',
         items: seguimiento.value,
-        subtitulo: (o: ObservacionSinClasificar) => estadoLabels[o.estado ?? ''] ?? o.estado ?? '',
+        subtitulo: subtituloEstado,
     },
 ].filter(bloque => bloque.items.length > 0))
 

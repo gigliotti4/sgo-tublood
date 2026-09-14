@@ -9,6 +9,7 @@ import Icon from '@/Components/Icon.vue'
 import type { Observacion } from '@/types'
 import { proveedorDeProducto } from '@/lib/productos'
 import { partidaDeProducto, vencimientoDiscrepa } from '@/lib/partidas'
+import { badgeEstado } from '@/lib/estados'
 
 const props = defineProps<{
     observacion: Observacion
@@ -17,27 +18,7 @@ const props = defineProps<{
     prioridades: Record<string, string>
     /** Viene de ObservacionPolicy: solo el responsable asignado (o super-admin). */
     puedeEditar: boolean
-    /** Más amplio que `puedeEditar`: incluye a los usuarios a notificar. */
-    puedeComentar: boolean
 }>()
-
-const estadoLabels: Record<string, string> = {
-    pendiente_clasificacion: 'Pendiente de clasificación',
-    clasificada: 'Clasificada',
-    en_proceso: 'En proceso',
-    derivada: 'Derivada',
-    cerrada: 'Cerrada',
-    cancelada: 'Cancelada',
-}
-
-const estadoVariant: Record<string, 'amber' | 'blue' | 'indigo' | 'purple' | 'emerald' | 'slate' | 'red'> = {
-    pendiente_clasificacion: 'amber',
-    clasificada: 'blue',
-    en_proceso: 'indigo',
-    derivada: 'purple',
-    cerrada: 'emerald',
-    cancelada: 'red',
-}
 
 const formatFecha = (d: string | null) =>
     d ? new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'
@@ -74,10 +55,11 @@ const humanizar = (clave: string) =>
                 <div class="mt-2 flex flex-wrap items-center gap-2">
                     <span class="font-mono text-theme-sm text-gray-500 dark:text-gray-400">{{ observacion.numero }}</span>
                     <Badge variant="slate">{{ observacion.origen === 'interna' ? 'Interna' : 'Externa' }}</Badge>
-                    <Badge :variant="estadoVariant[observacion.estado] ?? 'slate'">
-                        {{ estadoLabels[observacion.estado] ?? observacion.estado }}
+                    <Badge :variant="badgeEstado(observacion, prioridades).variant">
+                        {{ badgeEstado(observacion, prioridades).label }}
                     </Badge>
-                    <Badge v-if="observacion.prioridad === 'critica'" variant="red">Crítica</Badge>
+                    <!-- Si el badge de estado ya dice "Crítica" (clasificada + prioridad crítica), no se repite. -->
+                    <Badge v-if="observacion.prioridad === 'critica' && observacion.estado !== 'clasificada'" variant="red">Crítica</Badge>
                 </div>
             </div>
             <div class="flex flex-wrap items-center gap-3">
@@ -268,7 +250,7 @@ const humanizar = (clave: string) =>
                     <BitacoraObservacion
                         :observacion-id="observacion.id"
                         :entradas="observacion.historial ?? []"
-                        :puede-editar="puedeComentar"
+                        :puede-editar="puedeEditar"
                     />
                 </div>
             </div>
