@@ -3,6 +3,7 @@
 namespace App\Services\RpSistemas;
 
 use App\Models\Cliente;
+use App\Support\Mojibake;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 
@@ -65,6 +66,17 @@ class ClienteSyncService
     private function mapear(array $c, Carbon $syncedAt): array
     {
         $now = $syncedAt->toDateTimeString();
+
+        // ⚠️ `clientes.php` devuelve el texto doble-codificado ("AsociaciÃ³n" en
+        // vez de "Asociación"): son 503 valores de 3.729 clientes, medidos el
+        // 21/9/2026. No es un problema nuestro y lo correcto es que RP lo
+        // arregle, pero mientras tanto se repara al entrar — ver `Mojibake`,
+        // que solo toca lo que está roto de verdad y es idempotente.
+        //
+        // Va acá y no en `RpSistemasClient` a propósito: `articulos.php` sale
+        // por el mismo cliente HTTP y devuelve bien sus descripciones con
+        // acentos, así que el defecto es de este endpoint y no del transporte.
+        $c = Mojibake::repararArreglo($c);
 
         return [
             'numero' => (string) ($c['numero'] ?? ''),

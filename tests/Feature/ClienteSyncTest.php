@@ -170,4 +170,85 @@ class ClienteSyncTest extends TestCase
         $service = new ClienteSyncService(new RpSistemasClient);
         $service->sync();
     }
+
+    // ── Texto doble-codificado que manda el ERP ────────────────────────
+
+    /**
+     * `clientes.php` devuelve el texto leído como Latin-1 y vuelto a codificar
+     * ("AsociaciÃ³n"). Se repara al entrar — ver `Support\Mojibake`.
+     */
+    public function test_sync_repara_el_texto_doble_codificado_del_erp(): void
+    {
+        $roto = $this->makeCliente('1', 'AsociaciÃ³n Mutual de FarmacÃ©uticos');
+        $roto['domicilio'] = 'Rodriguez PeÃ±a 237';
+        $roto['localidad'] = 'NeuquÃ©n';
+        $roto['contacto'] = 'JosÃ© Luis';
+
+        Http::fake([
+            '*/clientes.php' => Http::response(
+                $this->makeResponse([$roto], $this->paginado(false)),
+                200
+            ),
+        ]);
+
+        (new ClienteSyncService(new RpSistemasClient))->sync();
+
+        $this->assertDatabaseHas('clientes', [
+            'numero' => '1',
+            'razon_social' => 'Asociación Mutual de Farmacéuticos',
+            'domicilio' => 'Rodriguez Peña 237',
+            'localidad' => 'Neuquén',
+            'contacto' => 'José Luis',
+        ]);
+    }
+
+    /**
+     * El modo de falla peligroso: convertir a ciegas destruiría el texto que ya
+     * viene bien, y la sync corre cada 5 minutos.
+     */
+    public function test_sync_no_rompe_el_texto_que_el_erp_manda_bien(): void
+    {
+        $sano = $this->makeCliente('1', 'BAÑO TERMOSTATICO SRL');
+        $sano['localidad'] = 'Neuquén';
+        $sano['domicilio'] = 'AGÜERO 123';
+
+        Http::fake([
+            '*/clientes.php' => Http::response(
+                $this->makeResponse([$sano], $this->paginado(false)),
+                200
+            ),
+        ]);
+
+        (new ClienteSyncService(new RpSistemasClient))->sync();
+
+        $this->assertDatabaseHas('clientes', [
+            'numero' => '1',
+            'razon_social' => 'BAÑO TERMOSTATICO SRL',
+            'localidad' => 'Neuquén',
+            'domicilio' => 'AGÜERO 123',
+        ]);
+    }
+
+    /** Correr la sync dos veces no puede volver a mover el texto ya reparado. */
+    public function test_sync_repetida_deja_el_texto_igual(): void
+    {
+        Http::fake([
+            '*/clientes.php' => Http::response(
+                $this->makeResponse(
+                    [$this->makeCliente('1', 'AsociaciÃ³n Mutual')],
+                    $this->paginado(false)
+                ),
+                200
+            ),
+        ]);
+
+        $service = new ClienteSyncService(new RpSistemasClient);
+        $service->sync();
+        $service->sync();
+
+        $this->assertSame(
+            'Asociación Mutual',
+            Cliente::where('numero', '1')->value('razon_social')
+        );
+    }
 }
