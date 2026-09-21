@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Concerns\OrdenaListados;
+use App\Http\Controllers\Concerns\VuelveAlListado;
 use App\Http\Controllers\Controller;
 use App\Jobs\SyncClientesJob;
 use App\Models\Cliente;
@@ -21,6 +23,35 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ClienteController extends Controller
 {
+    use OrdenaListados, VuelveAlListado;
+
+    /**
+     * Qué columnas se pueden ordenar. La clave es lo que viaja en la URL; el
+     * valor, el SQL. La comparten el listado y el export.
+     *
+     * "Documentación" ordena por la columna denormalizada
+     * `documentacion_completa` y no por el semáforo completo: ese estado se
+     * deriva del catálogo en config y no se puede expresar en SQL — es
+     * justamente el motivo por el que esa columna existe.
+     *
+     * @return array<string, string>
+     */
+    private function ordenables(): array
+    {
+        return [
+            'numero' => 'clientes.numero',
+            'razon_social' => 'clientes.razon_social',
+            'cuit' => 'clientes.cuit',
+            'iva' => 'clientes.descripcion_iva',
+            'localidad' => 'clientes.localidad',
+            'telefono' => 'clientes.telefono',
+            'mail' => 'clientes.mail',
+            'vencimiento' => 'clientes.fecha_vencimiento',
+            'tipo' => 'clientes.tipo_cliente',
+            'documentacion' => 'clientes.documentacion_completa',
+        ];
+    }
+
     public function index(Request $request): Response
     {
         $this->authorize('clientes.view');
@@ -50,6 +81,7 @@ class ClienteController extends Controller
                 'tipo_cliente' => $tipo,
                 'estado_documental' => $estado,
             ],
+            'orden' => $this->orden($request, $this->ordenables()),
             'tipos' => Documentacion::etiquetasTipos(),
             'lastSync' => $lastSync,
             // Sin filtrar: el paginador ya trae el total de la búsqueda vigente.
@@ -105,7 +137,7 @@ class ClienteController extends Controller
         $tipo = $request->string('tipo_cliente')->trim()->value();
         $estado = $request->string('estado_documental')->trim()->value();
 
-        return Cliente::query()
+        $query = Cliente::query()
             ->when($search, function ($q) use ($search) {
                 // Agrupado: sin el closure, los `orWhere` se escaparían de los
                 // otros filtros y el de tipo/estado dejaría de aplicar.
@@ -117,8 +149,18 @@ class ClienteController extends Controller
                 });
             })
             ->when($tipo, fn ($q) => $q->where('tipo_cliente', $tipo))
-            ->when($estado, fn ($q) => $this->filtrarPorEstadoDocumental($q, $estado))
-            ->orderBy('razon_social');
+            ->when($estado, fn ($q) => $this->filtrarPorEstadoDocumental($q, $estado));
+
+        return $this->aplicarOrden(
+            $query,
+            $request,
+            $this->ordenables(),
+            // El orden propio de la pantalla. Va como callback y no encadenado
+            // arriba: encadenado primero dejaba cualquier `?sort=` como
+            // criterio secundario, o sea sin efecto.
+            fn (Builder $q) => $q->orderBy('clientes.razon_social'),
+            'clientes.id',
+        );
     }
 
     /**
@@ -144,13 +186,16 @@ class ClienteController extends Controller
             'archivo' => ['required', 'file', 'mimes:xlsx,xls,csv'],
         ]);
 
+        // `back()` en las dos salidas: el import se dispara desde un modal del
+        // listado, así que el redirect pelado sacaba al usuario de la búsqueda
+        // que tenía puesta. El `fallback` cubre el caso sin Referer.
         try {
             $resultado = $service->import($data['archivo']);
         } catch (\InvalidArgumentException $e) {
-            return redirect()->route('clientes.index')->with('error', $e->getMessage());
+            return back(fallback: route('clientes.index'))->with('error', $e->getMessage());
         }
 
-        $redirect = redirect()->route('clientes.index')->with(
+        $redirect = back(fallback: route('clientes.index'))->with(
             'success',
             "Importación completa: {$resultado['actualizados']} clientes actualizados, {$resultado['documentos']} documentos cargados."
         );
@@ -190,7 +235,9 @@ class ClienteController extends Controller
 
         SyncClientesJob::dispatch();
 
-        return redirect()->route('clientes.index')
+        // `back()`: el botón está en el listado y sincronizar no tiene por qué
+        // descartar los filtros que el usuario tenía puestos.
+        return back(fallback: route('clientes.index'))
             ->with('success', 'Sincronización iniciada. Los datos se actualizarán en breve.');
     }
 
@@ -293,13 +340,19 @@ class ClienteController extends Controller
         // vencimiento, así que el estado se recalcula también desde acá.
         $cliente->recalcularEstadoDocumental();
 
-        return redirect()->route('clientes.edit', $cliente)
+        // Vuelve al listado con los filtros y la página que traía, no a la
+        // ficha: guardar terminaba dejando al usuario adentro y el único camino
+        // de salida era un "← Volver" que descartaba la búsqueda. Ver el trait
+        // `VuelveAlListado`.
+        return $this->alListado($request, 'clientes.index')
             ->with('success', 'Cliente actualizado correctamente.');
     }
 
     /**
-     * Guarda el checklist de documentación completo (Sí/No y vencimiento de
-     * cada documento) y recalcula el estado derivado del cliente.
+     * Adjunta archivos sueltos a la ficha del cliente.
+     *
+     * (El docblock que había acá describía `updateDocumentacion()`, un método
+     * que ya no existe: el checklist se fusionó dentro de `update()`.)
      */
     public function uploadArchivo(Request $request, Cliente $cliente): RedirectResponse
     {
@@ -314,7 +367,11 @@ class ClienteController extends Controller
             $cliente->guardarAdjunto($file);
         }
 
-        return redirect()->route('clientes.edit', $cliente)
+        // `back()` y no `route('clientes.edit', $cliente)`: son la misma
+        // pantalla, pero el redirect armado a mano pierde el `?volver=` que
+        // trae la ficha — y con él, la vuelta al listado filtrado. Ver el trait
+        // `VuelveAlListado`.
+        return back(fallback: route('clientes.edit', $cliente))
             ->with('success', 'Archivos subidos correctamente.');
     }
 
@@ -332,7 +389,8 @@ class ClienteController extends Controller
         Storage::disk('local')->delete($attachment->path);
         $attachment->delete();
 
-        return redirect()->route('clientes.edit', $cliente)
+        // Ver el comentario de `uploadArchivo()`.
+        return back(fallback: route('clientes.edit', $cliente))
             ->with('success', 'Archivo eliminado correctamente.');
     }
 }

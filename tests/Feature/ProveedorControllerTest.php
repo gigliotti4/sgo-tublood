@@ -174,7 +174,7 @@ class ProveedorControllerTest extends TestCase
             'mail' => 'compras@luquin.com.ar',
             'localidad' => 'CABA',
             'observaciones' => 'Entrega los martes.',
-        ])->assertRedirect("/proveedores/{$proveedor->id}/edit");
+        ])->assertRedirect('/proveedores');
 
         $proveedor->refresh();
         $this->assertSame('ANTONIO LUQUIN S.A.', $proveedor->razon_social);
@@ -192,7 +192,7 @@ class ProveedorControllerTest extends TestCase
         $this->actingAs($user)->put("/proveedores/{$proveedor->id}", [
             'numero' => '9999',
             'razon_social' => 'ANTONIO LUQUIN S A C I F E I',
-        ])->assertRedirect("/proveedores/{$proveedor->id}/edit");
+        ])->assertRedirect('/proveedores');
 
         $this->assertSame('933', $proveedor->fresh()->numero);
     }

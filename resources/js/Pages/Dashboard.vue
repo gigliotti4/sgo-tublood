@@ -74,6 +74,12 @@ const props = defineProps<{
     estadoLabels: Record<string, string>
     porSector: { sector: string; count: number }[]
     /**
+     * Promedio de resolución por sector, en horas, de la misma ventana de 90
+     * días que `kpis.resolucion`. Los sectores sin cierres en la ventana no
+     * vienen: una barra en 0 h se leería como "resuelven al instante".
+     */
+    resolucionPorSector: { sector: string; horas: number; casos: number }[]
+    /**
      * Ranking de proveedores por productos fallados. `sinProveedor` son los
      * renglones que no se le pueden atribuir a nadie (código sin artículo, o
      * artículo sin proveedor cargado).
@@ -110,19 +116,22 @@ const formatFecha = (d: string) =>
 const totalEstados = computed(() => props.porEstado.reduce((acc, e) => acc + e.count, 0))
 
 /**
- * El promedio de resolucion, legible segun su magnitud: un caso de 4 h no
- * puede mostrarse como "0 dias". Sin cierres en la ventana devuelve null y la
- * tarjeta dice "Sin datos" — cero seria un promedio buenisimo y justo lo
- * contrario de lo que pasa.
+ * Horas legibles segun su magnitud: un caso de 4 h no puede mostrarse como
+ * "0 dias". `null` significa "no hubo cierres en la ventana", distinto de cero
+ * — que seria un promedio buenisimo y justo lo contrario de lo que pasa.
+ *
+ * Es un helper y no un computed contra `kpis.resolucion` porque lo comparten la
+ * tarjeta del KPI y el tooltip del grafico por sector: dos formatos distintos
+ * para el mismo numero harian dudar de cual es el bueno.
  */
-const resolucionTexto = computed(() => {
-    const horas = props.kpis.resolucion.horas
-
+const formatHoras = (horas: number | null): string | null => {
     if (horas === null) return null
     if (horas < 24) return `${Math.round(horas)} h`
 
     return `${(horas / 24).toFixed(1).replace('.', ',')} días`
-})
+}
+
+const resolucionTexto = computed(() => formatHoras(props.kpis.resolucion.horas))
 
 // Barras: observaciones por sector
 const sectorChartOptions = computed<ApexOptions>(() => ({
@@ -201,6 +210,60 @@ const proveedorChartOptions = computed<ApexOptions>(() => ({
 
 const proveedorChartSeries = computed(() => [
     { name: 'Productos con falla', data: props.porProveedor.items.map(p => p.fallas) },
+])
+
+// Barras horizontales: tiempo promedio de resolución por sector. Horizontal
+// por el mismo motivo que el de proveedores — "Asuntos Regulatorios" no entra
+// como etiqueta del eje X — y en tarjeta aparte del gráfico de volumen porque
+// son dos preguntas distintas sobre el mismo eje: aquél cuenta casos, éste
+// mide cuánto tardan.
+const resolucionSectorChartOptions = computed<ApexOptions>(() => ({
+    chart: {
+        type: 'bar',
+        fontFamily: 'Poppins, sans-serif',
+        foreColor: '#98a2b3',
+        toolbar: { show: false },
+    },
+    // Ni el azul de marca del gráfico de volumen ni el ámbar del de
+    // proveedores: es una tercera métrica y compartir color sugeriría que las
+    // barras son comparables entre gráficos.
+    colors: ['#6373c4'],
+    plotOptions: {
+        bar: { horizontal: true, barHeight: '55%', borderRadius: 4, borderRadiusApplication: 'end' },
+    },
+    dataLabels: { enabled: false },
+    grid: {
+        borderColor: isDark.value ? 'rgba(255,255,255,0.08)' : '#f2f4f7',
+        xaxis: { lines: { show: true } },
+    },
+    xaxis: {
+        categories: props.resolucionPorSector.map(s => s.sector),
+        axisBorder: { show: false },
+        axisTicks: { show: false },
+        // El eje va en horas, que es como viaja el dato: en días casi todas las
+        // barras caerían entre 0 y 1. La traducción a días la hace el tooltip,
+        // con el mismo criterio que la tarjeta del KPI.
+        labels: { style: { fontSize: '12px' }, formatter: (v: string) => `${Math.round(Number(v))} h` },
+    },
+    yaxis: { labels: { style: { fontSize: '12px' }, maxWidth: 220 } },
+    tooltip: {
+        theme: isDark.value ? 'dark' : 'light',
+        y: {
+            // La firma del segundo parámetro se declara a mano, igual que en el
+            // `dataPointSelection` de arriba: los tipos de ApexCharts no la traen.
+            formatter: (v: number, opciones?: { dataPointIndex?: number }) => {
+                const fila = props.resolucionPorSector[opciones?.dataPointIndex ?? -1]
+                const casos = fila ? ` · ${fila.casos} ${fila.casos === 1 ? 'caso' : 'casos'}` : ''
+
+                return `${formatHoras(v) ?? '—'}${casos}`
+            },
+        },
+    },
+    states: { hover: { filter: { type: 'darken', value: 0.9 } } },
+}))
+
+const resolucionSectorChartSeries = computed(() => [
+    { name: 'Promedio de resolución', data: props.resolucionPorSector.map(s => s.horas) },
 ])
 
 // Donut: observaciones por estado
@@ -395,6 +458,27 @@ const statCards = computed<StatCard[]>(() => [
                     :series="estadoChartSeries"
                 />
             </div>
+        </div>
+
+        <!-- Tiempo de resolución por sector -->
+        <div class="mb-6 rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6">
+            <div class="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+                <h2 class="text-lg font-semibold text-gray-800 dark:text-white/90">Tiempo de resolución por sector</h2>
+                <p class="text-theme-xs text-gray-400">
+                    Últimos 90 días, del alta al cierre. Los sectores sin cierres en la ventana no se listan.
+                </p>
+            </div>
+
+            <div v-if="resolucionPorSector.length === 0" class="flex h-48 items-center justify-center text-sm text-gray-400">
+                Sin datos
+            </div>
+            <VueApexCharts
+                v-else
+                type="bar"
+                height="320"
+                :options="resolucionSectorChartOptions"
+                :series="resolucionSectorChartSeries"
+            />
         </div>
 
         <!-- Proveedores con más fallas -->

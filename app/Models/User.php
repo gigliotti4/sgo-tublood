@@ -23,6 +23,16 @@ class User extends Authenticatable
     /** @use HasFactory<UserFactory> */
     use HasFactory, HasRoles, Notifiable;
 
+    /**
+     * El rol que saltea todos los Gates (ver `Gate::before()` en
+     * AppServiceProvider).
+     *
+     * Como constante porque es la clave con la que se resuelve a quién avisarle
+     * de **todas** las altas (`ObservacionObserver::avisarALosSuperAdmin()`): un
+     * typo ahí deja la notificación sin destinatarios y en silencio.
+     */
+    public const ROL_SUPER_ADMIN = 'super-admin';
+
     public function sector(): BelongsTo
     {
         return $this->belongsTo(Sector::class);

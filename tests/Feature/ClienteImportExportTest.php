@@ -70,9 +70,15 @@ class ClienteImportExportTest extends TestCase
         return implode("\n", array_map(fn ($fila) => implode(' | ', $fila), $filas));
     }
 
+    /**
+     * `from('/clientes')` porque el import se dispara desde un modal del
+     * listado y el controller vuelve con `back()`. Sin esto el test hereda el
+     * `/clientes/export` del `GET` anterior, que es un artefacto del test y no
+     * un recorrido real.
+     */
     private function importar(User $user, array $filas)
     {
-        return $this->actingAs($user)->post('/clientes/import', [
+        return $this->actingAs($user)->from('/clientes')->post('/clientes/import', [
             'archivo' => $this->excelDeFilas($filas),
         ]);
     }
@@ -390,7 +396,10 @@ class ClienteImportExportTest extends TestCase
 
         $archivo = new UploadedFile($path, 'clientes.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
 
+        // `from('/clientes')` por lo mismo que el helper `importar()`: el
+        // import sale del listado y el controller vuelve con `back()`.
         $this->actingAs($this->userWith('clientes.import'))
+            ->from('/clientes')
             ->post('/clientes/import', ['archivo' => $archivo])
             ->assertRedirect('/clientes')
             ->assertSessionMissing('error');

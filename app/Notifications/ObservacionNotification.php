@@ -52,6 +52,31 @@ abstract class ObservacionNotification extends Notification implements ShouldQue
 
     abstract protected function mensaje(): string;
 
+    /**
+     * Líneas extra del cuerpo del mail, entre el mensaje y el número de caso.
+     *
+     * Existe como hook y no reescribiendo `toMail()` en cada subclase porque
+     * este método concentra reglas que no se pueden perder de vista (el prefijo
+     * de prioridad crítica en el asunto, el `replyTo` del sector, el botón) y
+     * que hoy están escritas una sola vez: una subclase que sobreescriba
+     * `toMail()` entero las duplica, y la próxima vez que cambie alguna va a
+     * cambiar en un lado y no en el otro.
+     *
+     * Recibe `$notifiable` porque los avisos de vencimiento le llegan al
+     * responsable y a su supervisor en el mismo envío, y el texto que sirve
+     * para uno no sirve para el otro (ver `Concerns\DetallaElAtraso`).
+     *
+     * Vacío por defecto: las notificaciones que no lo necesitan no cambian. Y
+     * **no** se refleja en `toArray()`: `toBroadcast()` lo reenvía tal cual y
+     * el toast se volvería ilegible.
+     *
+     * @return array<int, string>
+     */
+    protected function detalles(object $notifiable): array
+    {
+        return [];
+    }
+
     public function toMail(object $notifiable): MailMessage
     {
         $critica = $this->observacion->prioridad === 'critica';
@@ -74,8 +99,13 @@ abstract class ObservacionNotification extends Notification implements ShouldQue
             $mail->replyTo($replyTo);
         }
 
+        $mail->line($this->mensaje());
+
+        foreach ($this->detalles($notifiable) as $detalle) {
+            $mail->line($detalle);
+        }
+
         return $mail
-            ->line($this->mensaje())
             ->line("Observación {$this->observacion->numero}: {$this->observacion->titulo}")
             ->action('Ver en el sistema', route('observaciones.show', $this->observacion));
     }

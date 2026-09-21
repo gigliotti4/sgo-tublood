@@ -2,13 +2,19 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Concerns\OrdenaListados;
+use App\Http\Controllers\Concerns\VuelveAlListado;
 use App\Http\Controllers\Controller;
+use Closure;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
 class RoleController extends Controller
 {
+    use OrdenaListados, VuelveAlListado;
+
     /**
      * Permisos con su etiqueta en español y su grupo, para las tres pantallas
      * que los listan. Los que no estén en config/permisos.php caen a su nombre
@@ -33,12 +39,36 @@ class RoleController extends Controller
             });
     }
 
-    public function index()
+    /**
+     * @return array<string, string|Closure>
+     */
+    private function ordenables(): array
+    {
+        return [
+            'nombre' => 'name',
+            'permisos' => fn (Builder $q, string $dir) => $q
+                ->withCount('permissions')
+                ->orderBy('permissions_count', $dir),
+        ];
+    }
+
+    public function index(Request $request)
     {
         $this->authorize('roles.view');
 
         return inertia('Admin/Roles/Index', [
-            'roles' => Role::with('permissions')->paginate(15),
+            // El orden por defecto es nuevo: este listado paginaba **sin
+            // ninguno**, y eso es no determinista — podía repetir filas entre
+            // páginas. `withQueryString()` también, para no perder el orden al
+            // pasar de página.
+            'roles' => $this->aplicarOrden(
+                Role::with('permissions'),
+                $request,
+                $this->ordenables(),
+                fn (Builder $q) => $q->orderBy('name'),
+                'roles.id',
+            )->paginate(15)->withQueryString(),
+            'orden' => $this->orden($request, $this->ordenables()),
             'permisos' => $this->permisosConEtiqueta(),
         ]);
     }
@@ -92,7 +122,9 @@ class RoleController extends Controller
         $role->update(['name' => $data['name']]);
         $role->syncPermissions($data['permissions'] ?? []);
 
-        return redirect()->route('roles.index')
+        // Al listado, pero **con los filtros y la página** que traía: ver el
+        // trait `VuelveAlListado`.
+        return $this->alListado($request, 'roles.index')
             ->with('success', 'Rol actualizado correctamente.');
     }
 
@@ -106,7 +138,9 @@ class RoleController extends Controller
 
         $role->delete();
 
-        return redirect()->route('roles.index')
+        // `back()`, igual que la rama de error de arriba: el borrado se
+        // confirma en un modal del listado.
+        return back(fallback: route('roles.index'))
             ->with('success', 'Rol eliminado correctamente.');
     }
 }

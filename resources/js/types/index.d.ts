@@ -480,6 +480,14 @@ export interface Observacion {
     deleted_at?: string | null
     /** La última entrada de bitácora de tipo "baja" (cancelación o borrado), con motivo y autor. */
     baja?: ObservationHistoryEntry | null
+    /** Sellada por ObservacionObserver al entrar en un estado final; vuelve a null si el caso se reabre. */
+    cerrada_at?: string | null
+    /**
+     * Quién cerró el caso. Columna propia y no una lectura de la bitácora — ver
+     * `ObservacionObserver::marcarCierre()`. El nombre lleva el sufijo
+     * `_usuario` porque `cerrada_por` a secas es la columna `int`.
+     */
+    cerrada_por_usuario?: { id: number; name: string; apellido: string | null } | null
 }
 
 export interface ObservationAttachment {

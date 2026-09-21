@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Concerns\OrdenaListados;
+use App\Http\Controllers\Concerns\VuelveAlListado;
 use App\Http\Controllers\Controller;
 use App\Jobs\SyncArticulosJob;
 use App\Models\Articulo;
+use App\Models\Proveedor;
 use App\Services\ArticuloExportService;
 use App\Services\ArticuloImportService;
 use App\Services\VinculacionProveedores;
@@ -16,6 +19,45 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ArticuloController extends Controller
 {
+    use OrdenaListados, VuelveAlListado;
+
+    /**
+     * Qué columnas se pueden ordenar y con qué expresión. La clave es lo que
+     * viaja en la URL; el valor, el SQL.
+     *
+     * La comparten el listado y el export: "lo que ves es lo que baja" ya vale
+     * para los filtros, y el orden es parte de lo que se ve — si la pantalla
+     * está ordenada por vencimiento porque se está armando la lista de lo que
+     * vence, el Excel tiene que bajar así o hay que rehacerlo a mano.
+     *
+     * "Observaciones" queda afuera: es texto libre largo y ordenarlo no
+     * responde ninguna pregunta.
+     *
+     * @return array<string, string|Closure>
+     */
+    private function ordenables(): array
+    {
+        return [
+            'codigo' => 'articulos.codigo',
+            'descripcion' => 'articulos.descripcion',
+            'estado' => 'articulos.activo',
+            // Subconsulta y **no** un join: `filtrados()` se comparte con el
+            // export y devuelve el modelo entero, así que un join traería
+            // `proveedores.id` pisando `articulos.id` en el resultado. Laravel
+            // inserta la subconsulta en el ORDER BY y la lista sigue siendo de
+            // artículos.
+            'proveedor' => fn (Builder $q, string $dir) => $q->orderBy(
+                Proveedor::query()
+                    ->select('razon_social')
+                    ->whereColumn('proveedores.id', 'articulos.proveedor_id'),
+                $dir,
+            ),
+            'pm' => 'articulos.pm',
+            'legajo' => 'articulos.legajo',
+            'vencimiento' => 'articulos.fecha_vencimiento',
+        ];
+    }
+
     public function index(Request $request): Response
     {
         $this->authorize('articulos.view');
@@ -25,16 +67,16 @@ class ArticuloController extends Controller
 
         $proveedor = $request->string('proveedor')->trim()->value();
 
-        $articulos = $this->filtrados($request)
-            ->orderBy('descripcion')
-            ->paginate(50)
-            ->withQueryString();
+        // Sin `orderBy` acá: lo resuelve `filtrados()`, que es lo que hace que
+        // el export herede el mismo orden.
+        $articulos = $this->filtrados($request)->paginate(50)->withQueryString();
 
         $lastSync = Articulo::max('synced_at');
 
         return inertia('Admin/Articulos/Index', [
             'articulos' => $articulos,
             'filters' => ['search' => $search, 'estado' => $estado, 'proveedor' => $proveedor],
+            'orden' => $this->orden($request, $this->ordenables()),
             'lastSync' => $lastSync,
             // Sin filtrar: el paginador ya trae el total de la búsqueda vigente.
             'total' => Articulo::count(),
@@ -55,14 +97,16 @@ class ArticuloController extends Controller
     {
         $this->authorize('articulos.view');
 
-        $articulos = $this->filtrados($request)->orderBy('descripcion')->get();
+        // Sin `orderBy` repetido: el orden ya lo resuelve `filtrados()`, que es
+        // el mismo que usa el listado.
+        $articulos = $this->filtrados($request)->get();
 
         return (new ArticuloExportService)->exportar($articulos);
     }
 
     /**
-     * La query del listado con los filtros de la request aplicados. La
-     * comparten el listado y la exportación a Excel.
+     * La query del listado con los filtros y el orden de la request aplicados.
+     * La comparten el listado y la exportación a Excel.
      */
     private function filtrados(Request $request): Builder
     {
@@ -70,7 +114,7 @@ class ArticuloController extends Controller
         $estado = $request->string('estado')->trim()->value();
         $proveedor = $request->string('proveedor')->trim()->value();
 
-        return Articulo::query()
+        $query = Articulo::query()
             ->with('proveedor:id,numero,razon_social')
             ->when($search, fn ($q) => $q->buscar($search))
             // Encadenado después del buscador: buscar "AGUJA" dentro de los
@@ -82,6 +126,18 @@ class ArticuloController extends Controller
             ->when($proveedor, fn ($q) => $proveedor === 'sin'
                 ? $q->whereNull('proveedor_id')
                 : $q->whereNotNull('proveedor_id'));
+
+        return $this->aplicarOrden(
+            $query,
+            $request,
+            $this->ordenables(),
+            // El orden propio de esta pantalla cuando no se pidió otro. Antes
+            // vivía encadenado al final de este método; movido acá porque
+            // encadenado primero dejaba cualquier `?sort=` como criterio
+            // secundario, o sea sin efecto.
+            fn (Builder $q) => $q->orderBy('articulos.descripcion'),
+            'articulos.id',
+        );
     }
 
     public function sync(): RedirectResponse
@@ -90,7 +146,9 @@ class ArticuloController extends Controller
 
         SyncArticulosJob::dispatch();
 
-        return redirect()->route('articulos.index')
+        // `back()`: el botón está en el listado y sincronizar no tiene por qué
+        // descartar los filtros que el usuario tenía puestos.
+        return back(fallback: route('articulos.index'))
             ->with('success', 'Sincronización iniciada. Los datos se actualizarán en breve.');
     }
 
@@ -126,7 +184,9 @@ class ArticuloController extends Controller
 
         $articulo->update($data);
 
-        return redirect()->route('articulos.edit', $articulo)
+        // Vuelve al listado filtrado y no a la ficha — ver el trait
+        // `VuelveAlListado` y el comentario equivalente en ClienteController.
+        return $this->alListado($request, 'articulos.index')
             ->with('success', 'Artículo actualizado correctamente.');
     }
 
@@ -139,10 +199,12 @@ class ArticuloController extends Controller
             'crear_faltantes' => ['boolean'],
         ]);
 
+        // `back()` en las dos salidas: el import se dispara desde un modal del
+        // listado, así que el redirect pelado sacaba al usuario de su búsqueda.
         try {
             $resultado = $service->import($data['archivo'], $request->boolean('crear_faltantes'));
         } catch (\InvalidArgumentException $e) {
-            return redirect()->route('articulos.index')->with('error', $e->getMessage());
+            return back(fallback: route('articulos.index'))->with('error', $e->getMessage());
         }
 
         $mensaje = "Importación completa: {$resultado['actualizados']} artículos actualizados";
@@ -157,7 +219,7 @@ class ArticuloController extends Controller
 
         $mensaje .= '.';
 
-        $redirect = redirect()->route('articulos.index')->with('success', $mensaje);
+        $redirect = back(fallback: route('articulos.index'))->with('success', $mensaje);
 
         if ($resultado['advertencias'] !== []) {
             $redirect->with('error', implode(' | ', $resultado['advertencias']));

@@ -6,6 +6,7 @@ import InputFecha from '@/Components/InputFecha.vue'
 import Textarea from '@/Components/Textarea.vue'
 import Button from '@/Components/Button.vue'
 import SelectorProveedor from '@/Components/SelectorProveedor.vue'
+import { useVolverAlListado } from '@/composables/useVolverAlListado'
 import type { Articulo } from '@/types'
 
 const props = defineProps<{ articulo: Articulo }>()
@@ -30,7 +31,12 @@ const proveedorInicial = props.articulo.proveedor
     }
     : null
 
-const submit = () => form.put(route('articulos.update', props.articulo.id))
+// `volver` transporta los filtros del listado: lo puso el link "Editar"
+// y se lo devolvemos al controller para que sepa a dónde volver.
+// Ver `composables/useVolverAlListado.ts`.
+const { urlListado, aGuardar } = useVolverAlListado('articulos.index')
+
+const submit = () => form.put(aGuardar('articulos.update', { articulo: props.articulo.id }))
 </script>
 
 <template>
@@ -38,7 +44,7 @@ const submit = () => form.put(route('articulos.update', props.articulo.id))
 
     <AppLayout>
         <div class="mb-6 flex items-center gap-3">
-            <Link :href="route('articulos.index')" class="text-sm text-gray-400 transition hover:text-gray-600 dark:hover:text-gray-300">← Volver</Link>
+            <Link :href="urlListado" class="text-sm text-gray-400 transition hover:text-gray-600 dark:hover:text-gray-300">← Volver</Link>
             <h1 class="text-xl font-semibold text-gray-800 dark:text-white/90">Editar artículo</h1>
         </div>
 

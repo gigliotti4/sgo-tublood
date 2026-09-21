@@ -355,4 +355,134 @@ class ObservacionBajaTest extends TestCase
                 ->where('puedeEditar', false)
             );
     }
+
+    // ── Cerradas en el archivo ────────────────────────────────────
+
+    public function test_bajas_index_lista_tambien_las_cerradas(): void
+    {
+        $user = $this->userWith('observaciones.delete');
+
+        $this->observacion(['titulo' => 'Cerrada', 'estado' => 'cerrada']);
+        $this->observacion(['titulo' => 'Cancelada', 'estado' => 'cancelada']);
+        $borrada = $this->observacion(['titulo' => 'Borrada']);
+        $borrada->delete();
+        $this->observacion(['titulo' => 'Abierta, no debería salir']);
+
+        $this->actingAs($user)->get('/bajas')
+            ->assertInertia(fn ($page) => $page->has('observaciones.data', 3));
+    }
+
+    public function test_bajas_index_filtra_por_tipo_cerrada(): void
+    {
+        $user = $this->userWith('observaciones.delete');
+
+        $this->observacion(['titulo' => 'Cerrada', 'estado' => 'cerrada']);
+        $this->observacion(['titulo' => 'Cancelada', 'estado' => 'cancelada']);
+        $borrada = $this->observacion(['titulo' => 'Borrada']);
+        $borrada->delete();
+
+        $this->actingAs($user)->get('/bajas?tipo=cerrada')
+            ->assertInertia(fn ($page) => $page
+                ->has('observaciones.data', 1)
+                ->where('observaciones.data.0.titulo', 'Cerrada'));
+
+        // El filtro viejo sigue aislando lo suyo.
+        $this->actingAs($user)->get('/bajas?tipo=borrada')
+            ->assertInertia(fn ($page) => $page
+                ->has('observaciones.data', 1)
+                ->where('observaciones.data.0.titulo', 'Borrada'));
+    }
+
+    /** El borrado gana sobre el estado: es el único bucket que habilita restaurar. */
+    public function test_una_borrada_que_ademas_estaba_cerrada_cuenta_como_borrada(): void
+    {
+        $user = $this->userWith('observaciones.delete');
+
+        $observacion = $this->observacion(['titulo' => 'Cerrada y borrada', 'estado' => 'cerrada']);
+        $observacion->delete();
+
+        $this->actingAs($user)->get('/bajas?tipo=cerrada')
+            ->assertInertia(fn ($page) => $page->has('observaciones.data', 0));
+
+        $this->actingAs($user)->get('/bajas?tipo=borrada')
+            ->assertInertia(fn ($page) => $page->has('observaciones.data', 1));
+    }
+
+    public function test_el_observer_guarda_quien_cerro_el_caso(): void
+    {
+        $user = $this->userWith('observaciones.delete');
+        $observacion = $this->observacion(['estado' => 'en_proceso']);
+
+        $this->actingAs($user);
+        $observacion->update(['estado' => 'cerrada']);
+
+        $this->assertSame($user->id, $observacion->fresh()->cerrada_por);
+    }
+
+    /**
+     * Sin esto, un caso reabierto seguiría mostrando en el archivo a quien lo
+     * cerró la primera vez.
+     */
+    public function test_reabrir_un_caso_borra_cerrada_at_y_cerrada_por(): void
+    {
+        $user = $this->userWith('observaciones.delete');
+        $observacion = $this->observacion(['estado' => 'en_proceso']);
+
+        $this->actingAs($user);
+        $observacion->update(['estado' => 'cerrada']);
+        $this->assertNotNull($observacion->fresh()->cerrada_por);
+
+        $observacion->update(['estado' => 'en_proceso']);
+
+        $this->assertNull($observacion->fresh()->cerrada_at);
+        $this->assertNull($observacion->fresh()->cerrada_por);
+    }
+
+    /**
+     * `cancelada` no está en `estados_finales`: un caso anulado no es trabajo
+     * terminado. Guarda contra que alguien "arregle" eso de paso.
+     */
+    public function test_cancelar_no_sella_el_cierre(): void
+    {
+        $user = $this->userWith('observaciones.delete');
+        $observacion = $this->observacion(['estado' => 'en_proceso']);
+
+        $this->actingAs($user);
+        $observacion->update(['estado' => 'cancelada']);
+
+        $this->assertNull($observacion->fresh()->cerrada_at);
+        $this->assertNull($observacion->fresh()->cerrada_por);
+    }
+
+    /** Una cerrada no está "trashed": restaurarla no significa nada. */
+    public function test_una_cerrada_no_se_puede_restaurar(): void
+    {
+        $user = $this->userWith('observaciones.delete');
+        $observacion = $this->observacion(['estado' => 'cerrada']);
+
+        $this->actingAs($user)
+            ->post(route('bajas.restore', $observacion->id))
+            ->assertNotFound();
+
+        $this->assertSame('cerrada', $observacion->fresh()->estado);
+    }
+
+    /**
+     * La relación se llama `cerradaPorUsuario` justamente para no colisionar
+     * con la columna `cerrada_por` al serializar: este test agarra esa colisión.
+     */
+    public function test_el_listado_trae_quien_cerro_el_caso(): void
+    {
+        $user = $this->userWith('observaciones.delete');
+        $user->update(['name' => 'Ana', 'apellido' => 'Gomez']);
+        $observacion = $this->observacion(['estado' => 'en_proceso']);
+
+        $this->actingAs($user);
+        $observacion->update(['estado' => 'cerrada']);
+
+        $this->actingAs($user)->get('/bajas?tipo=cerrada')
+            ->assertInertia(fn ($page) => $page
+                ->where('observaciones.data.0.cerrada_por_usuario.name', 'Ana')
+                ->where('observaciones.data.0.cerrada_por_usuario.apellido', 'Gomez'));
+    }
 }

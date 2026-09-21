@@ -7,8 +7,13 @@ use App\Models\ObservationHistory;
 use App\Models\Sector;
 use App\Models\User;
 use App\Notifications\ObservacionAsignadaNotification;
+use App\Notifications\ObservacionCreadaNotification;
 use App\Notifications\ObservacionCriticaNotification;
 use App\Notifications\ObservacionFinalizadaNotification;
+use App\Support\TaxonomiaIncidencias;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Notification;
+use Throwable;
 
 /**
  * Arranca y corta el reloj de gestión de una observación, y deja la entrada de
@@ -59,7 +64,7 @@ class ObservacionObserver
      *
      * Reabrir un caso vuelve `cerrada_at` a null: sin esto, un caso reabierto y
      * cerrado de nuevo conservaria la fecha del primer cierre y mentiria el
-     * promedio.
+     * promedio. Lo mismo vale para `cerrada_por`.
      */
     private function marcarCierre(Observacion $observacion): void
     {
@@ -67,7 +72,18 @@ class ObservacionObserver
             return;
         }
 
-        $observacion->cerrada_at = $observacion->estaFinalizada() ? now() : null;
+        $finalizada = $observacion->estaFinalizada();
+
+        $observacion->cerrada_at = $finalizada ? now() : null;
+        // Quién cerró, en la misma pasada y en columna propia: la bitácora
+        // guarda la **etiqueta legible** del estado y ya se demostró que no es
+        // consultable de forma confiable (ver la migración de `cerrada_at`,
+        // que tuvo que buscar 'Cerrada' y 'Resuelta' para su backfill).
+        //
+        // Null cuando el cierre no lo hace una persona (un comando, un seeder):
+        // es mejor que "Sistema" sea un caso explícito de la pantalla y no un
+        // id inventado.
+        $observacion->cerrada_por = $finalizada ? auth()->id() : null;
     }
 
     public function updated(Observacion $observacion): void
@@ -96,11 +112,75 @@ class ObservacionObserver
         // El alta del portal asigna sola por tipo y avisa con "entró un reclamo
         // nuevo"; sumarle el de asignación sería contar el mismo hecho dos
         // veces. Ver `Observacion::$omitirAvisoDeAsignacion`.
-        if ($observacion->omitirAvisoDeAsignacion) {
-            return;
+        //
+        // ⚠️ La bandera apaga **solo** el aviso de asignación y no el método
+        // entero: el aviso a los super-admin de abajo es de otras personas y de
+        // otro hecho (entró un caso al sistema), y nadie se lo mandó ya.
+        if (! $observacion->omitirAvisoDeAsignacion) {
+            User::find($observacion->responsable_id)?->notify(new ObservacionAsignadaNotification($observacion));
         }
 
-        User::find($observacion->responsable_id)?->notify(new ObservacionAsignadaNotification($observacion));
+        $this->avisarALosSuperAdmin($observacion);
+    }
+
+    /**
+     * Aviso a los super-admin de cada alta, venga del portal o del panel.
+     *
+     * Vive en el observer y no en los controllers porque hay tres caminos de
+     * alta (`Portal\ObservacionController::store`, `storeInterna` y
+     * `storeInternaEspecial`), más la derivación el día que se implemente:
+     * mismo criterio que el reloj de gestión y el aviso de asignación.
+     *
+     * Se excluyen tres conjuntos, con el mismo criterio que
+     * `avisarSiPasoACritica()` — avisarle a alguien de algo que ya le llegó, o
+     * de su propia acción, entrena a la gente a ignorar los mails:
+     *
+     * - Quien cargó el caso (`created_by`; `auth()->id()` como red para las
+     *   altas que todavía no lo guardan). En el portal los dos son null.
+     * - El responsable asignado: ya recibe `ObservacionAsignadaNotification`
+     *   (interna) o `ObservacionExternaRecibidaNotification` (portal).
+     * - En las externas, quien atiende ese tipo por rol
+     *   (`incidencias.roles_por_tipo`). **No** se replica el *fallback* de
+     *   `Portal\ObservacionController::avisar()` (todo el equipo de Calidad
+     *   cuando nadie tiene el rol): es un estado de configuración incompleta,
+     *   dura hasta que se asigne el rol, y duplicar esa regla acá la condenaba
+     *   a desincronizarse del original. En ese caso puntual un super-admin de
+     *   Calidad recibe dos mails, que es el precio correcto.
+     *
+     * ⚠️ Dos cosas no negociables, porque esto corre también en el alta del
+     * portal, que es pública y **nunca puede perder un reclamo**:
+     *
+     * - Se filtra con `whereHas('roles', ...)` y **no** con el scope
+     *   `User::role(...)` de Spatie, que tira `RoleDoesNotExist` si el rol no
+     *   está creado — un 500 en un endpoint público.
+     * - Todo va en un `try/catch` que loguea: el evento `created` dispara
+     *   **dentro** de la transacción de `Observacion::altaConNumero()`, así que
+     *   una excepción acá tiraría abajo el alta entera.
+     */
+    private function avisarALosSuperAdmin(Observacion $observacion): void
+    {
+        try {
+            $excluidos = array_values(array_filter([
+                $observacion->created_by ?? auth()->id(),
+                $observacion->responsable_id,
+            ]));
+
+            $rolDelTipo = $observacion->origen === 'externa'
+                ? TaxonomiaIncidencias::rolDeTipo($observacion->tipo)
+                : null;
+
+            $destinatarios = User::query()
+                ->whereHas('roles', fn ($q) => $q->where('name', User::ROL_SUPER_ADMIN))
+                ->when($excluidos !== [], fn ($q) => $q->whereKeyNot($excluidos))
+                ->when($rolDelTipo, fn ($q, $rol) => $q->whereDoesntHave('roles', fn ($r) => $r->where('name', $rol)))
+                ->get();
+
+            if ($destinatarios->isNotEmpty()) {
+                Notification::send($destinatarios, new ObservacionCreadaNotification($observacion));
+            }
+        } catch (Throwable $e) {
+            Log::error("No se pudo avisar a los super-admin del alta de {$observacion->numero}: {$e->getMessage()}");
+        }
     }
 
     /**

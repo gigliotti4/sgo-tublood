@@ -14,11 +14,16 @@ import Pagination from '@/Components/Pagination.vue'
 import ContadorRegistros from '@/Components/ContadorRegistros.vue'
 import TableCard from '@/Components/TableCard.vue'
 import DataRow from '@/Components/DataRow.vue'
+import ThOrdenable from '@/Components/ThOrdenable.vue'
+import { useOrdenamiento, type OrdenVigente } from '@/composables/useOrdenamiento'
+import { useIrALaFicha } from '@/composables/useVolverAlListado'
 import type { Articulo, PaginatedData } from '@/types'
 
 const props = defineProps<{
     articulos: PaginatedData<Articulo>
     filters: { search: string; estado: string; proveedor: string }
+    /** Validado contra la whitelist del backend: `sort` es null en el orden por defecto. */
+    orden: OrdenVigente
     lastSync: string | null
     total: number
     totalInactivos: number
@@ -34,8 +39,30 @@ const search = ref(props.filters.search ?? '')
 const estado = ref(props.filters.estado ?? '')
 const proveedor = ref(props.filters.proveedor ?? '')
 
+const filtrosVigentes = () => ({
+    search: search.value,
+    estado: estado.value,
+    proveedor: proveedor.value,
+})
+
+const { orden, ordenarPor, paramsDeOrden } = useOrdenamiento({
+    ruta: 'articulos.index',
+    orden: () => props.orden,
+    parametros: filtrosVigentes,
+    // Texto A→Z. Estado, proveedor y vencimiento arrancan al revés: lo que se
+    // busca es "los discontinuados", "los que ya tienen proveedor" y "lo que
+    // vence primero".
+    ascendentesPorDefecto: ['codigo', 'descripcion', 'pm', 'legajo', 'vencimiento'],
+})
+
+// El link a la ficha se lleva la página y los filtros vigentes, para que
+// al guardar (o al cancelar) se vuelva exactamente acá.
+const { aLaFicha } = useIrALaFicha()
+
 const recargar = () => {
-    router.get(route('articulos.index'), { search: search.value, estado: estado.value, proveedor: proveedor.value }, {
+    // El orden viaja con los filtros: cambiar el buscador no tiene por qué
+    // devolver la tabla al orden por defecto.
+    router.get(route('articulos.index'), { ...filtrosVigentes(), ...paramsDeOrden.value }, {
         preserveState: true,
         preserveScroll: true,
         replace: true,
@@ -56,6 +83,8 @@ const urlExportar = computed(() => route('articulos.export', {
     search: search.value || undefined,
     estado: estado.value || undefined,
     proveedor: proveedor.value || undefined,
+    // El Excel baja en el orden de la pantalla: "lo que ves es lo que baja".
+    ...paramsDeOrden.value,
 }))
 
 // El reporte de códigos mal cargados se abre a pedido: es para mandarle a RP,
@@ -215,14 +244,15 @@ const submitImport = () => {
                     <table class="w-full">
                         <thead>
                             <tr class="border-b border-gray-100 dark:border-gray-800">
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Código</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Descripción</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Estado</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Proveedor</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">PM</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Legajo</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Vencimiento</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Observaciones</th>
+                                <ThOrdenable campo="codigo" :orden="orden" @ordenar="ordenarPor">Código</ThOrdenable>
+                                <ThOrdenable campo="descripcion" :orden="orden" @ordenar="ordenarPor">Descripción</ThOrdenable>
+                                <ThOrdenable campo="estado" :orden="orden" @ordenar="ordenarPor">Estado</ThOrdenable>
+                                <ThOrdenable campo="proveedor" :orden="orden" @ordenar="ordenarPor">Proveedor</ThOrdenable>
+                                <ThOrdenable campo="pm" :orden="orden" @ordenar="ordenarPor">PM</ThOrdenable>
+                                <ThOrdenable campo="legajo" :orden="orden" @ordenar="ordenarPor">Legajo</ThOrdenable>
+                                <ThOrdenable campo="vencimiento" :orden="orden" @ordenar="ordenarPor">Vencimiento</ThOrdenable>
+                                <!-- Texto libre largo: ordenarlo no responde ninguna pregunta. -->
+                                <ThOrdenable :orden="orden">Observaciones</ThOrdenable>
                                 <th v-if="hasPermission('articulos.edit')" class="px-4 py-3" />
                             </tr>
                         </thead>
@@ -261,7 +291,7 @@ const submitImport = () => {
                                 <td class="max-w-60 truncate px-4 py-3.5 text-theme-xs text-gray-500 dark:text-gray-400">{{ articulo.observaciones ?? '—' }}</td>
                                 <td v-if="hasPermission('articulos.edit')" class="px-4 py-3.5 text-right">
                                     <Link
-                                        :href="route('articulos.edit', articulo.id)"
+                                        :href="aLaFicha('articulos.edit', { articulo: articulo.id })"
                                         class="inline-flex rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-brand-500 dark:hover:bg-white/[0.05] dark:hover:text-brand-300"
                                         title="Editar"
                                     >
@@ -284,7 +314,7 @@ const submitImport = () => {
                         </template>
                         <template v-if="hasPermission('articulos.edit')" #actions>
                             <Link
-                                :href="route('articulos.edit', articulo.id)"
+                                :href="aLaFicha('articulos.edit', { articulo: articulo.id })"
                                 class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-brand-500 dark:hover:bg-white/[0.05] dark:hover:text-brand-300"
                                 title="Editar"
                             >

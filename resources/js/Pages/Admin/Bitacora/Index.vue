@@ -10,6 +10,8 @@ import Select from '@/Components/Select.vue'
 import TableCard from '@/Components/TableCard.vue'
 import DataRow from '@/Components/DataRow.vue'
 import { accionLabels, accionVariant, comoCambioSimple, esBaja, esClasificacion, esNotificados, formatFechaHora, formatSize, nombreAutor } from '@/lib/bitacora'
+import ThOrdenable from '@/Components/ThOrdenable.vue'
+import { useOrdenamiento, type OrdenVigente } from '@/composables/useOrdenamiento'
 import type { ObservationHistoryEntry, PaginatedData } from '@/types'
 
 interface UsuarioOption { id: number; name: string; apellido: string | null }
@@ -29,6 +31,8 @@ const props = defineProps<{
     filters: Filtros
     usuarios: UsuarioOption[]
     sectores: SectorOption[]
+    /** Validado contra la whitelist del backend: `sort` es null en el orden por defecto. */
+    orden: OrdenVigente
 }>()
 
 const nombreCompleto = (u: UsuarioOption) => [u.name, u.apellido].filter(Boolean).join(' ')
@@ -51,10 +55,18 @@ const hayFiltros = computed(() => Object.values(filtros).some(v => v !== ''))
 
 const fechaParcial = (v: string) => v !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(v)
 
+const { orden, ordenarPor, paramsDeOrden } = useOrdenamiento({
+    ruta: 'bitacora.index',
+    orden: () => props.orden,
+    parametros: () => Object.fromEntries(Object.entries(filtros).filter(([, v]) => v !== '')),
+    // Los textos se leen A→Z; los numeros y las fechas, de mayor a menor.
+    ascendentesPorDefecto: ['accion', 'usuario', 'observacion'],
+})
+
 const aplicarFiltros = () => {
     if (fechaParcial(filtros.desde) || fechaParcial(filtros.hasta)) return
     const params = Object.fromEntries(Object.entries(filtros).filter(([, v]) => v !== ''))
-    router.get(route('bitacora.index'), params, {
+    router.get(route('bitacora.index'), { ...params, ...paramsDeOrden.value }, {
         preserveState: true,
         preserveScroll: true,
         replace: true,
@@ -132,11 +144,11 @@ const limpiarFiltros = () => {
                     <table class="w-full">
                         <thead>
                             <tr class="border-b border-gray-100 dark:border-gray-800">
-                                <th class="px-5 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Fecha</th>
-                                <th class="px-5 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Acción</th>
-                                <th class="px-5 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Usuario</th>
-                                <th class="px-5 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Observación</th>
-                                <th class="px-5 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Detalle</th>
+                                <ThOrdenable campo="fecha" :orden="orden" pad="px-5" @ordenar="ordenarPor">Fecha</ThOrdenable>
+                                <ThOrdenable campo="accion" :orden="orden" pad="px-5" @ordenar="ordenarPor">Acción</ThOrdenable>
+                                <ThOrdenable campo="usuario" :orden="orden" pad="px-5" @ordenar="ordenarPor">Usuario</ThOrdenable>
+                                <ThOrdenable campo="observacion" :orden="orden" pad="px-5" @ordenar="ordenarPor">Observación</ThOrdenable>
+                                <ThOrdenable :orden="orden" pad="px-5">Detalle</ThOrdenable>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100 dark:divide-gray-800">

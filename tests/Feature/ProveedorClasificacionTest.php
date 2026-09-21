@@ -55,7 +55,7 @@ class ProveedorClasificacionTest extends TestCase
                 'tiene_legajo' => true,
                 'habilitado' => false,
             ])
-            ->assertRedirect(route('proveedores.edit', $proveedor));
+            ->assertRedirect(route('proveedores.index'));
 
         $proveedor->refresh();
 
@@ -92,7 +92,7 @@ class ProveedorClasificacionTest extends TestCase
                     'bpf' => ['presentado' => true, 'fecha_vencimiento' => '2027-03-10'],
                 ],
             ])
-            ->assertRedirect(route('proveedores.edit', $proveedor));
+            ->assertRedirect(route('proveedores.index'));
 
         $proveedor->refresh();
 

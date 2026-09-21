@@ -14,6 +14,9 @@ import Pagination from '@/Components/Pagination.vue'
 import ContadorRegistros from '@/Components/ContadorRegistros.vue'
 import TableCard from '@/Components/TableCard.vue'
 import DataRow from '@/Components/DataRow.vue'
+import ThOrdenable from '@/Components/ThOrdenable.vue'
+import { useOrdenamiento, type OrdenVigente } from '@/composables/useOrdenamiento'
+import { useIrALaFicha } from '@/composables/useVolverAlListado'
 import type { PaginatedData, Proveedor } from '@/types'
 
 const props = defineProps<{
@@ -22,6 +25,8 @@ const props = defineProps<{
     tipos: Record<string, string>
     total: number
     lastSync: string | null
+    /** Validado contra la whitelist del backend: `sort` es null en el orden por defecto. */
+    orden: OrdenVigente
 }>()
 
 const syncing = ref(false)
@@ -47,12 +52,27 @@ const search = ref(props.filters.search ?? '')
 const tipoProveedor = ref(props.filters.tipo_proveedor ?? '')
 const filtroEstado = ref(props.filters.estado_documental ?? '')
 
+const filtrosVigentes = () => ({
+    search: search.value,
+    tipo_proveedor: tipoProveedor.value,
+    estado_documental: filtroEstado.value,
+})
+
+const { orden, ordenarPor, paramsDeOrden } = useOrdenamiento({
+    ruta: 'proveedores.index',
+    orden: () => props.orden,
+    parametros: filtrosVigentes,
+    // Los textos se leen A→Z; los numeros y las fechas, de mayor a menor.
+    ascendentesPorDefecto: ['numero', 'razon_social', 'domicilio', 'localidad', 'telefono', 'mail', 'tipo'],
+})
+
+// El link a la ficha se lleva la página y los filtros vigentes, para que
+// al guardar (o al cancelar) se vuelva exactamente acá.
+const { aLaFicha } = useIrALaFicha()
+
 const recargar = () => {
-    router.get(route('proveedores.index'), {
-        search: search.value,
-        tipo_proveedor: tipoProveedor.value,
-        estado_documental: filtroEstado.value,
-    }, {
+    // El orden viaja con los filtros: ver el comentario equivalente en Clientes.
+    router.get(route('proveedores.index'), { ...filtrosVigentes(), ...paramsDeOrden.value }, {
         preserveState: true,
         preserveScroll: true,
         replace: true,
@@ -178,14 +198,14 @@ const submitImport = () => {
                     <table class="w-full">
                         <thead>
                             <tr class="border-b border-gray-100 dark:border-gray-800">
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">N°</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Razón Social</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Domicilio</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Localidad</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Teléfono</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Mail</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Tipo</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Documentación</th>
+                                <ThOrdenable campo="numero" :orden="orden" @ordenar="ordenarPor">N°</ThOrdenable>
+                                <ThOrdenable campo="razon_social" :orden="orden" @ordenar="ordenarPor">Razón Social</ThOrdenable>
+                                <ThOrdenable campo="domicilio" :orden="orden" @ordenar="ordenarPor">Domicilio</ThOrdenable>
+                                <ThOrdenable campo="localidad" :orden="orden" @ordenar="ordenarPor">Localidad</ThOrdenable>
+                                <ThOrdenable campo="telefono" :orden="orden" @ordenar="ordenarPor">Teléfono</ThOrdenable>
+                                <ThOrdenable campo="mail" :orden="orden" @ordenar="ordenarPor">Mail</ThOrdenable>
+                                <ThOrdenable campo="tipo" :orden="orden" @ordenar="ordenarPor">Tipo</ThOrdenable>
+                                <ThOrdenable campo="documentacion" :orden="orden" @ordenar="ordenarPor">Documentación</ThOrdenable>
                                 <th v-if="hasPermission('proveedores.edit')" class="px-4 py-3" />
                             </tr>
                         </thead>
@@ -227,7 +247,7 @@ const submitImport = () => {
                                 </td>
                                 <td v-if="hasPermission('proveedores.edit')" class="px-4 py-3.5 text-right">
                                     <Link
-                                        :href="route('proveedores.edit', proveedor.id)"
+                                        :href="aLaFicha('proveedores.edit', { proveedor: proveedor.id })"
                                         class="inline-flex rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-brand-500 dark:hover:bg-white/[0.05] dark:hover:text-brand-300"
                                         title="Editar"
                                     >
@@ -249,7 +269,7 @@ const submitImport = () => {
                         </template>
                         <template v-if="hasPermission('proveedores.edit')" #actions>
                             <Link
-                                :href="route('proveedores.edit', proveedor.id)"
+                                :href="aLaFicha('proveedores.edit', { proveedor: proveedor.id })"
                                 class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-brand-500 dark:hover:bg-white/[0.05] dark:hover:text-brand-300"
                                 title="Editar"
                             >

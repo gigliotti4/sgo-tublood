@@ -459,4 +459,120 @@ class AlertasObservacionTest extends TestCase
 
         $this->assertEquals($original, $observacion->fresh()->cerrada_at);
     }
+
+    // ── Contenido de los avisos de vencimiento ──────────────────────────────
+    //
+    // Hasta el 21/9/2026 el supervisor recibía "la observación 0012-26 venció"
+    // y tenía que abrir el caso para saber de quién era. Estos tests fijan que
+    // el nombre viaje por los dos canales que lo muestran.
+    //
+    // ⚠️ La fecha se pincha en un **lunes**: el plazo está en días hábiles
+    // (`addWeekdays()`) y los asserts de atraso cambiarían según el día en que
+    // se corra la suite.
+
+    /** Arma una observación vencida hace `$diasHabiles` con su responsable. */
+    private function vencida(int $diasHabiles = 2): array
+    {
+        $this->travelTo('2026-07-20 09:00:00');
+
+        $responsable = $this->responsable(3);
+        $responsable->update(['name' => 'Juana', 'apellido' => 'Pérez']);
+
+        $observacion = $this->observacion([
+            'responsable_id' => $responsable->id,
+            'estado' => 'en_proceso',
+        ]);
+
+        // Se fuerza el vencimiento en vez de viajar en el tiempo: así el atraso
+        // es un número exacto y el test no depende del plazo del sector.
+        $observacion->forceFill([
+            'vence_at' => now()->copy()->subWeekdays($diasHabiles),
+        ])->save();
+
+        return [$observacion->fresh(), $responsable->fresh()];
+    }
+
+    public function test_el_mail_de_vencida_dice_de_quien_es_el_caso(): void
+    {
+        [$observacion, $responsable] = $this->vencida();
+        $supervisor = $responsable->supervisor;
+
+        $lineas = implode(' ', (new ObservacionVencidaNotification($observacion))->toMail($supervisor)->introLines);
+
+        $this->assertStringContainsString('Juana Pérez', $lineas);
+        $this->assertStringContainsString($responsable->sector->nombre, $lineas);
+        $this->assertStringContainsString($responsable->email, $lineas);
+        $this->assertStringContainsString('hace 2 días hábiles', $lineas);
+        $this->assertStringContainsString('En proceso', $lineas);
+    }
+
+    /** El mismo mail le llega al responsable: decirle "Juana Pérez no respondió" a Juana es absurdo. */
+    public function test_el_mail_de_vencida_le_habla_en_segunda_persona_al_responsable(): void
+    {
+        [$observacion, $responsable] = $this->vencida();
+
+        $lineas = implode(' ', (new ObservacionVencidaNotification($observacion))->toMail($responsable)->introLines);
+
+        $this->assertStringContainsString('a tu cargo', $lineas);
+        $this->assertStringNotContainsString($responsable->email, $lineas);
+    }
+
+    public function test_el_asunto_de_vencida_lleva_al_responsable(): void
+    {
+        [$observacion, $responsable] = $this->vencida();
+
+        $this->assertSame(
+            "Observación {$observacion->numero} vencida — Juana Pérez ({$responsable->sector->nombre})",
+            (new ObservacionVencidaNotification($observacion))->toMail($responsable->supervisor)->subject,
+        );
+    }
+
+    /** El canal `database` alimenta la campana: ahí también tiene que estar el nombre. */
+    public function test_el_mensaje_de_la_campana_incluye_al_responsable(): void
+    {
+        [$observacion, $responsable] = $this->vencida();
+        $supervisor = $responsable->supervisor;
+
+        $this->assertStringContainsString(
+            'Juana Pérez',
+            (new ObservacionVencidaNotification($observacion))->toArray($supervisor)['mensaje'],
+        );
+    }
+
+    public function test_el_escalamiento_tambien_dice_de_quien_es(): void
+    {
+        [$observacion, $responsable] = $this->vencida();
+        $gerente = $responsable->gerente;
+
+        $mail = (new ObservacionEscaladaNotification($observacion))->toMail($gerente);
+
+        $this->assertStringContainsString('Juana Pérez', $mail->subject);
+        $this->assertStringContainsString('Juana Pérez', implode(' ', $mail->introLines));
+    }
+
+    /** El import deja sin sector a los nombres que no matchean el catálogo. */
+    public function test_un_responsable_sin_sector_no_imprime_parentesis_vacios(): void
+    {
+        [$observacion, $responsable] = $this->vencida();
+        $responsable->update(['sector_id' => null]);
+
+        $mail = (new ObservacionVencidaNotification($observacion->fresh()))->toMail($responsable->supervisor);
+
+        $this->assertStringContainsString('Juana Pérez', $mail->subject);
+        $this->assertStringNotContainsString('()', $mail->subject);
+    }
+
+    /**
+     * La red contra que el hook `detalles()` se filtre a las otras
+     * notificaciones, que comparten el mismo `toMail()`.
+     */
+    public function test_las_otras_notificaciones_no_suman_lineas(): void
+    {
+        [$observacion, $responsable] = $this->vencida();
+
+        $this->assertCount(
+            2,
+            (new ObservacionAsignadaNotification($observacion))->toMail($responsable)->introLines,
+        );
+    }
 }

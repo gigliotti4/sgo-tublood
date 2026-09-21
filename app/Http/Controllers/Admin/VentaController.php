@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Concerns\OrdenaListados;
 use App\Http\Controllers\Controller;
 use App\Jobs\SyncVentasJob;
 use App\Models\Venta;
 use App\Models\VentaPartida;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Response;
@@ -18,6 +20,47 @@ use Inertia\Response;
  */
 class VentaController extends Controller
 {
+    use OrdenaListados;
+
+    /**
+     * Qué columnas se pueden ordenar. La clave es lo que viaja en la URL.
+     *
+     * Quedan afuera a propósito:
+     *
+     * - **Lote**: se adjunta *después* del paginado con clave compuesta
+     *   (`VentaPartida::adjuntarAVentas()`), así que ordenarlo obligaría a
+     *   joinear las ~166.000 filas del kardex y a elegir cuál de los lotes
+     *   manda cuando el renglón salió de varios (3,5% de los casos).
+     * - **Remito**: `remito_nro` es un entero pelado sin la serie y el 29% se
+     *   repite entre series, así que el orden sería ambiguo y además
+     *   contradiría al remito "bueno" que la fila muestra cuando viene del
+     *   kardex (ver `VentaPartida::SERIES_DE_REMITO`).
+     *
+     * @return array<string, string>
+     */
+    private function ordenables(bool $puedeVerMontos): array
+    {
+        $ordenables = [
+            'fecha' => 'fecha',
+            'comprobante' => 'compro_nro',
+            'cliente' => 'razon_social',
+            'articulo' => 'descrip_arti',
+            'cantidad' => 'cantidad',
+            'vendedor' => 'vendedor',
+        ];
+
+        if ($puedeVerMontos) {
+            // Sin el permiso la columna ni se muestra, y dejarla siempre en la
+            // whitelist filtraría el dato por ordenamiento: con
+            // `?sort=sub_total&dir=desc` la primera fila es la venta más cara,
+            // que es justo lo que `ventas.montos` esconde. Mismo criterio que
+            // el `makeHidden(COLUMNAS_DE_IMPORTE)` de más abajo.
+            $ordenables['sub_total'] = 'sub_total';
+        }
+
+        return $ordenables;
+    }
+
     public function index(Request $request): Response
     {
         $this->authorize('ventas.view');
@@ -34,6 +77,8 @@ class VentaController extends Controller
         // seguirían viajando en las props de Inertia y se leerían del HTML.
         $puedeVerMontos = $request->user()->can('ventas.montos');
 
+        $ordenables = $this->ordenables($puedeVerMontos);
+
         $ventas = Venta::query()
             ->when($search, fn ($q) => $q->buscar($search))
             ->when($desde, fn ($q, $desde) => $q->whereDate('fecha', '>=', $desde))
@@ -47,11 +92,14 @@ class VentaController extends Controller
                     ->whereColumn('vp.compro_nro', 'ventas.compro_nro')
                     ->whereColumn('vp.codigo_articulo', 'ventas.articulo')
                     ->where('vp.codigo_partida', 'like', '%'.mb_strtoupper($lote).'%')
-            ))
-            ->orderByDesc('fecha')
-            ->orderByDesc('id')
-            ->paginate(50)
-            ->withQueryString();
+            ));
+
+        $ventas = $this->aplicarOrden(
+            $ventas,
+            $request,
+            $ordenables,
+            fn (Builder $q) => $q->orderByDesc('fecha'),
+        )->paginate(50)->withQueryString();
 
         if (! $puedeVerMontos) {
             $ventas->through(fn (Venta $venta) => $venta->makeHidden(Venta::COLUMNAS_DE_IMPORTE));
@@ -64,6 +112,7 @@ class VentaController extends Controller
 
         return inertia('Admin/Ventas/Index', [
             'ventas' => $ventas,
+            'orden' => $this->orden($request, $ordenables),
             'filters' => [
                 'search' => $search,
                 'desde' => $desde,
@@ -93,7 +142,9 @@ class VentaController extends Controller
 
         SyncVentasJob::dispatch();
 
-        return redirect()->route('ventas.index')
+        // `back()`: el botón está en el listado y sincronizar no tiene por qué
+        // descartar los filtros que el usuario tenía puestos.
+        return back(fallback: route('ventas.index'))
             ->with('success', 'Sincronización iniciada. Los datos se actualizarán en breve.');
     }
 }

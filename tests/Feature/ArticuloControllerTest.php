@@ -108,7 +108,7 @@ class ArticuloControllerTest extends TestCase
                 'legajo' => '133',
                 'observaciones' => 'Revisar con Calidad',
             ])
-            ->assertRedirect(route('articulos.edit', $articulo));
+            ->assertRedirect(route('articulos.index'));
 
         $articulo->refresh();
         $this->assertSame('2030-10-06', $articulo->fecha_vencimiento->toDateString());
@@ -125,13 +125,13 @@ class ArticuloControllerTest extends TestCase
 
         $this->actingAs($user)
             ->put("/articulos/{$articulo->id}", ['proveedor_id' => $proveedor->id])
-            ->assertRedirect(route('articulos.edit', $articulo));
+            ->assertRedirect(route('articulos.index'));
 
         $this->assertSame($proveedor->id, $articulo->fresh()->proveedor_id);
 
         $this->actingAs($user)
             ->put("/articulos/{$articulo->id}", ['proveedor_id' => null])
-            ->assertRedirect(route('articulos.edit', $articulo));
+            ->assertRedirect(route('articulos.index'));
 
         $this->assertNull($articulo->fresh()->proveedor_id);
     }

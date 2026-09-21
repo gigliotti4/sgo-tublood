@@ -10,6 +10,7 @@ import Button from '@/Components/Button.vue'
 import ControlDocumental from '@/Components/ControlDocumental.vue'
 import ChecklistDocumentos from '@/Components/ChecklistDocumentos.vue'
 import { useChecklistDocumental } from '@/composables/useChecklistDocumental'
+import { useVolverAlListado } from '@/composables/useVolverAlListado'
 import type { ChecklistFormulario, DocumentoChecklist, DocumentosCargados, EstadoDocumentacion, Proveedor } from '@/types'
 
 const props = defineProps<{
@@ -47,7 +48,12 @@ const { documentos } = useChecklistDocumental({
     form,
 })
 
-const submit = () => form.put(route('proveedores.update', props.proveedor.id))
+// `volver` transporta los filtros del listado: lo puso el link "Editar"
+// y se lo devolvemos al controller para que sepa a dónde volver.
+// Ver `composables/useVolverAlListado.ts`.
+const { urlListado, aGuardar } = useVolverAlListado('proveedores.index')
+
+const submit = () => form.put(aGuardar('proveedores.update', { proveedor: props.proveedor.id }))
 
 const opcionesSiNo = [
     { value: '1', label: 'Sí' },
@@ -64,7 +70,7 @@ const etiquetaDeterminante = computed(() =>
 
     <AppLayout>
         <div class="mb-6 flex items-center gap-3">
-            <Link :href="route('proveedores.index')" class="text-sm text-gray-400 transition hover:text-gray-600 dark:hover:text-gray-300">← Volver</Link>
+            <Link :href="urlListado" class="text-sm text-gray-400 transition hover:text-gray-600 dark:hover:text-gray-300">← Volver</Link>
             <h1 class="text-xl font-semibold text-gray-800 dark:text-white/90">Editar proveedor</h1>
         </div>
 

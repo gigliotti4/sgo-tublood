@@ -11,6 +11,8 @@ import Pagination from '@/Components/Pagination.vue'
 import Select from '@/Components/Select.vue'
 import TableCard from '@/Components/TableCard.vue'
 import DataRow from '@/Components/DataRow.vue'
+import ThOrdenable from '@/Components/ThOrdenable.vue'
+import { useOrdenamiento, type OrdenVigente } from '@/composables/useOrdenamiento'
 import type { Observacion, PaginatedData } from '@/types'
 
 interface Filtros {
@@ -23,6 +25,8 @@ interface Filtros {
 const props = defineProps<{
     observaciones: PaginatedData<Observacion>
     filters: Filtros
+    /** Validado contra la whitelist del backend: `sort` es null en el orden por defecto. */
+    orden: OrdenVigente
 }>()
 
 // ── Filtros ───────────────────────────────────────────────────────────────
@@ -41,10 +45,18 @@ const hayFiltros = computed(() => Object.values(filtros).some(v => v !== ''))
 
 const fechaParcial = (v: string) => v !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(v)
 
+const { orden, ordenarPor, paramsDeOrden } = useOrdenamiento({
+    ruta: 'bajas.index',
+    orden: () => props.orden,
+    parametros: () => Object.fromEntries(Object.entries(filtros).filter(([, v]) => v !== '')),
+    // Los textos se leen A→Z; los numeros y las fechas, de mayor a menor.
+    ascendentesPorDefecto: ['numero', 'titulo', 'baja'],
+})
+
 const aplicarFiltros = () => {
     if (fechaParcial(filtros.desde) || fechaParcial(filtros.hasta)) return
     const params = Object.fromEntries(Object.entries(filtros).filter(([, v]) => v !== ''))
-    router.get(route('bajas.index'), params, {
+    router.get(route('bajas.index'), { ...params, ...paramsDeOrden.value }, {
         preserveState: true,
         preserveScroll: true,
         replace: true,
@@ -63,17 +75,48 @@ const limpiarFiltros = () => {
 
 // ── Presentación ─────────────────────────────────────────────────────────
 
-const esBorrada = (o: Observacion) => !!o.deleted_at
+type TipoBaja = 'borrada' | 'cancelada' | 'cerrada'
+
+/**
+ * A qué bucket pertenece la fila. El borrado gana sobre el estado: es el único
+ * que habilita restaurar, y una observación puede estar cerrada **y** borrada.
+ * El backend filtra con el mismo criterio (`whereNull('deleted_at')`).
+ */
+const tipoDeBaja = (o: Observacion): TipoBaja =>
+    o.deleted_at ? 'borrada' : o.estado === 'cerrada' ? 'cerrada' : 'cancelada'
+
+const esBorrada = (o: Observacion) => tipoDeBaja(o) === 'borrada'
+
+// Verde para "cerrada" y no un cuarto color: es el mismo que ese estado ya
+// tiene en el listado de observaciones, en el detalle y en el Dashboard. Queda
+// rojo/ámbar = algo se dio de baja, verde = se terminó bien.
+const badge: Record<TipoBaja, { label: string; variant: 'red' | 'amber' | 'emerald' }> = {
+    borrada: { label: 'Borrada', variant: 'red' },
+    cancelada: { label: 'Cancelada', variant: 'amber' },
+    cerrada: { label: 'Cerrada', variant: 'emerald' },
+}
 
 const formatFecha = (d: string) =>
     new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
-const quienDioDeBaja = (o: Observacion) => {
-    if (!o.baja) return '—'
-    if (!o.baja.user) return 'Sistema'
+const nombre = (u?: { name: string; apellido: string | null } | null) =>
+    u ? [u.name, u.apellido].filter(Boolean).join(' ') : null
 
-    return [o.baja.user.name, o.baja.user.apellido].filter(Boolean).join(' ')
+/**
+ * Quién terminó el caso. Para una baja sale de la bitácora (la entrada la
+ * escribe quien cancela o borra, y pide motivo); para un cierre, de la columna
+ * propia `cerrada_por`. "Sistema" es el caso real de un cierre o una baja sin
+ * usuario detrás (un comando, un seeder), no un dato faltante.
+ */
+const quienDioDeBaja = (o: Observacion) => {
+    if (tipoDeBaja(o) === 'cerrada') return nombre(o.cerrada_por_usuario) ?? 'Sistema'
+    if (!o.baja) return '—'
+
+    return nombre(o.baja.user) ?? 'Sistema'
 }
+
+/** La baja tiene su entrada de bitácora; el cierre, `cerrada_at`. */
+const fechaDeBaja = (o: Observacion) => formatFecha(o.baja?.created_at ?? o.cerrada_at ?? o.created_at)
 
 const restaurar = (o: Observacion) => {
     router.post(route('bajas.restore', o.id))
@@ -86,9 +129,10 @@ const restaurar = (o: Observacion) => {
     <AppLayout>
         <div class="space-y-6">
             <div>
-                <h1 class="text-xl font-semibold text-gray-800 dark:text-white/90">Bajas</h1>
+                <h1 class="text-xl font-semibold text-gray-800 dark:text-white/90">Bajas y cierres</h1>
                 <p class="mt-0.5 text-theme-sm text-gray-500 dark:text-gray-400">
-                    Observaciones canceladas o borradas, con motivo y autor. Las borradas se pueden restaurar.
+                    Observaciones cerradas, canceladas o borradas. Las bajas traen el motivo que se cargó al darlas;
+                    cerrar un caso no pide ninguno. Solo las borradas se pueden restaurar.
                 </p>
             </div>
 
@@ -108,6 +152,7 @@ const restaurar = (o: Observacion) => {
                         <div>
                             <Select v-model="filtros.tipo" label="Tipo de baja">
                                 <option value="">Todas</option>
+                                <option value="cerrada">Cerradas</option>
                                 <option value="cancelada">Canceladas</option>
                                 <option value="borrada">Borradas</option>
                             </Select>
@@ -133,19 +178,19 @@ const restaurar = (o: Observacion) => {
                     <table class="w-full">
                         <thead>
                             <tr class="border-b border-gray-100 dark:border-gray-800">
-                                <th class="px-5 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">N°</th>
-                                <th class="px-5 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Título</th>
-                                <th class="px-5 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Baja</th>
-                                <th class="px-5 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Motivo</th>
-                                <th class="px-5 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Quién</th>
-                                <th class="px-5 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Fecha</th>
+                                <ThOrdenable campo="numero" :orden="orden" pad="px-5" @ordenar="ordenarPor">N°</ThOrdenable>
+                                <ThOrdenable campo="titulo" :orden="orden" pad="px-5" @ordenar="ordenarPor">Título</ThOrdenable>
+                                <ThOrdenable campo="baja" :orden="orden" pad="px-5" @ordenar="ordenarPor">Baja</ThOrdenable>
+                                <ThOrdenable :orden="orden" pad="px-5">Motivo</ThOrdenable>
+                                <ThOrdenable :orden="orden" pad="px-5">Quién</ThOrdenable>
+                                <ThOrdenable campo="fecha" :orden="orden" pad="px-5" @ordenar="ordenarPor">Fecha</ThOrdenable>
                                 <th class="px-5 py-3" />
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
                             <tr v-if="observaciones.data.length === 0">
                                 <td colspan="7" class="px-5 py-12 text-center text-sm text-gray-400">
-                                    {{ hayFiltros ? 'Sin resultados para los filtros aplicados.' : 'No hay observaciones canceladas ni borradas.' }}
+                                    {{ hayFiltros ? 'Sin resultados para los filtros aplicados.' : 'No hay observaciones cerradas, canceladas ni borradas.' }}
                                 </td>
                             </tr>
                             <tr
@@ -156,14 +201,18 @@ const restaurar = (o: Observacion) => {
                                 <td class="px-5 py-3.5 font-mono text-theme-xs text-gray-500 dark:text-gray-400">{{ o.numero }}</td>
                                 <td class="px-5 py-3.5 text-theme-sm font-medium text-gray-800 dark:text-white/90">{{ o.titulo }}</td>
                                 <td class="px-5 py-3.5">
-                                    <Badge :variant="esBorrada(o) ? 'red' : 'amber'">{{ esBorrada(o) ? 'Borrada' : 'Cancelada' }}</Badge>
+                                    <Badge :variant="badge[tipoDeBaja(o)].variant">{{ badge[tipoDeBaja(o)].label }}</Badge>
                                 </td>
                                 <td class="max-w-sm px-5 py-3.5 text-theme-sm text-gray-600 dark:text-gray-300">
-                                    <p class="whitespace-pre-line">{{ o.baja?.nota ?? '—' }}</p>
+                                    <p v-if="o.baja?.nota" class="whitespace-pre-line">{{ o.baja.nota }}</p>
+                                    <!-- Cerrar un caso no pide motivo (solo cancelar y borrar lo piden);
+                                         decirlo es más honesto que un guion, que se lee como dato faltante. -->
+                                    <span v-else-if="tipoDeBaja(o) === 'cerrada'" class="text-theme-xs text-gray-400">Sin nota de cierre</span>
+                                    <span v-else>—</span>
                                 </td>
                                 <td class="px-5 py-3.5 text-theme-sm text-gray-600 dark:text-gray-300">{{ quienDioDeBaja(o) }}</td>
                                 <td class="px-5 py-3.5 text-theme-xs text-gray-500 dark:text-gray-400">
-                                    {{ formatFecha(o.baja?.created_at ?? o.created_at) }}
+                                    {{ fechaDeBaja(o) }}
                                 </td>
                                 <td class="px-5 py-3.5">
                                     <div class="flex items-center justify-end gap-1">
@@ -195,8 +244,8 @@ const restaurar = (o: Observacion) => {
                     <TableCard v-for="o in observaciones.data" :key="o.id">
                         <template #header>
                             <div class="flex flex-wrap items-center gap-2">
-                                <Badge :variant="esBorrada(o) ? 'red' : 'amber'">{{ esBorrada(o) ? 'Borrada' : 'Cancelada' }}</Badge>
-                                <span class="text-theme-xs text-gray-400">{{ formatFecha(o.baja?.created_at ?? o.created_at) }}</span>
+                                <Badge :variant="badge[tipoDeBaja(o)].variant">{{ badge[tipoDeBaja(o)].label }}</Badge>
+                                <span class="text-theme-xs text-gray-400">{{ fechaDeBaja(o) }}</span>
                             </div>
                             <p class="mt-1 truncate text-theme-sm font-medium text-gray-800 dark:text-white/90">{{ o.titulo }}</p>
                             <p class="font-mono text-theme-xs text-gray-400">{{ o.numero }}</p>
@@ -212,7 +261,7 @@ const restaurar = (o: Observacion) => {
                             </Link>
                         </template>
                         <template #body>
-                            <DataRow label="Motivo">{{ o.baja?.nota ?? '—' }}</DataRow>
+                            <DataRow label="Motivo">{{ o.baja?.nota ?? (tipoDeBaja(o) === 'cerrada' ? 'Sin nota de cierre' : '—') }}</DataRow>
                             <DataRow label="Quién">{{ quienDioDeBaja(o) }}</DataRow>
                         </template>
                         <template v-if="esBorrada(o)" #footer>
@@ -221,7 +270,7 @@ const restaurar = (o: Observacion) => {
                     </TableCard>
                 </div>
                 <p v-else class="p-4 text-center text-sm text-gray-400 md:hidden">
-                    {{ hayFiltros ? 'Sin resultados para los filtros aplicados.' : 'No hay observaciones canceladas ni borradas.' }}
+                    {{ hayFiltros ? 'Sin resultados para los filtros aplicados.' : 'No hay observaciones cerradas, canceladas ni borradas.' }}
                 </p>
 
                 <div class="flex flex-col gap-3 border-t border-gray-100 px-5 py-3.5 text-theme-sm text-gray-500 dark:border-gray-800 dark:text-gray-400 sm:flex-row sm:items-center sm:justify-between">

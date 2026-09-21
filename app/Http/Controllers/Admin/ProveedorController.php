@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Concerns\OrdenaListados;
+use App\Http\Controllers\Concerns\VuelveAlListado;
 use App\Http\Controllers\Controller;
 use App\Jobs\SyncProveedoresJob;
 use App\Models\Proveedor;
@@ -24,6 +26,31 @@ class ProveedorController extends Controller
 
     /** Menos que esto devolvería medio padrón y no ayuda a completar nada. */
     private const MINIMO = 2;
+
+    use OrdenaListados, VuelveAlListado;
+
+    /**
+     * Qué columnas se pueden ordenar. La clave es lo que viaja en la URL; el
+     * valor, el SQL. La comparten el listado y el export.
+     *
+     * "Documentación" ordena por la columna denormalizada, igual que en
+     * Clientes y por el mismo motivo.
+     *
+     * @return array<string, string>
+     */
+    private function ordenables(): array
+    {
+        return [
+            'numero' => 'proveedores.numero',
+            'razon_social' => 'proveedores.razon_social',
+            'domicilio' => 'proveedores.domicilio',
+            'localidad' => 'proveedores.localidad',
+            'telefono' => 'proveedores.telefono',
+            'mail' => 'proveedores.mail',
+            'tipo' => 'proveedores.tipo_proveedor',
+            'documentacion' => 'proveedores.documentacion_completa',
+        ];
+    }
 
     public function index(Request $request): Response
     {
@@ -48,6 +75,7 @@ class ProveedorController extends Controller
                 'tipo_proveedor' => $request->string('tipo_proveedor')->trim()->value(),
                 'estado_documental' => $request->string('estado_documental')->trim()->value(),
             ],
+            'orden' => $this->orden($request, $this->ordenables()),
             'tipos' => Documentacion::etiquetasTipos(Documentacion::PROVEEDORES),
             // Sin filtrar: el paginador ya trae el total de la búsqueda vigente.
             'total' => Proveedor::count(),
@@ -65,11 +93,19 @@ class ProveedorController extends Controller
         $tipo = $request->string('tipo_proveedor')->trim()->value();
         $estado = $request->string('estado_documental')->trim()->value();
 
-        return Proveedor::query()
+        $query = Proveedor::query()
             ->when($search, fn ($q) => $q->buscar($search))
             ->when($tipo, fn ($q) => $q->where('tipo_proveedor', $tipo))
-            ->when($estado, fn ($q) => $this->filtrarPorEstadoDocumental($q, $estado))
-            ->orderBy('razon_social');
+            ->when($estado, fn ($q) => $this->filtrarPorEstadoDocumental($q, $estado));
+
+        return $this->aplicarOrden(
+            $query,
+            $request,
+            $this->ordenables(),
+            // Ver el comentario equivalente en ClienteController::filtrados().
+            fn (Builder $q) => $q->orderBy('proveedores.razon_social'),
+            'proveedores.id',
+        );
     }
 
     /**
@@ -112,7 +148,9 @@ class ProveedorController extends Controller
 
         SyncProveedoresJob::dispatch();
 
-        return redirect()->route('proveedores.index')
+        // `back()`: el botón está en el listado y sincronizar no tiene por qué
+        // descartar los filtros que el usuario tenía puestos.
+        return back(fallback: route('proveedores.index'))
             ->with('success', 'Sincronización iniciada. Los datos se actualizarán en breve.');
     }
 
@@ -246,13 +284,17 @@ class ProveedorController extends Controller
         // vencimiento, así que el estado se recalcula también desde acá.
         $proveedor->recalcularEstadoDocumental();
 
-        return redirect()->route('proveedores.edit', $proveedor)
+        // Vuelve al listado filtrado y no a la ficha — ver el trait
+        // `VuelveAlListado` y el comentario equivalente en ClienteController.
+        return $this->alListado($request, 'proveedores.index')
             ->with('success', 'Proveedor actualizado correctamente.');
     }
 
     /**
-     * Guarda el checklist de documentación completo (Sí/No y vencimiento de
-     * cada documento) y recalcula el estado derivado del proveedor.
+     * Importa el padrón desde Excel.
+     *
+     * (El docblock que había acá describía `updateDocumentacion()`, un método
+     * que ya no existe: el checklist se fusionó dentro de `update()`.)
      */
     public function import(Request $request, ProveedorImportService $service): RedirectResponse
     {
@@ -262,13 +304,15 @@ class ProveedorController extends Controller
             'archivo' => ['required', 'file', 'mimes:xlsx,xls,csv'],
         ]);
 
+        // `back()` en las dos salidas: el import se dispara desde un modal del
+        // listado, así que el redirect pelado sacaba al usuario de su búsqueda.
         try {
             $resultado = $service->import($data['archivo']);
         } catch (\InvalidArgumentException $e) {
-            return redirect()->route('proveedores.index')->with('error', $e->getMessage());
+            return back(fallback: route('proveedores.index'))->with('error', $e->getMessage());
         }
 
-        $redirect = redirect()->route('proveedores.index')
+        $redirect = back(fallback: route('proveedores.index'))
             ->with('success', "Importación completa: {$resultado['creados']} proveedores nuevos, {$resultado['actualizados']} actualizados.");
 
         if ($resultado['advertencias'] !== []) {

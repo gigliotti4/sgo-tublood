@@ -12,6 +12,8 @@ import Pagination from '@/Components/Pagination.vue'
 import ContadorRegistros from '@/Components/ContadorRegistros.vue'
 import TableCard from '@/Components/TableCard.vue'
 import DataRow from '@/Components/DataRow.vue'
+import ThOrdenable from '@/Components/ThOrdenable.vue'
+import { useOrdenamiento, type OrdenVigente } from '@/composables/useOrdenamiento'
 import type { PaginatedData, Partida } from '@/types'
 
 const props = defineProps<{
@@ -20,6 +22,8 @@ const props = defineProps<{
     proveedores: { numero: string | null; razon_social: string }[]
     lastSync: string | null
     total: number
+    /** Validado contra la whitelist del backend: `sort` es null en el orden por defecto. */
+    orden: OrdenVigente
 }>()
 
 const { hasPermission } = usePermissions()
@@ -32,8 +36,19 @@ const filtros = reactive({
 
 let debounce: ReturnType<typeof setTimeout>
 
+const filtrosVigentes = () => ({ search: search.value, ...filtros })
+
+const { orden, ordenarPor, paramsDeOrden } = useOrdenamiento({
+    ruta: 'partidas.index',
+    orden: () => props.orden,
+    parametros: filtrosVigentes,
+    // Vencimiento arranca ascendente: lo que se busca es lo que vence
+    // primero. El ultimo movimiento, al reves.
+    ascendentesPorDefecto: ['lote', 'articulo', 'proveedor', 'ubicacion', 'vencimiento'],
+})
+
 const recargar = () => {
-    router.get(route('partidas.index'), { search: search.value, ...filtros }, {
+    router.get(route('partidas.index'), { ...filtrosVigentes(), ...paramsDeOrden.value }, {
         preserveState: true,
         preserveScroll: true,
         replace: true,
@@ -166,12 +181,12 @@ const estadoVencimiento = (p: Partida): { label: string; variant: 'red' | 'amber
                     <table class="w-full">
                         <thead>
                             <tr class="border-b border-gray-100 dark:border-gray-800">
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Lote</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Artículo</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Proveedor</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Vencimiento</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Ubicación</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Últ. movimiento</th>
+                                <ThOrdenable campo="lote" :orden="orden" @ordenar="ordenarPor">Lote</ThOrdenable>
+                                <ThOrdenable campo="articulo" :orden="orden" @ordenar="ordenarPor">Artículo</ThOrdenable>
+                                <ThOrdenable campo="proveedor" :orden="orden" @ordenar="ordenarPor">Proveedor</ThOrdenable>
+                                <ThOrdenable campo="vencimiento" :orden="orden" @ordenar="ordenarPor">Vencimiento</ThOrdenable>
+                                <ThOrdenable campo="ubicacion" :orden="orden" @ordenar="ordenarPor">Ubicación</ThOrdenable>
+                                <ThOrdenable campo="movimiento" :orden="orden" @ordenar="ordenarPor">Últ. movimiento</ThOrdenable>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100 dark:divide-gray-800">

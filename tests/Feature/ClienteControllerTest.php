@@ -115,7 +115,7 @@ class ClienteControllerTest extends TestCase
                 'habilitado' => false,
                 'notas' => 'Pidió prórroga por el BPF.',
             ])
-            ->assertRedirect(route('clientes.edit', $cliente));
+            ->assertRedirect(route('clientes.index'));
 
         $cliente->refresh();
 
@@ -165,7 +165,7 @@ class ClienteControllerTest extends TestCase
                     'habilitacion_ministerio' => ['presentado' => true],
                 ],
             ])
-            ->assertRedirect(route('clientes.edit', $cliente));
+            ->assertRedirect(route('clientes.index'));
 
         $cliente->refresh();
 
@@ -354,7 +354,7 @@ class ClienteControllerTest extends TestCase
                 ],
             ])
             ->assertSessionHasNoErrors()
-            ->assertRedirect(route('clientes.edit', $cliente));
+            ->assertRedirect(route('clientes.index'));
 
         $cliente->refresh();
 

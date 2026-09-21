@@ -20,6 +20,8 @@ import SelectorUsuarios from '@/Components/SelectorUsuarios.vue'
 import SelectorMultiple from '@/Components/SelectorMultiple.vue'
 import SelectorMultipleAsync, { type OpcionAsync } from '@/Components/SelectorMultipleAsync.vue'
 import Textarea from '@/Components/Textarea.vue'
+import ThOrdenable from '@/Components/ThOrdenable.vue'
+import { useOrdenamiento, type OrdenVigente } from '@/composables/useOrdenamiento'
 import type { Observacion, PaginatedData } from '@/types'
 import { proveedorDeProducto } from '@/lib/productos'
 import { badgeEstado, estadoLabels } from '@/lib/estados'
@@ -58,6 +60,8 @@ const props = defineProps<{
     tiposCaso: string[]
     presentaciones: Record<string, string>
     aniosDisponibles: number[]
+    /** Validado contra la whitelist del backend: `sort` es null en el orden por defecto. */
+    orden: OrdenVigente
 }>()
 
 const { isSuperAdmin, user, hasPermission } = usePermissions()
@@ -99,9 +103,17 @@ const fechaParcial = (v: string) => v !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(v)
 
 const filtrosVigentes = () => Object.fromEntries(Object.entries(filtros).filter(([, v]) => !vacio(v)))
 
+const { orden, ordenarPor, paramsDeOrden } = useOrdenamiento({
+    ruta: 'observaciones.index',
+    orden: () => props.orden,
+    parametros: filtrosVigentes,
+    // Los textos se leen A→Z; los numeros y las fechas, de mayor a menor.
+    ascendentesPorDefecto: ['numero', 'tipo', 'origen', 'titulo', 'cliente', 'sector', 'responsable', 'estado'],
+})
+
 const aplicarFiltros = () => {
     if (fechaParcial(filtros.desde) || fechaParcial(filtros.hasta)) return
-    router.get(route('observaciones.index'), filtrosVigentes(), {
+    router.get(route('observaciones.index'), { ...filtrosVigentes(), ...paramsDeOrden.value }, {
         preserveState: true,
         preserveScroll: true,
         replace: true,
@@ -434,15 +446,15 @@ const guardar = () => {
                     <table class="w-full">
                         <thead>
                             <tr class="border-b border-gray-100 dark:border-gray-800">
-                                <th class="px-5 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">N°</th>
-                                <th class="px-5 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Tipo</th>
-                                <th class="px-5 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Origen</th>
-                                <th class="px-5 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Título</th>
-                                <th class="px-5 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Cliente</th>
-                                <th class="px-5 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Sector</th>
-                                <th class="px-5 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Responsable</th>
-                                <th class="px-5 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Estado</th>
-                                <th class="px-5 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Fecha</th>
+                                <ThOrdenable campo="numero" :orden="orden" pad="px-5" @ordenar="ordenarPor">N°</ThOrdenable>
+                                <ThOrdenable campo="tipo" :orden="orden" pad="px-5" @ordenar="ordenarPor">Tipo</ThOrdenable>
+                                <ThOrdenable campo="origen" :orden="orden" pad="px-5" @ordenar="ordenarPor">Origen</ThOrdenable>
+                                <ThOrdenable campo="titulo" :orden="orden" pad="px-5" @ordenar="ordenarPor">Título</ThOrdenable>
+                                <ThOrdenable campo="cliente" :orden="orden" pad="px-5" @ordenar="ordenarPor">Cliente</ThOrdenable>
+                                <ThOrdenable campo="sector" :orden="orden" pad="px-5" @ordenar="ordenarPor">Sector</ThOrdenable>
+                                <ThOrdenable campo="responsable" :orden="orden" pad="px-5" @ordenar="ordenarPor">Responsable</ThOrdenable>
+                                <ThOrdenable campo="estado" :orden="orden" pad="px-5" @ordenar="ordenarPor">Estado</ThOrdenable>
+                                <ThOrdenable campo="fecha" :orden="orden" pad="px-5" @ordenar="ordenarPor">Fecha</ThOrdenable>
                                 <th class="px-5 py-3" />
                             </tr>
                         </thead>

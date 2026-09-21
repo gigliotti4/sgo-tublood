@@ -9,6 +9,9 @@ import Icon from '@/Components/Icon.vue'
 import Modal from '@/Components/Modal.vue'
 import Pagination from '@/Components/Pagination.vue'
 import TableCard from '@/Components/TableCard.vue'
+import ThOrdenable from '@/Components/ThOrdenable.vue'
+import { useOrdenamiento, type OrdenVigente } from '@/composables/useOrdenamiento'
+import { useIrALaFicha } from '@/composables/useVolverAlListado'
 import type { PaginatedData, PermisoEtiquetado } from '@/types'
 
 interface RoleRow {
@@ -19,8 +22,22 @@ interface RoleRow {
 
 const props = defineProps<{
     roles: PaginatedData<RoleRow>
+    /** Validado contra la whitelist del backend: `sort` es null en el orden por defecto. */
+    orden: OrdenVigente
     permisos: PermisoEtiquetado[]
 }>()
+
+// Sin filtros: el ordenamiento es lo único que viaja en la URL.
+const { orden, ordenarPor } = useOrdenamiento({
+    ruta: 'roles.index',
+    orden: () => props.orden,
+    parametros: () => ({}),
+    ascendentesPorDefecto: ['nombre'],
+})
+
+// El link a la ficha se lleva la página y los filtros vigentes, para que
+// al guardar (o al cancelar) se vuelva exactamente acá.
+const { aLaFicha } = useIrALaFicha()
 
 // El rol trae solo el nombre técnico del permiso; la etiqueta en español sale
 // de config/permisos.php vía el controller.
@@ -68,9 +85,9 @@ const destroy = () => {
             <table class="w-full">
                 <thead>
                     <tr class="border-b border-gray-100 dark:border-gray-800">
-                        <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Nombre</th>
-                        <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Permisos</th>
-                        <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Acciones</th>
+                        <ThOrdenable campo="nombre" :orden="orden" pad="px-6" @ordenar="ordenarPor">Nombre</ThOrdenable>
+                        <ThOrdenable campo="permisos" :orden="orden" pad="px-6" @ordenar="ordenarPor">Permisos</ThOrdenable>
+                        <ThOrdenable :orden="orden" pad="px-6">Acciones</ThOrdenable>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
@@ -86,7 +103,7 @@ const destroy = () => {
                             <div class="flex items-center gap-1">
                                 <Link
                                     v-if="hasPermission('roles.edit')"
-                                    :href="route('roles.edit', role.id)"
+                                    :href="aLaFicha('roles.edit', { role: role.id })"
                                     class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-brand-500 dark:hover:bg-white/[0.05] dark:hover:text-brand-300"
                                     title="Editar"
                                 >
@@ -122,7 +139,7 @@ const destroy = () => {
                     <template #actions>
                         <Link
                             v-if="hasPermission('roles.edit')"
-                            :href="route('roles.edit', role.id)"
+                            :href="aLaFicha('roles.edit', { role: role.id })"
                             class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-brand-500 dark:hover:bg-white/[0.05] dark:hover:text-brand-300"
                             title="Editar"
                         >

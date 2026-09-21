@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Concerns\OrdenaListados;
 use App\Http\Controllers\Controller;
 use App\Jobs\SyncPartidasJob;
 use App\Models\Partida;
 use App\Models\Proveedor;
 use App\Models\Venta;
 use App\Models\VentaPartida;
+use Closure;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Response;
@@ -20,6 +23,35 @@ use Inertia\Response;
  */
 class PartidaController extends Controller
 {
+    use OrdenaListados;
+
+    /**
+     * Qué columnas se pueden ordenar. La clave es lo que viaja en la URL.
+     *
+     * "Proveedor" va con **subconsulta y no con un join**: la query devuelve el
+     * modelo entero, así que un join traería `proveedores.id` pisando
+     * `partidas.id`. Se cruza por `numero`, que es como está guardada la
+     * relación en `partidas.proveedor_numero`.
+     *
+     * @return array<string, string|Closure>
+     */
+    private function ordenables(): array
+    {
+        return [
+            'lote' => 'partidas.codigo_partida',
+            'articulo' => 'partidas.codigo_articulo',
+            'proveedor' => fn (Builder $q, string $dir) => $q->orderBy(
+                Proveedor::query()
+                    ->select('razon_social')
+                    ->whereColumn('proveedores.numero', 'partidas.proveedor_numero'),
+                $dir,
+            ),
+            'vencimiento' => 'partidas.fecha_vencimiento',
+            'ubicacion' => 'partidas.ubicacion',
+            'movimiento' => 'partidas.ultimo_movimiento_at',
+        ];
+    }
+
     public function index(Request $request): Response
     {
         $this->authorize('partidas.view');
@@ -35,14 +67,19 @@ class PartidaController extends Controller
             ->with(['articulo:codigo,descripcion', 'proveedor:id,numero,razon_social'])
             ->when($search, fn ($q) => $q->buscar($search))
             ->when($proveedor, fn ($q, $proveedor) => $q->where('proveedor_numero', $proveedor))
-            ->when($vencimiento, fn ($q, $vencimiento) => $q->vencimiento($vencimiento))
-            ->orderByDesc('ultimo_movimiento_at')
-            ->orderByDesc('id')
-            ->paginate(50)
-            ->withQueryString();
+            ->when($vencimiento, fn ($q, $vencimiento) => $q->vencimiento($vencimiento));
+
+        $partidas = $this->aplicarOrden(
+            $partidas,
+            $request,
+            $this->ordenables(),
+            fn (Builder $q) => $q->orderByDesc('partidas.ultimo_movimiento_at'),
+            'partidas.id',
+        )->paginate(50)->withQueryString();
 
         return inertia('Admin/Partidas/Index', [
             'partidas' => $partidas,
+            'orden' => $this->orden($request, $this->ordenables()),
             'filters' => [
                 'search' => $search,
                 'proveedor' => $proveedor,
@@ -121,7 +158,9 @@ class PartidaController extends Controller
 
         SyncPartidasJob::dispatch();
 
-        return redirect()->route('partidas.index')
+        // `back()`: el botón está en el listado y sincronizar no tiene por qué
+        // descartar los filtros que el usuario tenía puestos.
+        return back(fallback: route('partidas.index'))
             ->with('success', 'Sincronización iniciada. Los datos se actualizarán en breve.');
     }
 }

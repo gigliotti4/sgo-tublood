@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Concerns\OrdenaListados;
 use App\Http\Controllers\Controller;
 use App\Models\Cliente;
 use App\Models\Observacion;
@@ -33,6 +34,8 @@ use Throwable;
 
 class ObservacionController extends Controller
 {
+    use OrdenaListados;
+
     /**
      * Topes del PDF: mas alla de esto, las imagenes se listan por nombre en vez
      * de incrustarse. Un caso con 30 fotos generaria un PDF de decenas de MB y
@@ -68,9 +71,63 @@ class ObservacionController extends Controller
     ];
 
     /** @return array<string, array<int, mixed>> */
+    /**
+     * Qué columnas se pueden ordenar. La clave es lo que viaja en la URL.
+     *
+     * Las de relación van con **subconsulta en el ORDER BY** y no con un join:
+     * la query devuelve el modelo entero, así que un join traería el `id` de
+     * la otra tabla pisando el de la observación.
+     *
+     * @return array<string, string|Closure>
+     */
+    private function ordenables(): array
+    {
+        return [
+            'numero' => 'observations.numero',
+            'tipo' => 'observations.tipo',
+            'origen' => 'observations.origen',
+            'titulo' => 'observations.titulo',
+            'cliente' => fn (Builder $q, string $dir) => $q->orderByRaw(
+                // La celda muestra la razón social del cliente vinculado y, si
+                // no hay, el nombre que tipeó quien cargó el reclamo. El orden
+                // tiene que seguir exactamente eso o la tabla se ve desordenada.
+                'COALESCE((select razon_social from clientes where clientes.id = observations.cliente_id), observations.contacto_nombre) '.$dir
+            ),
+            'sector' => fn (Builder $q, string $dir) => $q->orderBy(
+                Sector::query()->select('nombre')->whereColumn('sectors.id', 'observations.sector_id'),
+                $dir,
+            ),
+            'responsable' => fn (Builder $q, string $dir) => $q->orderBy(
+                User::query()->select('name')->whereColumn('users.id', 'observations.responsable_id'),
+                $dir,
+            ),
+            'estado' => fn (Builder $q, string $dir) => $q->orderByRaw(
+                // Orden del flujo (el del catálogo `Observacion::ESTADOS`) y no
+                // alfabético: que "Cerrada" salga antes que "En proceso" no le
+                // dice nada a nadie. El CASE se arma con las claves del
+                // catálogo, que son constantes del código; lo único que viene de
+                // la URL es `$dir`, ya normalizado a 'asc'/'desc' por el trait.
+                'CASE observations.estado '
+                    .collect(array_keys(Observacion::ESTADOS))
+                        ->map(fn (string $estado, int $i) => "WHEN '{$estado}' THEN {$i}")
+                        ->implode(' ')
+                    ." ELSE 99 END {$dir}"
+            ),
+            'fecha' => 'observations.created_at',
+        ];
+    }
+
     private function reglasDeFiltros(): array
     {
         return [
+            // ⚠️ `sort` y `dir` tienen que estar acá: sin la regla,
+            // `validate()` los descarta en silencio y el ordenamiento no hace
+            // nada, sin ningún error a la vista. No van con `Rule::in()` de la
+            // whitelist a propósito — un `?sort=` viejo compartido por link
+            // tiene que abrir la pantalla, no romperla; de filtrarlo se encarga
+            // el trait.
+            'sort' => ['nullable', 'string', 'max:40'],
+            'dir' => ['nullable', 'in:asc,desc'],
             'q' => ['nullable', 'string', 'max:255'],
             'origen' => ['nullable', Rule::in(array_keys(Observacion::ORIGENES))],
             'prioridad' => ['nullable', Rule::in(array_keys(config('incidencias.prioridades')))],
@@ -141,15 +198,19 @@ class ObservacionController extends Controller
         $filters = $request->validate($this->reglasDeFiltros());
 
         return inertia('Admin/Observaciones/Index', [
-            'observaciones' => $this->filtrarObservaciones($filters)
-                ->with([
-                    'responsable:id,name', 'sector:id,nombre', 'cliente:id,numero,razon_social,mail,telefono',
-                    ...self::EAGER_PRODUCTOS,
-                    ...$this->eagerLoadsDeGestion(),
-                ])
-                ->latest()
-                ->paginate(20)
-                ->withQueryString(),
+            'observaciones' => $this->aplicarOrden(
+                $this->filtrarObservaciones($filters)
+                    ->with([
+                        'responsable:id,name', 'sector:id,nombre', 'cliente:id,numero,razon_social,mail,telefono',
+                        ...self::EAGER_PRODUCTOS,
+                        ...$this->eagerLoadsDeGestion(),
+                    ]),
+                $request,
+                $this->ordenables(),
+                fn (Builder $q) => $q->latest(),
+                'observations.id',
+            )->paginate(20)->withQueryString(),
+            'orden' => $this->orden($request, $this->ordenables()),
             'filters' => $filters,
             // Cualquiera que vea el listado puede necesitar reasignar responsable/sector
             // en las filas que sí puede editar (ver ObservacionPolicy::update).
@@ -790,7 +851,16 @@ class ObservacionController extends Controller
             $this->sincronizarNotificados($observacion, $notificados);
         }
 
-        return redirect()->route('observaciones.index')
+        // `back()` y no `route('observaciones.index')`: el modal de edición vive
+        // sobre el listado, así que el redirect pelado devolvía a la página 1
+        // sin filtros y obligaba a rehacer la búsqueda después de cada cambio.
+        // Los filtros, el orden y la página viven en la URL, y el Referer la
+        // trae entera. Mismo criterio que `uploadArchivo()` y `comentar()`, que
+        // se disparan desde este mismo modal.
+        //
+        // ⚠️ El `fallback` no es decorativo: sin Referer (un test, un cliente
+        // que no lo manda) `back()` devolvería a `/`.
+        return back(fallback: route('observaciones.index'))
             ->with('success', 'Observación actualizada correctamente.');
     }
 
@@ -821,7 +891,11 @@ class ObservacionController extends Controller
             $observacion->delete();
         });
 
-        return redirect()->route('observaciones.index')
+        // Ver el comentario de `update()`: el borrado también sale del listado.
+        // ⚠️ Si era la última fila de la última página, se vuelve a una página
+        // vacía. Es el precio de conservar el paginado, y se ve el empty-state
+        // con el link "anterior" funcionando.
+        return back(fallback: route('observaciones.index'))
             ->with('success', 'Observación borrada correctamente.');
     }
 }

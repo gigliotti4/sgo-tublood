@@ -234,11 +234,11 @@ class DashboardTest extends TestCase
      * `cerrada_at` se setea a mano en estos tests (no cerrando el caso) para
      * poder fijar duraciones conocidas: el observer siempre pondría now().
      */
-    private function cerrada(string $numero, int $horasParaCerrar, int $diasAtras = 0): Observacion
+    private function cerrada(string $numero, int $horasParaCerrar, int $diasAtras = 0, array $attrs = []): Observacion
     {
         $cierre = now()->subDays($diasAtras);
 
-        $obs = $this->observacion($numero, ['estado' => 'cerrada']);
+        $obs = $this->observacion($numero, ['estado' => 'cerrada', ...$attrs]);
         $obs->forceFill([
             'created_at' => $cierre->copy()->subHours($horasParaCerrar),
             'cerrada_at' => $cierre,
@@ -363,5 +363,121 @@ class DashboardTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->has('porSector', 1)
                 ->where('porSector.0.count', 1));
+    }
+
+    // ── Tiempo de resolución por sector ─────────────────────────────────────
+
+    public function test_el_grafico_de_resolucion_promedia_por_sector(): void
+    {
+        $calidad = Sector::create(['nombre' => 'Garantía de Calidad', 'slug' => 'garantia_calidad']);
+        $logistica = Sector::create(['nombre' => 'Logística', 'slug' => 'logistica']);
+
+        $this->cerrada('0001-26', horasParaCerrar: 10, attrs: ['sector_id' => $calidad->id]);
+        $this->cerrada('0002-26', horasParaCerrar: 20, attrs: ['sector_id' => $calidad->id]);
+        $this->cerrada('0003-26', horasParaCerrar: 4, attrs: ['sector_id' => $logistica->id]);
+
+        $this->actingAs(User::factory()->create())
+            ->get('/dashboard')
+            ->assertInertia(fn ($page) => $page
+                ->has('resolucionPorSector', 2)
+                // De mayor a menor: la pregunta es dónde se tarda más.
+                ->where('resolucionPorSector.0.sector', 'Garantía de Calidad')
+                ->where('resolucionPorSector.0.horas', 15)
+                ->where('resolucionPorSector.0.casos', 2)
+                ->where('resolucionPorSector.1.sector', 'Logística')
+                ->where('resolucionPorSector.1.horas', 4)
+                ->where('resolucionPorSector.1.casos', 1));
+    }
+
+    /**
+     * Los reclamos del portal se guardan aunque no se resuelva el sector, y
+     * cuánto tardan en derivarse es el dato más accionable del gráfico. Este
+     * test se rompe si alguien cambia el `leftJoin` por un `join`.
+     */
+    public function test_el_grafico_de_resolucion_muestra_el_bucket_sin_sector(): void
+    {
+        $this->cerrada('0001-26', horasParaCerrar: 10);
+
+        $this->actingAs(User::factory()->create())
+            ->get('/dashboard')
+            ->assertInertia(fn ($page) => $page
+                ->has('resolucionPorSector', 1)
+                ->where('resolucionPorSector.0.sector', 'Sin sector'));
+    }
+
+    /** Una barra en 0 h se leería como "resuelven al instante", que es lo contrario. */
+    public function test_el_grafico_de_resolucion_omite_los_sectores_sin_cierres(): void
+    {
+        $calidad = Sector::create(['nombre' => 'Garantía de Calidad', 'slug' => 'garantia_calidad']);
+        $logistica = Sector::create(['nombre' => 'Logística', 'slug' => 'logistica']);
+
+        $this->cerrada('0001-26', horasParaCerrar: 10, attrs: ['sector_id' => $calidad->id]);
+        // Logística tiene trabajo abierto pero nada cerrado: no va al gráfico.
+        $this->observacion('0002-26', ['sector_id' => $logistica->id]);
+
+        $this->actingAs(User::factory()->create())
+            ->get('/dashboard')
+            ->assertInertia(fn ($page) => $page
+                ->has('resolucionPorSector', 1)
+                ->where('resolucionPorSector.0.sector', 'Garantía de Calidad'));
+    }
+
+    public function test_el_grafico_de_resolucion_usa_la_misma_ventana_que_el_kpi(): void
+    {
+        $this->cerrada('0001-26', horasParaCerrar: 10);
+        $this->cerrada('0002-26', horasParaCerrar: 500, diasAtras: 120);
+
+        $this->actingAs(User::factory()->create())
+            ->get('/dashboard')
+            ->assertInertia(fn ($page) => $page
+                ->has('resolucionPorSector', 1)
+                ->where('resolucionPorSector.0.horas', 10));
+    }
+
+    public function test_el_grafico_de_resolucion_no_cuenta_las_canceladas(): void
+    {
+        $this->cerrada('0001-26', horasParaCerrar: 10);
+
+        $cancelada = $this->observacion('0002-26', ['estado' => 'cancelada']);
+        $cancelada->forceFill(['created_at' => now()->subHours(999), 'cerrada_at' => now()])->save();
+
+        $this->actingAs(User::factory()->create())
+            ->get('/dashboard')
+            ->assertInertia(fn ($page) => $page
+                ->has('resolucionPorSector', 1)
+                ->where('resolucionPorSector.0.horas', 10));
+    }
+
+    public function test_el_grafico_de_resolucion_sin_cierres_viaja_vacio(): void
+    {
+        $this->observacion('0001-26');
+
+        $this->actingAs(User::factory()->create())
+            ->get('/dashboard')
+            ->assertInertia(fn ($page) => $page->has('resolucionPorSector', 0));
+    }
+
+    /**
+     * La guarda contra que los dos filtros se desincronicen: la tarjeta del KPI
+     * tiene que ser el promedio **ponderado** de las barras, o la pantalla se
+     * contradice sola. Por eso los dos salen de `cerradasDeLaVentana()`.
+     */
+    public function test_el_kpi_general_es_el_ponderado_de_las_barras(): void
+    {
+        $calidad = Sector::create(['nombre' => 'Garantía de Calidad', 'slug' => 'garantia_calidad']);
+        $logistica = Sector::create(['nombre' => 'Logística', 'slug' => 'logistica']);
+
+        $this->cerrada('0001-26', horasParaCerrar: 10, attrs: ['sector_id' => $calidad->id]);
+        $this->cerrada('0002-26', horasParaCerrar: 20, attrs: ['sector_id' => $calidad->id]);
+        $this->cerrada('0003-26', horasParaCerrar: 6, attrs: ['sector_id' => $logistica->id]);
+
+        // (15 * 2 + 6 * 1) / 3 = 12
+        $this->actingAs(User::factory()->create())
+            ->get('/dashboard')
+            ->assertInertia(fn ($page) => $page
+                ->where('kpis.resolucion.horas', 12)
+                ->where('kpis.resolucion.casos', 3)
+                ->where('resolucionPorSector.0.horas', 15)
+                ->where('resolucionPorSector.1.horas', 6));
     }
 }

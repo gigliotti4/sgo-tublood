@@ -75,6 +75,7 @@ class Observacion extends Model
         'responsable_asignado_at',
         'vence_at',
         'cerrada_at',
+        'cerrada_por',
         'alerta_nivel',
         'sector_id',
         'contacto_telefono',
@@ -166,6 +167,22 @@ class Observacion extends Model
         return $this->hasOne(ObservationHistory::class, 'observation_id')
             ->where('accion', ObservationHistory::ACCION_BAJA)
             ->latestOfMany();
+    }
+
+    /**
+     * Quién cerró el caso.
+     *
+     * Columna propia y no una lectura de la bitácora — ver
+     * `ObservacionObserver::marcarCierre()`. La escribe solo el observer.
+     *
+     * ⚠️ Se llama `cerradaPorUsuario` y no `cerradaPor` a propósito: Eloquent
+     * serializaría esta última como `cerrada_por`, que es el nombre de la
+     * columna `int`, y la clave del JSON quedaría con el objeto o con el id
+     * según el orden de serialización.
+     */
+    public function cerradaPorUsuario(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'cerrada_por');
     }
 
     public function productos(): HasMany

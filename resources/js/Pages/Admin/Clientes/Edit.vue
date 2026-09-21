@@ -10,6 +10,7 @@ import Button from '@/Components/Button.vue'
 import ControlDocumental from '@/Components/ControlDocumental.vue'
 import ChecklistDocumentos from '@/Components/ChecklistDocumentos.vue'
 import { useChecklistDocumental } from '@/composables/useChecklistDocumental'
+import { useVolverAlListado } from '@/composables/useVolverAlListado'
 import type { ChecklistFormulario, Cliente, DocumentoChecklist, DocumentosCargados, EstadoDocumentacion } from '@/types'
 
 const props = defineProps<{
@@ -44,7 +45,12 @@ const { documentos } = useChecklistDocumental({
     form,
 })
 
-const submit = () => form.put(route('clientes.update', props.cliente.id))
+// `volver` transporta los filtros del listado: lo puso el link "Editar"
+// y se lo devolvemos al controller para que sepa a dónde volver.
+// Ver `composables/useVolverAlListado.ts`.
+const { urlListado, aGuardar } = useVolverAlListado('clientes.index')
+
+const submit = () => form.put(aGuardar('clientes.update', { cliente: props.cliente.id }))
 
 const opcionesSiNo = [
     { value: '1', label: 'Sí' },
@@ -76,15 +82,21 @@ const removeFile = (index: number) => {
     uploadForm.archivos = uploadForm.archivos.filter((_, i) => i !== index)
 }
 
+// `preserveScroll` en los dos: la lista de adjuntos está al final de la ficha,
+// y sin esto tocar un archivo devuelve al usuario al tope. Mismo criterio que
+// `Components/AdjuntosObservacion.vue`.
 const subirArchivos = () => {
     uploadForm.post(route('clientes.archivos.store', props.cliente.id), {
         forceFormData: true,
+        preserveScroll: true,
         onSuccess: () => { uploadForm.reset() },
     })
 }
 
 const borrarArchivo = (archivoId: number) => {
-    router.delete(route('clientes.archivos.destroy', [props.cliente.id, archivoId]))
+    router.delete(route('clientes.archivos.destroy', [props.cliente.id, archivoId]), {
+        preserveScroll: true,
+    })
 }
 
 const formatSize = (bytes: number) => {
@@ -99,7 +111,7 @@ const formatSize = (bytes: number) => {
 
     <AppLayout>
         <div class="mb-6 flex items-center gap-3">
-            <Link :href="route('clientes.index')" class="text-sm text-gray-400 transition hover:text-gray-600 dark:hover:text-gray-300">← Volver</Link>
+            <Link :href="urlListado" class="text-sm text-gray-400 transition hover:text-gray-600 dark:hover:text-gray-300">← Volver</Link>
             <h1 class="text-xl font-semibold text-gray-800 dark:text-white/90">Editar cliente</h1>
         </div>
 

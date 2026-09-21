@@ -3,6 +3,7 @@ import AppLayout from '@/Layouts/AppLayout.vue'
 import { Head, Link, useForm } from '@inertiajs/vue3'
 import Button from '@/Components/Button.vue'
 import CamposUsuario, { type SectorOption, type RoleOption, type UserFormData, type UsuarioOption } from '@/Components/CamposUsuario.vue'
+import { useVolverAlListado } from '@/composables/useVolverAlListado'
 
 interface UserData {
     id: number
@@ -30,7 +31,12 @@ const form = useForm<UserFormData>({
     roles: props.user.roles.map(r => r.name),
 })
 
-const submit = () => form.put(route('users.update', props.user.id))
+// `volver` transporta los filtros del listado: lo puso el link "Editar"
+// y se lo devolvemos al controller para que sepa a dónde volver.
+// Ver `composables/useVolverAlListado.ts`.
+const { urlListado, aGuardar } = useVolverAlListado('users.index')
+
+const submit = () => form.put(aGuardar('users.update', { user: props.user.id }))
 </script>
 
 <template>
@@ -39,7 +45,7 @@ const submit = () => form.put(route('users.update', props.user.id))
     <AppLayout>
         <div class="max-w-3xl mx-auto">
             <div class="mb-6 flex items-center gap-3">
-                <Link :href="route('users.index')" class="text-sm text-gray-400 transition hover:text-gray-600 dark:hover:text-gray-300">← Volver</Link>
+                <Link :href="urlListado" class="text-sm text-gray-400 transition hover:text-gray-600 dark:hover:text-gray-300">← Volver</Link>
                 <h1 class="text-xl font-semibold text-gray-800 dark:text-white/90">Editar usuario</h1>
             </div>
 
@@ -57,7 +63,7 @@ const submit = () => form.put(route('users.update', props.user.id))
 
                 <div class="flex justify-end gap-3 border-t border-gray-100 pt-5 dark:border-gray-800">
                     <Link
-                        :href="route('users.index')"
+                        :href="urlListado"
                         class="inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-white/[0.05]"
                     >
                         Cancelar

@@ -4,6 +4,7 @@ import { Head, Link, useForm } from '@inertiajs/vue3'
 import Input from '@/Components/Input.vue'
 import Button from '@/Components/Button.vue'
 import SelectorPermisos from '@/Components/SelectorPermisos.vue'
+import { useVolverAlListado } from '@/composables/useVolverAlListado'
 import type { PermisoEtiquetado } from '@/types'
 
 interface RoleData { id: number; name: string; permissions: { name: string }[] }
@@ -15,7 +16,12 @@ const form = useForm({
     permissions: props.role.permissions.map(p => p.name),
 })
 
-const submit = () => form.put(route('roles.update', props.role.id))
+// `volver` transporta los filtros del listado: lo puso el link "Editar"
+// y se lo devolvemos al controller para que sepa a dónde volver.
+// Ver `composables/useVolverAlListado.ts`.
+const { urlListado, aGuardar } = useVolverAlListado('roles.index')
+
+const submit = () => form.put(aGuardar('roles.update', { role: props.role.id }))
 </script>
 
 <template>
@@ -23,7 +29,7 @@ const submit = () => form.put(route('roles.update', props.role.id))
 
     <AppLayout>
         <div class="mb-6 flex items-center gap-3">
-            <Link :href="route('roles.index')" class="text-sm text-gray-400 transition hover:text-gray-600 dark:hover:text-gray-300">← Volver</Link>
+            <Link :href="urlListado" class="text-sm text-gray-400 transition hover:text-gray-600 dark:hover:text-gray-300">← Volver</Link>
             <h1 class="text-xl font-semibold text-gray-800 dark:text-white/90">Editar rol</h1>
         </div>
 
@@ -35,7 +41,7 @@ const submit = () => form.put(route('roles.update', props.role.id))
 
                 <div class="flex gap-3 pt-2">
                     <Button type="submit" variant="primary" :disabled="form.processing">Guardar cambios</Button>
-                    <Link :href="route('roles.index')" class="inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-white/[0.05]">
+                    <Link :href="urlListado" class="inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-white/[0.05]">
                         Cancelar
                     </Link>
                 </div>

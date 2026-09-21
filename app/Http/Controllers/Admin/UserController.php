@@ -2,25 +2,79 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Concerns\OrdenaListados;
+use App\Http\Controllers\Concerns\VuelveAlListado;
 use App\Http\Controllers\Controller;
 use App\Models\Sector;
 use App\Models\User;
 use App\Services\UserImportService;
+use Closure;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rules\Password;
 use Spatie\Permission\Models\Role;
 
 class UserController extends Controller
 {
-    public function index()
+    use OrdenaListados, VuelveAlListado;
+
+    /**
+     * Qué columnas se pueden ordenar.
+     *
+     * "Roles" queda afuera: es una relación muchos-a-muchos, una fila puede
+     * tener tres, y "el primero alfabético" no es una propiedad de la fila.
+     *
+     * ⚠️ Supervisor y gerente van con un **self-join aliaseado**: sin el alias,
+     * `whereColumn('users.id', 'users.supervisor_id')` compara la tabla consigo
+     * misma y devuelve el nombre del propio usuario en vez del de su
+     * supervisor. Es el bug que no da error.
+     *
+     * @return array<string, string|array<int, string>|Closure>
+     */
+    private function ordenables(): array
+    {
+        return [
+            // La celda muestra nombre y apellido juntos: el orden tiene que
+            // seguir los dos, o dos "Juan" salen en cualquier orden.
+            'nombre' => ['name', 'apellido'],
+            'email' => 'email',
+            'sector' => fn (Builder $q, string $dir) => $q->orderBy(
+                Sector::query()->select('nombre')->whereColumn('sectors.id', 'users.sector_id'),
+                $dir,
+            ),
+            'supervisor' => fn (Builder $q, string $dir) => $q->orderBy(
+                User::query()->from('users as supervisores')
+                    ->select('supervisores.name')
+                    ->whereColumn('supervisores.id', 'users.supervisor_id'),
+                $dir,
+            ),
+            'gerente' => fn (Builder $q, string $dir) => $q->orderBy(
+                User::query()->from('users as gerentes')
+                    ->select('gerentes.name')
+                    ->whereColumn('gerentes.id', 'users.gerente_id'),
+                $dir,
+            ),
+        ];
+    }
+
+    public function index(Request $request)
     {
         $this->authorize('users.view');
 
+        $users = User::with(['roles', 'sector:id,nombre', 'supervisor:id,name,apellido', 'gerente:id,name,apellido'])
+            ->select('id', 'name', 'apellido', 'email', 'sector_id', 'supervisor_id', 'gerente_id', 'es_gerente', 'created_at');
+
         return inertia('Admin/Users/Index', [
-            'users' => User::with(['roles', 'sector:id,nombre', 'supervisor:id,name,apellido', 'gerente:id,name,apellido'])
-                ->select('id', 'name', 'apellido', 'email', 'sector_id', 'supervisor_id', 'gerente_id', 'es_gerente', 'created_at')
-                ->latest()
-                ->paginate(15),
+            // `withQueryString()` es nuevo: sin él, pasar a la página 2 perdía
+            // el orden elegido.
+            'users' => $this->aplicarOrden(
+                $users,
+                $request,
+                $this->ordenables(),
+                fn (Builder $q) => $q->latest(),
+                'users.id',
+            )->paginate(15)->withQueryString(),
+            'orden' => $this->orden($request, $this->ordenables()),
             'roles' => Role::orderBy('name')->get(['id', 'name']),
             // Contraseñas de los usuarios recién importados: es la única vez que se
             // pueden ver, así que viajan por flash y se muestran una sola vez.
@@ -92,7 +146,9 @@ class UserController extends Controller
 
         $user->syncRoles($data['roles'] ?? []);
 
-        return redirect()->route('users.index')
+        // Al listado, pero **con los filtros y la página** que traía: ver el
+        // trait `VuelveAlListado`.
+        return $this->alListado($request, 'users.index')
             ->with('success', 'Usuario actualizado correctamente.');
     }
 
@@ -109,7 +165,9 @@ class UserController extends Controller
 
         $creados = count($resultado['creados']);
 
-        $redirect = redirect()->route('users.index')
+        // `back()`: el import se dispara desde un modal del listado y el
+        // redirect pelado sacaba al usuario de donde estaba trabajando.
+        $redirect = back(fallback: route('users.index'))
             ->with('success', "Importación completa: {$creados} creados, {$resultado['actualizados']} actualizados.")
             ->with('importados', $resultado['creados']);
 
@@ -130,7 +188,10 @@ class UserController extends Controller
 
         $user->delete();
 
-        return redirect()->route('users.index')
+        // `back()`, igual que la rama de error de arriba: el borrado se
+        // confirma en un modal del listado y las dos salidas del mismo método
+        // tienen que dejar al usuario en el mismo lugar.
+        return back(fallback: route('users.index'))
             ->with('success', 'Usuario eliminado correctamente.');
     }
 

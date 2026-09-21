@@ -11,6 +11,9 @@ import Pagination from '@/Components/Pagination.vue'
 import Select from '@/Components/Select.vue'
 import TableCard from '@/Components/TableCard.vue'
 import DataRow from '@/Components/DataRow.vue'
+import ThOrdenable from '@/Components/ThOrdenable.vue'
+import { useOrdenamiento, type OrdenVigente } from '@/composables/useOrdenamiento'
+import { useIrALaFicha } from '@/composables/useVolverAlListado'
 import type { PaginatedData } from '@/types'
 
 interface RoleOption { id: number; name: string }
@@ -31,9 +34,24 @@ interface UserRow {
 
 const props = defineProps<{
     users: PaginatedData<UserRow>
+    /** Validado contra la whitelist del backend: `sort` es null en el orden por defecto. */
+    orden: OrdenVigente
     roles: RoleOption[]
     importados?: Importado[] | null
 }>()
+
+// Esta pantalla no tiene filtros: el ordenamiento es lo único que viaja en la
+// URL, así que `parametros` va vacío.
+const { orden, ordenarPor } = useOrdenamiento({
+    ruta: 'users.index',
+    orden: () => props.orden,
+    parametros: () => ({}),
+    ascendentesPorDefecto: ['nombre', 'email', 'sector', 'supervisor', 'gerente'],
+})
+
+// El link a la ficha se lleva la página y los filtros vigentes, para que
+// al guardar (o al cancelar) se vuelva exactamente acá.
+const { aLaFicha } = useIrALaFicha()
 
 const { hasPermission } = usePermissions()
 
@@ -116,13 +134,13 @@ const copiarCredenciales = () => navigator.clipboard.writeText(credencialesComoT
                 <table class="w-full">
                     <thead>
                         <tr class="border-b border-gray-100 dark:border-gray-800">
-                            <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Nombre</th>
-                            <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Email</th>
-                            <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Sector</th>
-                            <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Supervisor</th>
-                            <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Gerente</th>
-                            <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Roles</th>
-                            <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Acciones</th>
+                            <ThOrdenable campo="nombre" :orden="orden" pad="px-6" @ordenar="ordenarPor">Nombre</ThOrdenable>
+                            <ThOrdenable campo="email" :orden="orden" pad="px-6" @ordenar="ordenarPor">Email</ThOrdenable>
+                            <ThOrdenable campo="sector" :orden="orden" pad="px-6" @ordenar="ordenarPor">Sector</ThOrdenable>
+                            <ThOrdenable campo="supervisor" :orden="orden" pad="px-6" @ordenar="ordenarPor">Supervisor</ThOrdenable>
+                            <ThOrdenable campo="gerente" :orden="orden" pad="px-6" @ordenar="ordenarPor">Gerente</ThOrdenable>
+                            <ThOrdenable :orden="orden" pad="px-6">Roles</ThOrdenable>
+                            <ThOrdenable :orden="orden" pad="px-6">Acciones</ThOrdenable>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
@@ -153,7 +171,7 @@ const copiarCredenciales = () => navigator.clipboard.writeText(credencialesComoT
                                 <div class="flex items-center gap-1">
                                     <Link
                                         v-if="hasPermission('users.edit')"
-                                        :href="route('users.edit', user.id)"
+                                        :href="aLaFicha('users.edit', { user: user.id })"
                                         class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-brand-500 dark:hover:bg-white/[0.05] dark:hover:text-brand-300"
                                         title="Editar"
                                     >
@@ -193,7 +211,7 @@ const copiarCredenciales = () => navigator.clipboard.writeText(credencialesComoT
                     <template #actions>
                         <Link
                             v-if="hasPermission('users.edit')"
-                            :href="route('users.edit', user.id)"
+                            :href="aLaFicha('users.edit', { user: user.id })"
                             class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-brand-500 dark:hover:bg-white/[0.05] dark:hover:text-brand-300"
                             title="Editar"
                         >

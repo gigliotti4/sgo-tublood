@@ -67,6 +67,7 @@ class DashboardController extends Controller
                 ])
                 ->values(),
             'porSector' => $this->observacionesPorSector(),
+            'resolucionPorSector' => $this->tiempoResolucionPorSector(),
             // Lo que muestra el hover de las tarjetas "Abiertas" y "Asignadas a
             // mí". Cada lista usa **el mismo criterio que el numero de su
             // tarjeta**: si no, el panel contradiria al contador que abre.
@@ -114,11 +115,7 @@ class DashboardController extends Controller
      */
     private function tiempoPromedioResolucion(): array
     {
-        $cerradas = Observacion::query()
-            ->where('estado', 'cerrada')
-            ->whereNotNull('cerrada_at')
-            ->where('cerrada_at', '>=', now()->subDays(self::DIAS_VENTANA_KPI))
-            ->get(['created_at', 'cerrada_at']);
+        $cerradas = $this->cerradasDeLaVentana()->get(['created_at', 'cerrada_at']);
 
         if ($cerradas->isEmpty()) {
             return ['horas' => null, 'casos' => 0];
@@ -130,6 +127,73 @@ class DashboardController extends Controller
             ), 1),
             'casos' => $cerradas->count(),
         ];
+    }
+
+    /**
+     * Las observaciones cerradas dentro de la ventana del KPI.
+     *
+     * Lo comparten el número general y el gráfico por sector: si el filtro se
+     * escribiera dos veces, la tarjeta podría dejar de ser el promedio
+     * ponderado de las barras y la pantalla se contradiría sola.
+     *
+     * Las columnas van calificadas con la tabla porque el gráfico por sector
+     * joinea `sectors`, que también tiene `created_at`.
+     */
+    private function cerradasDeLaVentana(): Builder
+    {
+        return Observacion::query()
+            ->where('observations.estado', 'cerrada')
+            ->whereNotNull('observations.cerrada_at')
+            ->where('observations.cerrada_at', '>=', now()->subDays(self::DIAS_VENTANA_KPI));
+    }
+
+    /**
+     * Tiempo promedio de resolución por sector, para el gráfico del panel.
+     *
+     * Mismo criterio de punta a punta y misma ventana que el KPI general (ver
+     * `tiempoPromedioResolucion()`): estas barras tienen que promediar al
+     * número de la tarjeta, por eso las dos salen de `cerradasDeLaVentana()`.
+     *
+     * ⚠️ El promedio se hace en PHP y no con `AVG(TIMESTAMPDIFF(...))` por el
+     * mismo motivo que el KPI general: esa función es de MySQL y los tests
+     * corren en SQLite. Acá además hay que agrupar, así que se traen las dos
+     * fechas con el nombre del sector ya resuelto y se agrupa con Collection.
+     *
+     * `leftJoin` + `COALESCE`, igual que `observacionesPorSector()`: el bucket
+     * "Sin sector" tiene casos reales (el portal guarda el reclamo aunque no
+     * resuelva el sector) y acá además es el más accionable — mide cuánto
+     * tardan en derivarse los reclamos que entran sin dueño.
+     *
+     * Los sectores **sin cierres en la ventana no aparecen**: una barra en 0 h
+     * se lee como "resuelven al instante", que es lo contrario de lo que pasa.
+     * Es el mismo motivo por el que el KPI general devuelve `null` y no `0`.
+     *
+     * Se alias a `sector_nombre` y no a `sector` para no tapar la relación
+     * `Observacion::sector()` en el modelo hidratado, que acá también se usa
+     * para leer `created_at` / `cerrada_at`.
+     *
+     * @return Collection<int, array{sector: string, horas: float, casos: int}>
+     */
+    private function tiempoResolucionPorSector(): Collection
+    {
+        return $this->cerradasDeLaVentana()
+            ->leftJoin('sectors', 'sectors.id', '=', 'observations.sector_id')
+            ->get([
+                DB::raw("COALESCE(sectors.nombre, 'Sin sector') as sector_nombre"),
+                DB::raw('observations.created_at as created_at'),
+                DB::raw('observations.cerrada_at as cerrada_at'),
+            ])
+            ->groupBy('sector_nombre')
+            ->map(fn (Collection $casos, string $sector) => [
+                'sector' => $sector,
+                'horas' => round($casos->avg(
+                    fn (Observacion $o) => $o->created_at->diffInHours($o->cerrada_at)
+                ), 1),
+                'casos' => $casos->count(),
+            ])
+            // De mayor a menor: la pregunta del gráfico es dónde se tarda más.
+            ->sortByDesc('horas')
+            ->values();
     }
 
     /**

@@ -39,7 +39,10 @@ class SectorController extends Controller
 
         Sector::create([...$data, 'slug' => Str::slug($data['nombre'])]);
 
-        return redirect()->route('sectores.index')
+        // `back()` aunque sea un `store()`: el alta es un modal sobre el propio
+        // listado, no una página aparte, así que el usuario tiene que quedarse
+        // donde estaba. La regla es de dónde sale la acción, no si crea o edita.
+        return back(fallback: route('sectores.index'))
             ->with('success', 'Sector creado correctamente.');
     }
 
@@ -52,7 +55,7 @@ class SectorController extends Controller
         // tipos de incidencia — cambiarlo rompería esa referencia.
         $sector->update($this->validar($request, $sector));
 
-        return redirect()->route('sectores.index')
+        return back(fallback: route('sectores.index'))
             ->with('success', 'Sector actualizado correctamente.');
     }
 

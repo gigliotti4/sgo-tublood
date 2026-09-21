@@ -12,6 +12,8 @@ import Pagination from '@/Components/Pagination.vue'
 import ContadorRegistros from '@/Components/ContadorRegistros.vue'
 import TableCard from '@/Components/TableCard.vue'
 import DataRow from '@/Components/DataRow.vue'
+import ThOrdenable from '@/Components/ThOrdenable.vue'
+import { useOrdenamiento, type OrdenVigente } from '@/composables/useOrdenamiento'
 import type { PaginatedData, Venta } from '@/types'
 
 const props = defineProps<{
@@ -22,6 +24,8 @@ const props = defineProps<{
     puedeVerMontos: boolean
     lastSync: string | null
     total: number
+    /** Validado contra la whitelist del backend: `sort` es null en el orden por defecto. */
+    orden: OrdenVigente
 }>()
 
 const { hasPermission } = usePermissions()
@@ -37,8 +41,19 @@ const filtros = reactive({
 let debounce: ReturnType<typeof setTimeout>
 let debounceLote: ReturnType<typeof setTimeout>
 
+const filtrosVigentes = () => ({ search: search.value, ...filtros })
+
+const { orden, ordenarPor, paramsDeOrden } = useOrdenamiento({
+    ruta: 'ventas.index',
+    orden: () => props.orden,
+    parametros: filtrosVigentes,
+    // Fecha, cantidad y subtotal arrancan de mayor a menor: lo que se
+    // busca es la venta mas reciente y la mas grande.
+    ascendentesPorDefecto: ['comprobante', 'cliente', 'articulo', 'vendedor'],
+})
+
 const recargar = () => {
-    router.get(route('ventas.index'), { search: search.value, ...filtros }, {
+    router.get(route('ventas.index'), { ...filtrosVigentes(), ...paramsDeOrden.value }, {
         preserveState: true,
         preserveScroll: true,
         replace: true,
@@ -191,15 +206,15 @@ const remitoDe = (venta: Venta) => {
                     <table class="w-full">
                         <thead>
                             <tr class="border-b border-gray-100 dark:border-gray-800">
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Fecha</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Comprobante</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Remito</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Cliente</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Artículo</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Lote</th>
-                                <th class="px-4 py-3 text-right text-theme-xs font-medium text-gray-500 dark:text-gray-400">Cant.</th>
-                                <th v-if="puedeVerMontos" class="px-4 py-3 text-right text-theme-xs font-medium text-gray-500 dark:text-gray-400">Subtotal</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Vendedor</th>
+                                <ThOrdenable campo="fecha" :orden="orden" @ordenar="ordenarPor">Fecha</ThOrdenable>
+                                <ThOrdenable campo="comprobante" :orden="orden" @ordenar="ordenarPor">Comprobante</ThOrdenable>
+                                <ThOrdenable :orden="orden">Remito</ThOrdenable>
+                                <ThOrdenable campo="cliente" :orden="orden" @ordenar="ordenarPor">Cliente</ThOrdenable>
+                                <ThOrdenable campo="articulo" :orden="orden" @ordenar="ordenarPor">Artículo</ThOrdenable>
+                                <ThOrdenable :orden="orden">Lote</ThOrdenable>
+                                <ThOrdenable campo="cantidad" :orden="orden" align="right" @ordenar="ordenarPor">Cant.</ThOrdenable>
+                                <ThOrdenable v-if="puedeVerMontos" campo="sub_total" :orden="orden" align="right" @ordenar="ordenarPor">Subtotal</ThOrdenable>
+                                <ThOrdenable campo="vendedor" :orden="orden" @ordenar="ordenarPor">Vendedor</ThOrdenable>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100 dark:divide-gray-800">

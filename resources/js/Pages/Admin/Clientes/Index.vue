@@ -14,11 +14,16 @@ import Pagination from '@/Components/Pagination.vue'
 import ContadorRegistros from '@/Components/ContadorRegistros.vue'
 import TableCard from '@/Components/TableCard.vue'
 import DataRow from '@/Components/DataRow.vue'
+import ThOrdenable from '@/Components/ThOrdenable.vue'
+import { useOrdenamiento, type OrdenVigente } from '@/composables/useOrdenamiento'
+import { useIrALaFicha } from '@/composables/useVolverAlListado'
 import type { Cliente, PaginatedData } from '@/types'
 
 const props = defineProps<{
     clientes: PaginatedData<Cliente>
     filters: { search: string; tipo_cliente: string; estado_documental: string }
+    /** Validado contra la whitelist del backend: `sort` es null en el orden por defecto. */
+    orden: OrdenVigente
     tipos: Record<string, string>
     lastSync: string | null
     total: number
@@ -30,12 +35,30 @@ const search = ref(props.filters.search ?? '')
 const tipoCliente = ref(props.filters.tipo_cliente ?? '')
 const filtroEstado = ref(props.filters.estado_documental ?? '')
 
+const filtrosVigentes = () => ({
+    search: search.value,
+    tipo_cliente: tipoCliente.value,
+    estado_documental: filtroEstado.value,
+})
+
+const { orden, ordenarPor, paramsDeOrden } = useOrdenamiento({
+    ruta: 'clientes.index',
+    orden: () => props.orden,
+    parametros: filtrosVigentes,
+    // Los textos se leen A→Z; el vencimiento también, porque lo que se busca
+    // es lo que vence primero. Documentación arranca al revés: primero lo
+    // incompleto, que es sobre lo que hay que trabajar.
+    ascendentesPorDefecto: ['numero', 'razon_social', 'cuit', 'iva', 'localidad', 'telefono', 'mail', 'vencimiento', 'tipo'],
+})
+
+// El link a la ficha se lleva la página y los filtros vigentes, para que
+// al guardar (o al cancelar) se vuelva exactamente acá.
+const { aLaFicha } = useIrALaFicha()
+
 const recargar = () => {
-    router.get(route('clientes.index'), {
-        search: search.value,
-        tipo_cliente: tipoCliente.value,
-        estado_documental: filtroEstado.value,
-    }, {
+    // El orden viaja con los filtros: cambiar el buscador no tiene por que
+    // devolver la tabla al orden por defecto.
+    router.get(route('clientes.index'), { ...filtrosVigentes(), ...paramsDeOrden.value }, {
         preserveState: true,
         preserveScroll: true,
         replace: true,
@@ -188,16 +211,16 @@ const formatFechaVencimiento = (d: string | null) => {
                     <table class="w-full">
                         <thead>
                             <tr class="border-b border-gray-100 dark:border-gray-800">
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">N°</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Razón Social</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">CUIT</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">IVA</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Localidad</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Teléfono</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Mail</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Vencimiento</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Tipo</th>
-                                <th class="px-4 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Documentación</th>
+                                <ThOrdenable campo="numero" :orden="orden" @ordenar="ordenarPor">N°</ThOrdenable>
+                                <ThOrdenable campo="razon_social" :orden="orden" @ordenar="ordenarPor">Razón Social</ThOrdenable>
+                                <ThOrdenable campo="cuit" :orden="orden" @ordenar="ordenarPor">CUIT</ThOrdenable>
+                                <ThOrdenable campo="iva" :orden="orden" @ordenar="ordenarPor">IVA</ThOrdenable>
+                                <ThOrdenable campo="localidad" :orden="orden" @ordenar="ordenarPor">Localidad</ThOrdenable>
+                                <ThOrdenable campo="telefono" :orden="orden" @ordenar="ordenarPor">Teléfono</ThOrdenable>
+                                <ThOrdenable campo="mail" :orden="orden" @ordenar="ordenarPor">Mail</ThOrdenable>
+                                <ThOrdenable campo="vencimiento" :orden="orden" @ordenar="ordenarPor">Vencimiento</ThOrdenable>
+                                <ThOrdenable campo="tipo" :orden="orden" @ordenar="ordenarPor">Tipo</ThOrdenable>
+                                <ThOrdenable campo="documentacion" :orden="orden" @ordenar="ordenarPor">Documentación</ThOrdenable>
                                 <th v-if="hasPermission('clientes.edit')" class="px-4 py-3" />
                             </tr>
                         </thead>
@@ -245,7 +268,7 @@ const formatFechaVencimiento = (d: string | null) => {
                                 </td>
                                 <td v-if="hasPermission('clientes.edit')" class="px-4 py-3.5 text-right">
                                     <Link
-                                        :href="route('clientes.edit', cliente.id)"
+                                        :href="aLaFicha('clientes.edit', { cliente: cliente.id })"
                                         class="inline-flex rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-brand-500 dark:hover:bg-white/[0.05] dark:hover:text-brand-300"
                                         title="Editar"
                                     >
@@ -268,7 +291,7 @@ const formatFechaVencimiento = (d: string | null) => {
                         </template>
                         <template v-if="hasPermission('clientes.edit')" #actions>
                             <Link
-                                :href="route('clientes.edit', cliente.id)"
+                                :href="aLaFicha('clientes.edit', { cliente: cliente.id })"
                                 class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-brand-500 dark:hover:bg-white/[0.05] dark:hover:text-brand-300"
                                 title="Editar"
                             >

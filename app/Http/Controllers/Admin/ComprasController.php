@@ -60,7 +60,9 @@ class ComprasController extends Controller
 
         SyncComprasJob::dispatch();
 
-        return redirect()->route('compras.index')
+        // `back()`: el botón está en el tablero y sincronizar no tiene por qué
+        // descartar los filtros que el usuario tenía puestos.
+        return back(fallback: route('compras.index'))
             ->with('success', 'Sincronización iniciada. Los datos se actualizarán en breve.');
     }
 }

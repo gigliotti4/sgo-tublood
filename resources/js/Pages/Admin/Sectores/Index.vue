@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { Head, Link, useForm } from '@inertiajs/vue3'
 import { usePermissions } from '@/composables/usePermissions'
@@ -10,9 +10,60 @@ import Input from '@/Components/Input.vue'
 import Modal from '@/Components/Modal.vue'
 import TableCard from '@/Components/TableCard.vue'
 import DataRow from '@/Components/DataRow.vue'
+import ThOrdenable from '@/Components/ThOrdenable.vue'
 import type { Sector } from '@/types'
 
-defineProps<{ sectores: Sector[] }>()
+const props = defineProps<{ sectores: Sector[] }>()
+
+// ── Ordenamiento, en el cliente ─────────────────────────────────────
+//
+// Y no en el servidor como los otros listados: son 9 filas fijas que ya viajan
+// enteras (`SectorController::index()` hace `->get()`, sin paginar), sin
+// filtros ni URL que preservar. Un roundtrip por click sería el único del
+// panel que recarga una tabla que ya está en memoria. Mismo criterio que
+// Compras. El `<th>` sí se comparte: `ThOrdenable` no sabe de Inertia.
+
+type ClaveOrden = 'sector' | 'plazo' | 'usuarios' | 'estado'
+
+const orden = ref<{ sort: ClaveOrden | null; dir: 'asc' | 'desc' }>({ sort: 'sector', dir: 'asc' })
+
+const ordenarPor = (campo: string) => {
+    const clave = campo as ClaveOrden
+
+    orden.value = orden.value.sort === clave
+        ? { sort: clave, dir: orden.value.dir === 'asc' ? 'desc' : 'asc' }
+        // Texto A→Z; los números, de mayor a menor.
+        : { sort: clave, dir: clave === 'sector' ? 'asc' : 'desc' }
+}
+
+const valorDeOrden = (s: Sector, clave: ClaveOrden): string | number => {
+    switch (clave) {
+        case 'sector': return s.nombre
+        // Sin plazo cargado, las observaciones de ese sector nunca alertan: va
+        // al fondo en vez de mezclarse con los plazos cortos.
+        case 'plazo': return s.dias_gestion ?? Number.MAX_VALUE
+        case 'usuarios': return s.usuarios_count ?? 0
+        case 'estado': return s.activo ? 1 : 0
+    }
+}
+
+const sectoresOrdenados = computed(() => {
+    const { sort, dir } = orden.value
+    if (!sort) return props.sectores
+
+    return props.sectores.slice().sort((a, b) => {
+        const va = valorDeOrden(a, sort)
+        const vb = valorDeOrden(b, sort)
+
+        if (typeof va === 'string' && typeof vb === 'string') {
+            const c = va.localeCompare(vb, 'es')
+
+            return dir === 'asc' ? c : -c
+        }
+
+        return dir === 'asc' ? (va as number) - (vb as number) : (vb as number) - (va as number)
+    })
+})
 
 const { hasPermission } = usePermissions()
 
@@ -87,15 +138,15 @@ const guardar = () => {
             <table class="w-full">
                 <thead>
                     <tr class="border-b border-gray-100 dark:border-gray-800">
-                        <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Sector</th>
-                        <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Plazo de gestión</th>
-                        <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Usuarios</th>
-                        <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Estado</th>
-                        <th class="px-6 py-3 text-left text-theme-xs font-medium text-gray-500 dark:text-gray-400">Acciones</th>
+                        <ThOrdenable campo="sector" :orden="orden" pad="px-6" @ordenar="ordenarPor">Sector</ThOrdenable>
+                        <ThOrdenable campo="plazo" :orden="orden" pad="px-6" @ordenar="ordenarPor">Plazo de gestión</ThOrdenable>
+                        <ThOrdenable campo="usuarios" :orden="orden" pad="px-6" @ordenar="ordenarPor">Usuarios</ThOrdenable>
+                        <ThOrdenable campo="estado" :orden="orden" pad="px-6" @ordenar="ordenarPor">Estado</ThOrdenable>
+                        <ThOrdenable :orden="orden" pad="px-6">Acciones</ThOrdenable>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
-                    <tr v-for="sector in sectores" :key="sector.id" class="transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]">
+                    <tr v-for="sector in sectoresOrdenados" :key="sector.id" class="transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]">
                         <td class="px-6 py-3.5 text-theme-sm font-medium text-gray-800 dark:text-white/90">{{ sector.nombre }}</td>
                         <td class="px-6 py-3.5 text-theme-sm text-gray-500 dark:text-gray-400">
                             <span v-if="sector.dias_gestion">{{ sector.dias_gestion }} días hábiles</span>
