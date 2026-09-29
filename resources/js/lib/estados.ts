@@ -19,6 +19,9 @@ export const estadoLabels: Record<string, string> = {
     clasificada: 'Clasificada',
     en_proceso: 'En proceso',
     derivada: 'Derivada',
+    // ⚠️ No es lo mismo que `derivada`, que es entre sectores. Ésta escaló a un
+    // desvío, y la etiqueta lo dice entero justamente para que no se confundan.
+    derivada_nc: 'Derivada a No Conformidad',
     cerrada: 'Cerrada',
     cancelada: 'Cancelada',
 }
@@ -28,6 +31,7 @@ export const estadoVariant: Record<string, BadgeVariant> = {
     clasificada: 'blue',
     en_proceso: 'indigo',
     derivada: 'purple',
+    derivada_nc: 'indigo',
     cerrada: 'emerald',
     cancelada: 'red',
 }

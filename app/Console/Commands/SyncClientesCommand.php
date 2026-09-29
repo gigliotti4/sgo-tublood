@@ -10,7 +10,8 @@ use Illuminate\Console\Command;
 
 class SyncClientesCommand extends Command
 {
-    protected $signature   = 'clientes:sync {--sync : Ejecutar sincronamente (sin queue, útil para debug)}';
+    protected $signature = 'clientes:sync {--sync : Ejecutar sincronamente (sin queue, útil para debug)}';
+
     protected $description = 'Sincroniza clientes desde la API de RP Sistemas';
 
     public function handle(): int
@@ -19,11 +20,12 @@ class SyncClientesCommand extends Command
             $this->info('Sincronizando clientes de forma síncrona...');
 
             try {
-                $service = new ClienteSyncService(new RpSistemasClient());
-                $total   = $service->sync();
+                $service = new ClienteSyncService(new RpSistemasClient);
+                $total = $service->sync();
                 $this->info("✓ {$total} clientes sincronizados.");
             } catch (RpSistemasException $e) {
                 $this->error("Error de API RP Sistemas [{$e->servicio}]: {$e->getMessage()}");
+
                 return Command::FAILURE;
             }
         } else {

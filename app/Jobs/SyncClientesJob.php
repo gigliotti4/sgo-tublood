@@ -13,7 +13,8 @@ class SyncClientesJob implements ShouldQueue
 {
     use Queueable;
 
-    public int $tries   = 3;
+    public int $tries = 3;
+
     public int $timeout = 300;
 
     public function handle(RpSistemasClient $client): void
@@ -26,7 +27,7 @@ class SyncClientesJob implements ShouldQueue
         } catch (RpSistemasException $e) {
             Log::error('SyncClientesJob: error de API RP Sistemas', [
                 'servicio' => $e->servicio,
-                'message'  => $e->getMessage(),
+                'message' => $e->getMessage(),
             ]);
             throw $e;
         }

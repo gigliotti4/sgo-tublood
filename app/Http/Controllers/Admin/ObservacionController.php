@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Concerns\OrdenaListados;
 use App\Http\Controllers\Controller;
 use App\Models\Cliente;
+use App\Models\NoConformidad;
 use App\Models\Observacion;
 use App\Models\ObservationAttachment;
 use App\Models\ObservationHistory;
@@ -20,6 +21,7 @@ use App\Support\TaxonomiaIncidencias;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -152,6 +154,42 @@ class ObservacionController extends Controller
      * Mismo filtrado para el listado paginado y para la exportación a Excel:
      * un solo lugar donde se define qué significa cada filtro.
      */
+    /**
+     * Autocompletado para vincular una observación a un desvío.
+     *
+     * Molde de `ProveedorController::buscar()`. Devuelve lo mínimo para elegir
+     * en una lista —número, título y estado— y no el caso entero: es un
+     * selector, no una vista.
+     *
+     * Se puede excluir lo ya vinculado con `?excluir[]=`, así el buscador no
+     * ofrece algo que ya está en la lista.
+     */
+    public function buscar(Request $request): JsonResponse
+    {
+        $this->authorize('observaciones.view');
+
+        // Un término corto devuelve lista vacía en vez de 422: para un
+        // autocompletado no es un error, es "todavía no hay nada que sugerir".
+        $termino = trim((string) $request->query('q', ''));
+
+        if (mb_strlen($termino) < 2) {
+            return response()->json([]);
+        }
+
+        $excluir = array_map('intval', (array) $request->query('excluir', []));
+
+        $observaciones = Observacion::query()
+            ->where(fn ($query) => $query
+                ->where('numero', 'like', '%'.mb_substr($termino, 0, 100).'%')
+                ->orWhere('titulo', 'like', '%'.mb_substr($termino, 0, 100).'%'))
+            ->when($excluir !== [], fn ($query) => $query->whereNotIn('id', $excluir))
+            ->orderByDesc('id')
+            ->limit(15)
+            ->get(['id', 'numero', 'titulo', 'estado']);
+
+        return response()->json($observaciones);
+    }
+
     private function filtrarObservaciones(array $filters): Builder
     {
         return Observacion::query()
@@ -259,6 +297,10 @@ class ObservacionController extends Controller
             'cliente:id,numero,razon_social,mail,telefono',
             ...self::EAGER_PRODUCTOS,
             'baja.user:id,name,apellido',
+            // Los desvíos a los que escaló este reclamo. La ficha los lista
+            // para poder navegar hasta ellos: el vínculo servía de poco si solo
+            // se veía desde el lado de la No Conformidad.
+            'noConformidades:id,numero,estado,motivo',
             ...$this->eagerLoadsDeGestion(),
         ]);
 
@@ -272,6 +314,11 @@ class ObservacionController extends Controller
             'tipoLabels' => TaxonomiaIncidencias::etiquetasTipos(),
             'prioridades' => config('incidencias.prioridades'),
             'puedeEditar' => $request->user()?->can('update', $observacion) ?? false,
+            // Escalar a un desvío pide las dos cosas: poder crear una NC y
+            // poder gestionar ESTA observación. La Policy lo vuelve a chequear.
+            'puedeDerivarANc' => ($request->user()?->can('nc.create') ?? false)
+                && ($request->user()?->can('update', $observacion) ?? false),
+            'estadosNc' => NoConformidad::ESTADOS,
         ]);
     }
 

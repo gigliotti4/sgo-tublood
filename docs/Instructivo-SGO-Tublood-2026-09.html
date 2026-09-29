@@ -1,0 +1,939 @@
+<title>Instructivo SGO Tublood</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+:root {
+  /* Paleta de marca Tublood: brand-500 es PANTONE Reflex Blue C. */
+  --brand: #001489;
+  --brand-soft: #3c54ac;
+  --sky: #c8eafd;
+  --sky-deep: #e1f3fe;
+
+  --paper: #f6f6f5;
+  --surface: #ffffff;
+  --surface-sunk: #eeeeed;
+  --ink: #00083a;
+  --ink-soft: #45453f;
+  --ink-faint: #65665c;
+  --rule: #d8d8d4;
+  --rule-soft: #e6e6e3;
+
+  --amber: #b45309;
+  --amber-bg: #fdf3e3;
+  --green: #04724d;
+  --green-bg: #e6f4ee;
+  --red: #a01b23;
+  --red-bg: #fbeaea;
+  --indigo: #3c54ac;
+  --indigo-bg: #e8ecf8;
+  --purple: #6b3fa0;
+  --purple-bg: #f0eafa;
+
+  --shadow: 0 1px 2px rgba(0, 8, 58, .06), 0 8px 24px -12px rgba(0, 8, 58, .18);
+
+  --serif: "Source Serif 4", ui-serif, Georgia, serif;
+  --sans: "Poppins", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --brand: #9cbbe3;
+    --brand-soft: #6e8ac9;
+    --sky: #1b2a52;
+    --sky-deep: #16224a;
+
+    --paper: #0a0f22;
+    --surface: #111830;
+    --surface-sunk: #0d1428;
+    --ink: #eef1f8;
+    --ink-soft: #c3c8d6;
+    --ink-faint: #8d94a8;
+    --rule: #263054;
+    --rule-soft: #1c2444;
+
+    --amber: #e0a35c;
+    --amber-bg: #2a2013;
+    --green: #6cc79c;
+    --green-bg: #10261d;
+    --red: #e88a8f;
+    --red-bg: #2b1517;
+    --indigo: #9cabe0;
+    --indigo-bg: #1a2145;
+    --purple: #b699e0;
+    --purple-bg: #221a3a;
+
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -12px rgba(0, 0, 0, .7);
+  }
+}
+
+:root[data-theme="dark"] {
+  --brand: #9cbbe3;
+  --brand-soft: #6e8ac9;
+  --sky: #1b2a52;
+  --sky-deep: #16224a;
+
+  --paper: #0a0f22;
+  --surface: #111830;
+  --surface-sunk: #0d1428;
+  --ink: #eef1f8;
+  --ink-soft: #c3c8d6;
+  --ink-faint: #8d94a8;
+  --rule: #263054;
+  --rule-soft: #1c2444;
+
+  --amber: #e0a35c;
+  --amber-bg: #2a2013;
+  --green: #6cc79c;
+  --green-bg: #10261d;
+  --red: #e88a8f;
+  --red-bg: #2b1517;
+  --indigo: #9cabe0;
+  --indigo-bg: #1a2145;
+  --purple: #b699e0;
+  --purple-bg: #221a3a;
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -12px rgba(0, 0, 0, .7);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 24px 96px;
+}
+
+@media (min-width: 1024px) {
+  .shell {
+    grid-template-columns: 232px minmax(0, 1fr);
+    gap: 56px;
+    padding-inline: 40px;
+  }
+}
+
+/* ---------- Portada ---------- */
+
+.portada {
+  grid-column: 1 / -1;
+  padding: 56px 0 40px;
+  border-bottom: 2px solid var(--ink);
+}
+
+.eyebrow {
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: var(--brand);
+  margin: 0 0 14px;
+}
+
+.portada h1 {
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: clamp(2.1rem, 5vw, 3.1rem);
+  line-height: 1.08;
+  letter-spacing: -.022em;
+  margin: 0 0 16px;
+  text-wrap: balance;
+  color: var(--ink);
+}
+
+.bajada {
+  font-size: 1.12rem;
+  color: var(--ink-soft);
+  max-width: 60ch;
+  margin: 0;
+}
+
+.accesos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.acceso {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 13px 18px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--brand);
+  border-radius: 3px;
+  min-width: 250px;
+}
+
+.acceso .rotulo {
+  font-family: var(--sans);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.acceso .url {
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--brand);
+  word-break: break-all;
+}
+
+.acceso .nota {
+  font-size: 14px;
+  color: var(--ink-faint);
+}
+
+/* ---------- Índice ---------- */
+
+.indice {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .indice {
+    display: block;
+    position: sticky;
+    top: 28px;
+    align-self: start;
+    padding-top: 44px;
+    max-height: calc(100vh - 56px);
+    overflow-y: auto;
+  }
+}
+
+.indice p {
+  font-family: var(--sans);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 0 0 12px;
+}
+
+.indice ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  counter-reset: toc;
+}
+
+.indice a {
+  display: block;
+  font-family: var(--sans);
+  font-size: 13.5px;
+  line-height: 1.35;
+  color: var(--ink-soft);
+  text-decoration: none;
+  padding: 5px 10px 5px 0;
+  border-left: 2px solid transparent;
+  padding-left: 12px;
+  transition: color .15s, border-color .15s;
+}
+
+.indice a:hover,
+.indice a:focus-visible {
+  color: var(--brand);
+  border-left-color: var(--brand);
+}
+
+/* ---------- Cuerpo ---------- */
+
+main { padding-top: 44px; min-width: 0; }
+
+section { margin-bottom: 60px; scroll-margin-top: 24px; }
+
+h2 {
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 1.55rem;
+  letter-spacing: -.015em;
+  line-height: 1.2;
+  margin: 0 0 6px;
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+h3 {
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 1.05rem;
+  letter-spacing: -.005em;
+  margin: 32px 0 8px;
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+.sub {
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--ink-faint);
+  margin: 0 0 22px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+p { margin: 0 0 15px; max-width: 66ch; }
+
+main ul, main ol { max-width: 66ch; padding-left: 20px; }
+main li { margin-bottom: 7px; }
+
+a { color: var(--brand); }
+
+strong { font-weight: 600; }
+
+code {
+  font-family: var(--mono);
+  font-size: .87em;
+  background: var(--surface-sunk);
+  border-radius: 3px;
+  padding: 1.5px 5px;
+  color: var(--ink);
+}
+
+/* ---------- Circuito numerado ---------- */
+
+.pasos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  counter-reset: paso;
+  border-left: 2px solid var(--rule);
+  max-width: 68ch;
+}
+
+.pasos li {
+  counter-increment: paso;
+  position: relative;
+  padding: 0 0 26px 28px;
+  margin: 0;
+}
+
+.pasos li::before {
+  content: counter(paso);
+  position: absolute;
+  left: -13px;
+  top: 1px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #fff;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+:root[data-theme="dark"] .pasos li::before { color: #06102b; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .pasos li::before { color: #06102b; }
+}
+
+.pasos h4 {
+  font-family: var(--sans);
+  font-size: .97rem;
+  font-weight: 600;
+  margin: 0 0 4px;
+  color: var(--ink);
+}
+
+.pasos p { margin: 0; font-size: .96rem; color: var(--ink-soft); }
+
+/* ---------- Chips de estado ---------- */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 2px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.chip-amber  { background: var(--amber-bg);  color: var(--amber); }
+.chip-blue   { background: var(--sky-deep);  color: var(--brand); }
+.chip-indigo { background: var(--indigo-bg); color: var(--indigo); }
+.chip-purple { background: var(--purple-bg); color: var(--purple); }
+.chip-green  { background: var(--green-bg);  color: var(--green); }
+.chip-red    { background: var(--red-bg);    color: var(--red); }
+
+/* ---------- Tablas ---------- */
+
+.tabla-wrap {
+  overflow-x: auto;
+  margin: 18px 0 22px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--surface);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+
+th {
+  font-family: var(--sans);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--ink-faint);
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--rule);
+  white-space: nowrap;
+}
+
+td {
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--rule-soft);
+  vertical-align: top;
+  color: var(--ink-soft);
+}
+
+tbody tr:last-child td { border-bottom: none; }
+
+td.num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+td.destacado { color: var(--ink); }
+
+/* ---------- Avisos ---------- */
+
+.aviso {
+  display: flex;
+  gap: 13px;
+  padding: 15px 18px;
+  border-radius: 4px;
+  margin: 20px 0;
+  max-width: 68ch;
+  font-size: 15.5px;
+  line-height: 1.55;
+  background: var(--sky-deep);
+  border-left: 3px solid var(--brand);
+  color: var(--ink-soft);
+}
+
+.aviso.ojo {
+  background: var(--amber-bg);
+  border-left-color: var(--amber);
+}
+
+.aviso .marca {
+  font-family: var(--sans);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  padding-top: 3px;
+  color: var(--brand);
+}
+
+.aviso.ojo .marca { color: var(--amber); }
+.aviso p { margin: 0; max-width: none; }
+.aviso p + p { margin-top: 9px; }
+
+/* ---------- Pantallas ---------- */
+
+.pantallas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(258px, 1fr));
+  gap: 1px;
+  background: var(--rule);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 20px 0;
+}
+
+.pantalla {
+  background: var(--surface);
+  padding: 17px 19px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.pantalla h4 {
+  font-family: var(--sans);
+  font-size: .95rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--ink);
+}
+
+.pantalla .ruta {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--brand);
+}
+
+.pantalla p {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+/* ---------- Definiciones ---------- */
+
+.defs {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 18px 0 22px;
+  max-width: 68ch;
+}
+
+.def {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 20px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--rule-soft);
+  align-items: start;
+}
+
+.def:last-child { border-bottom: none; }
+
+@media (max-width: 620px) {
+  .def { grid-template-columns: 1fr; gap: 6px; }
+}
+
+.def p { margin: 0; font-size: 15.5px; color: var(--ink-soft); }
+
+/* ---------- Cierre ---------- */
+
+.cierre {
+  grid-column: 1 / -1;
+  margin-top: 24px;
+  padding-top: 26px;
+  border-top: 2px solid var(--ink);
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--ink-faint);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 28px;
+  justify-content: space-between;
+}
+
+/* ---------- Impresión / Guardar como PDF ---------- */
+
+@media print {
+  /* Se imprime siempre en claro: la versión oscura gasta tinta y se lee peor. */
+  :root {
+    --paper: #ffffff;
+    --surface: #ffffff;
+    --surface-sunk: #f2f2f0;
+    --ink: #000833;
+    --ink-soft: #33332f;
+    --ink-faint: #55564d;
+    --rule: #b8b8b4;
+    --rule-soft: #d8d8d4;
+    --brand: #001489;
+    --shadow: none;
+  }
+
+  body { font-size: 10.5pt; line-height: 1.5; background: #fff; }
+
+  .shell {
+    display: block;
+    max-width: none;
+    padding: 0;
+  }
+
+  /* El índice es navegación en pantalla: en papel no sirve de nada. */
+  .indice { display: none; }
+
+  main { padding-top: 0; }
+
+  .portada { padding: 0 0 20px; }
+  .portada h1 { font-size: 22pt; }
+  .bajada { font-size: 11pt; }
+
+  /* Cada capítulo arranca en página nueva y no se parte al medio. */
+  section {
+    break-before: page;
+    break-inside: avoid;
+    margin-bottom: 26px;
+  }
+  section:first-of-type { break-before: auto; }
+
+  h2, h3, h4 { break-after: avoid; }
+  .aviso, .def, .pantalla, .pasos li, tr { break-inside: avoid; }
+  table { break-inside: auto; }
+  thead { display: table-header-group; }
+
+  .pantallas { grid-template-columns: repeat(2, 1fr); }
+
+  a { color: var(--ink); text-decoration: none; }
+
+  /* La URL del panel es dato: en papel el enlace no se puede clickear. */
+  .acceso .url { color: var(--ink); }
+
+  .cierre { break-inside: avoid; }
+}
+
+@page {
+  margin: 18mm 16mm;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+</style>
+
+<div class="shell">
+
+  <header class="portada">
+    <p class="eyebrow">Tublood SA · Gestión de la calidad</p>
+    <h1>Instructivo del Sistema de Gestión de Observaciones</h1>
+    <p class="bajada">Cómo entra un reclamo, quién lo clasifica, en cuánto tiempo hay que resolverlo y dónde se consulta cada dato. Guía de uso del panel para el equipo de Tublood.</p>
+
+    <div class="accesos">
+      <div class="acceso">
+        <span class="rotulo">Panel interno</span>
+        <span class="url">sgo.tublood.com</span>
+        <span class="nota">Requiere usuario y contraseña</span>
+      </div>
+      <div class="acceso">
+        <span class="rotulo">Portal para clientes</span>
+        <span class="url">sgo.tublood.com/cargar-observacion</span>
+        <span class="nota">Público, sin login</span>
+      </div>
+    </div>
+  </header>
+
+  <nav class="indice" aria-label="Contenido">
+    <p>Contenido</p>
+    <ol>
+      <li><a href="#circuito">El circuito de un reclamo</a></li>
+      <li><a href="#estados">Los seis estados</a></li>
+      <li><a href="#plazos">Prioridad y plazos</a></li>
+      <li><a href="#alertas">Alertas y escalamiento</a></li>
+      <li><a href="#campana">La campana y los avisos</a></li>
+      <li><a href="#ficha">La ficha de una observación</a></li>
+      <li><a href="#lote">Rastrear un lote</a></li>
+      <li><a href="#pantallas">Las demás pantallas</a></li>
+      <li><a href="#dudas">Qué hacer si…</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section id="circuito">
+      <h2>El circuito de un reclamo</h2>
+      <p class="sub">De la carga del cliente al cierre del caso</p>
+
+      <p>Un reclamo puede entrar por dos puertas: el <strong>portal público</strong>, donde lo carga el cliente sin necesidad de usuario, o la <strong>carga manual</strong> desde el panel, cuando alguien de Tublood lo recibe por teléfono o mail y lo registra.</p>
+
+      <ol class="pasos">
+        <li>
+          <h4>El cliente carga el reclamo</h4>
+          <p>Elige el tipo —Falla de Producto o Disconformidad de Servicio— y completa sus datos. Si es una falla de producto puede cargar varios productos en el mismo reclamo, cada uno con su lote, cantidad y remito. Si ingresa su número de cliente, el sistema lo vincula solo con su ficha.</p>
+        </li>
+        <li>
+          <h4>El sistema avisa y numera</h4>
+          <p>El cliente recibe un acuse de recibo por mail. En paralelo le llega el aviso a quien atiende ese tipo de reclamo: las fallas de producto van a Calidad de Producto y las disconformidades a Calidad de Servicio. El caso queda numerado y en estado <span class="chip chip-amber">Pendiente de clasificación</span>.</p>
+        </li>
+        <li>
+          <h4>Calidad lo clasifica</h4>
+          <p>Se le asigna <strong>prioridad</strong> y <strong>tipo de caso</strong>. Recién cuando están los dos, el reclamo pasa a <span class="chip chip-blue">Clasificada</span>. Este paso es el que define la urgencia con la que se va a tratar.</p>
+        </li>
+        <li>
+          <h4>Se asigna responsable y sector</h4>
+          <p>Acá arranca el reloj: desde que hay un responsable asignado empieza a correr el plazo de gestión. También se puede sumar gente “a notificar”, que recibe aviso y puede comentar en la bitácora sin poder modificar el caso.</p>
+        </li>
+        <li>
+          <h4>Se gestiona y se cierra</h4>
+          <p>Todo lo que pasa queda registrado en la bitácora del caso. Cuando el trabajo termina, el caso se marca <span class="chip chip-green">Cerrada</span>, se corta el reloj y se avisa al gerente del responsable.</p>
+        </li>
+      </ol>
+
+      <div class="aviso">
+        <span class="marca">Ojo</span>
+        <p><strong>Cerrada y Cancelada no son lo mismo.</strong> Cerrada es trabajo terminado. Cancelada es un caso anulado o duplicado, y por eso queda afuera de las estadísticas de casos resueltos: no fue una falla real que hayamos resuelto.</p>
+      </div>
+    </section>
+
+    <section id="estados">
+      <h2>Los seis estados</h2>
+      <p class="sub">Qué significa cada uno y qué se espera que pase después</p>
+
+      <div class="defs">
+        <div class="def">
+          <span class="chip chip-amber">Pendiente de clasificación</span>
+          <p>Entró y todavía nadie le puso prioridad ni tipo de caso. Es el estado en el que aparece en la campana, bajo “Sin clasificar”, hasta que alguien lo toma.</p>
+        </div>
+        <div class="def">
+          <span class="chip chip-blue">Clasificada</span>
+          <p>Ya tiene prioridad y tipo de caso. Está lista para asignarse y trabajarse.</p>
+        </div>
+        <div class="def">
+          <span class="chip chip-indigo">En proceso</span>
+          <p>Alguien la está trabajando. Es el estado normal mientras dura la gestión.</p>
+        </div>
+        <div class="def">
+          <span class="chip chip-purple">Derivada</span>
+          <p>Pasó a otro sector para que la resuelva.</p>
+        </div>
+        <div class="def">
+          <span class="chip chip-green">Cerrada</span>
+          <p>Trabajo terminado. Corta el reloj de plazos y dispara el aviso final al gerente.</p>
+        </div>
+        <div class="def">
+          <span class="chip chip-red">Cancelada</span>
+          <p>Caso anulado o duplicado. No cuenta como resuelto en las estadísticas.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="plazos">
+      <h2>Prioridad y plazos</h2>
+      <p class="sub">Cuánto tiempo hay para resolver y de dónde sale ese número</p>
+
+      <p>Cada caso se clasifica con una de cuatro prioridades: <strong>Crítica</strong>, <strong>Alta</strong>, <strong>Media</strong> o <strong>Baja</strong>. La prioridad ordena el trabajo y dispara avisos, pero <strong>no es la que fija el plazo</strong>: el plazo lo pone el sector.</p>
+
+      <div class="tabla-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Sector</th>
+              <th scope="col">Plazo de gestión</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="destacado">Facturación</td><td class="num">2 días</td></tr>
+            <tr><td class="destacado">Comercial</td><td class="num">2 días</td></tr>
+            <tr><td class="destacado">Depósito</td><td class="num">3 días</td></tr>
+            <tr><td class="destacado">Calidad</td><td class="num">3 días</td></tr>
+            <tr><td class="destacado">Logística</td><td class="num">5 días</td></tr>
+            <tr><td class="destacado">Asuntos Regulatorios</td><td class="num">5 días</td></tr>
+            <tr><td class="destacado">Compras</td><td class="num">sin plazo</td></tr>
+            <tr><td class="destacado">Finanzas</td><td class="num">sin plazo</td></tr>
+            <tr><td class="destacado">Dirección Técnica</td><td class="num">sin plazo</td></tr>
+            <tr><td class="destacado">Producción</td><td class="num">sin plazo</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>Los plazos se cuentan en <strong>días hábiles</strong>, no corridos: un caso de Logística asignado un jueves vence el jueves siguiente, no el martes. Los sectores sin plazo cargado no generan alertas de vencimiento.</p>
+
+      <div class="aviso ojo">
+        <span class="marca">Importante</span>
+        <p><strong>El plazo sale del sector de la persona responsable, no del sector al que se derivó el caso.</strong> Si una observación derivada a Logística queda a cargo de alguien de Calidad, corren los 3 días de Calidad y no los 5 de Logística.</p>
+        <p>Además, el reloj arranca cuando se asigna el responsable —no cuando entra el reclamo— y <strong>se reinicia si se reasigna a otra persona</strong>.</p>
+      </div>
+    </section>
+
+    <section id="alertas">
+      <h2>Alertas y escalamiento</h2>
+      <p class="sub">Qué pasa cuando un caso se pasa de fecha</p>
+
+      <p>El sistema revisa los vencimientos cada hora y avisa en dos escalones:</p>
+
+      <ul>
+        <li><strong>Primer aviso.</strong> Al vencerse el plazo se notifica a la persona responsable y a su supervisor.</li>
+        <li><strong>Escalamiento.</strong> Si pasa <em>otro</em> plazo completo sin que el caso se cierre, se escala al gerente, con copia al supervisor.</li>
+      </ul>
+
+      <p>Cada escalón avisa una sola vez: no hay repetición diaria del mismo mensaje. Y al cerrar el caso se manda un aviso final al gerente de la persona responsable.</p>
+
+      <p>Aparte de los vencimientos, hay un aviso propio cuando un caso <strong>pasa a prioridad Crítica</strong>. Se notifica a quien lo tiene a cargo, salvo que esa misma persona haya hecho el cambio.</p>
+    </section>
+
+    <section id="campana">
+      <h2>La campana y los avisos</h2>
+      <p class="sub">Dónde mirar lo que requiere atención</p>
+
+      <p>La campana, arriba a la derecha del panel, junta cuatro cosas distintas:</p>
+
+      <div class="defs">
+        <div class="def">
+          <strong>Sin clasificar</strong>
+          <p>Reclamos que entraron y todavía nadie clasificó. Se limpia sola en cuanto alguien los clasifica.</p>
+        </div>
+        <div class="def">
+          <strong>Alertas</strong>
+          <p>Vencimientos y escalamientos de tus casos. Se pueden marcar como leídas.</p>
+        </div>
+        <div class="def">
+          <strong>Vencimientos de clientes</strong>
+          <p>Clientes con documentación vencida o por vencer en los próximos 30 días. Lo ve solo quien tiene esa tarea a cargo.</p>
+        </div>
+        <div class="def">
+          <strong>Reclamos nuevos</strong>
+          <p>Un aviso emergente cuando entra un reclamo del portal. <strong>Insiste hasta que el caso se clasifica</strong>: cerrarlo lo oculta hasta la próxima vez que entres, pero no lo da por atendido. No aparece mientras estés completando un formulario.</p>
+        </div>
+      </div>
+
+      <p>Cada persona ve solo lo que le corresponde: quien atiende fallas de producto no ve las disconformidades de servicio, y viceversa. Quien es de Calidad sin un rol específico ve todos los tipos.</p>
+    </section>
+
+    <section id="ficha">
+      <h2>La ficha de una observación</h2>
+      <p class="sub">Qué contiene y quién puede tocar qué</p>
+
+      <p>La ficha reúne los datos de contacto, el cliente vinculado, los productos reclamados con su artículo y proveedor, los archivos adjuntos y la bitácora completa del caso. Desde ahí se puede descargar el <strong>PDF del caso</strong>, para expediente o para mandarle al cliente.</p>
+
+      <h3>Quién puede modificarla</h3>
+      <p>No alcanza con tener permiso general sobre observaciones: para gestionar un caso puntual hay que ser la persona <strong>responsable asignada</strong> o pertenecer al <strong>sector de la observación</strong>. Eso incluye reasignar, reclasificar, cambiar el estado y subir o borrar archivos.</p>
+      <p>Quienes figuran como <strong>“a notificar”</strong> tienen un permiso más acotado a propósito: pueden <strong>comentar en la bitácora</strong> —con adjuntos— pero no reasignar ni reclasificar. Se les pide opinión, así que tienen que poder responder por el canal donde queda registro.</p>
+
+      <h3>La bitácora</h3>
+      <p>Todo cambio queda asentado: quién lo hizo, cuándo y qué cambió. <strong>Es inmutable</strong>: no se puede editar ni borrar una entrada. Además de la bitácora de cada caso, existe la sección <em>Bitácora</em> del menú, que es la vista transversal de toda la actividad del sistema, filtrable por usuario, sector, acción y fechas.</p>
+    </section>
+
+    <section id="lote">
+      <h2>Rastrear un lote</h2>
+      <p class="sub">De un reclamo al lote, y del lote a los clientes que lo recibieron</p>
+
+      <p>Cuando un cliente reclama por un producto e informa el lote, el sistema lo cruza contra el padrón de partidas del ERP y muestra, en la ficha del caso, un bloque de <strong>Trazabilidad de partida</strong> con lo que sabe el sistema de ese lote: de qué artículo es, a qué proveedor se le compró, cuándo vence y en qué ubicación está.</p>
+
+      <div class="aviso">
+        <span class="marca">Por qué</span>
+        <p>Ese bloque está separado de la tabla de productos a propósito: <strong>arriba está lo que declaró el cliente y abajo lo que dice el sistema</strong>. Si el vencimiento no coincide, aparece la marca <span class="chip chip-amber">≠ declarado</span> — y esa discrepancia suele ser el dato más importante del reclamo.</p>
+      </div>
+
+      <p>El recorrido inverso también está disponible. Desde <strong>Partidas</strong> se abre la ficha de un lote y se ve a qué clientes se despachó, con comprobante, remito, fecha y cantidad. Es lo que hace falta para responder “a quién más le mandamos esta partida” ante un retiro de producto.</p>
+
+      <p>Dos aclaraciones sobre lo que puede aparecer vacío:</p>
+      <ul>
+        <li><strong>“Sin fecha” no quiere decir que el producto no venza.</strong> Quiere decir que el ERP no tiene el vencimiento cargado para esa partida. Por eso se muestra en gris y no en verde.</li>
+        <li><strong>Un lote sin partida atribuida</strong> puede estar mal tipeado, o pertenecer a un artículo distinto al que dice el reclamo. Cuando el lote existe en más de un artículo y el reclamo no trae código, el sistema no atribuye ninguno: prefiere no responder antes que mandarte a revisar el artículo equivocado.</li>
+      </ul>
+    </section>
+
+    <section id="pantallas">
+      <h2>Las demás pantallas</h2>
+      <p class="sub">Qué se consulta en cada sección del menú</p>
+
+      <div class="pantallas">
+        <div class="pantalla">
+          <h4>Dashboard</h4>
+          <span class="ruta">/dashboard</span>
+          <p>Estado general: casos abiertos, tiempos de resolución, gráficos por sector y estado, y el ranking de proveedores con más fallas.</p>
+        </div>
+        <div class="pantalla">
+          <h4>Observaciones</h4>
+          <span class="ruta">/observaciones</span>
+          <p>El listado de casos, con filtros por estado, prioridad, sector, responsable y proveedor. Se exporta a Excel.</p>
+        </div>
+        <div class="pantalla">
+          <h4>Clientes</h4>
+          <span class="ruta">/clientes</span>
+          <p>Padrón sincronizado del ERP, con la clasificación documental de cada cliente y sus archivos. Los vencimientos alimentan la campana.</p>
+        </div>
+        <div class="pantalla">
+          <h4>Artículos</h4>
+          <span class="ruta">/articulos</span>
+          <p>Catálogo de productos con su proveedor, PM, legajo y vencimiento. Se puede filtrar por los que todavía no tienen proveedor asignado.</p>
+        </div>
+        <div class="pantalla">
+          <h4>Proveedores</h4>
+          <span class="ruta">/proveedores</span>
+          <p>Padrón de proveedores con su documentación habilitante. Se carga por Excel, no viene del ERP.</p>
+        </div>
+        <div class="pantalla">
+          <h4>Partidas</h4>
+          <span class="ruta">/partidas</span>
+          <p>Los lotes con su vencimiento, proveedor y ubicación. Se busca por lote, artículo o proveedor, y se filtra por estado de vencimiento.</p>
+        </div>
+        <div class="pantalla">
+          <h4>Ventas</h4>
+          <span class="ruta">/ventas</span>
+          <p>Detalle de lo facturado, con el lote despachado en cada renglón. Permite buscar qué comprobantes salieron con un lote determinado.</p>
+        </div>
+        <div class="pantalla">
+          <h4>Bitácora</h4>
+          <span class="ruta">/bitacora</span>
+          <p>Toda la actividad del sistema en una sola vista, filtrable por usuario, sector, acción y fechas.</p>
+        </div>
+      </div>
+
+      <p>Clientes, artículos, ventas y partidas <strong>se sincronizan solos con el ERP</strong> y son de consulta: no se dan de alta ni se borran desde el panel. Los campos propios de Tublood —PM, legajo, notas, documentación— sí se editan acá y la sincronización no los pisa.</p>
+    </section>
+
+    <section id="dudas">
+      <h2>Qué hacer si…</h2>
+      <p class="sub">Las situaciones que más aparecen</p>
+
+      <div class="defs">
+        <div class="def">
+          <strong>El producto dice “Código sin artículo”</strong>
+          <p>El código que se cargó en el reclamo no coincide con ningún artículo del catálogo. Se corrige en la observación.</p>
+        </div>
+        <div class="def">
+          <strong>Dice “Artículo sin proveedor”</strong>
+          <p>El artículo existe pero no tiene proveedor cargado. Se corrige en la ficha del artículo, y el cambio se refleja solo en todos los reclamos que lo mencionan, incluidos los ya cargados.</p>
+        </div>
+        <div class="def">
+          <strong>Un caso no genera alertas</strong>
+          <p>O no tiene responsable asignado —el reloj no arrancó—, o el sector de esa persona no tiene plazo cargado. Los plazos se ajustan en <em>Sectores</em>.</p>
+        </div>
+        <div class="def">
+          <strong>No puedo editar una observación</strong>
+          <p>Hay que ser la persona responsable o del sector del caso. Si solo figurás como “a notificar”, podés comentar en la bitácora pero no modificar el caso.</p>
+        </div>
+        <div class="def">
+          <strong>El cliente cambió de mail</strong>
+          <p>Se carga en el campo de mail nuevo de su ficha. El mail original lo pisa la sincronización con el ERP cada cinco minutos.</p>
+        </div>
+        <div class="def">
+          <strong>Un dato del ERP está mal</strong>
+          <p>Se corrige en el ERP, no acá: la sincronización lo vuelve a pisar. Lo que sí es propio del panel —documentación, PM, legajo, notas— se edita directamente.</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="cierre">
+    <span>SGO Tublood · Instructivo de uso del panel</span>
+    <span>Septiembre 2026</span>
+  </footer>
+
+</div>

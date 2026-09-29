@@ -475,6 +475,13 @@ export interface Observacion {
     historial?: ObservationHistoryEntry[]
     /** Usuarios a notificar: reciben el aviso y ven el caso, pero no lo gestionan (ver ObservacionPolicy::update). */
     notificados?: { id: number; name: string; apellido: string | null }[]
+    /**
+     * Los desvíos a los que escaló este reclamo (§5).
+     *
+     * ⚠️ `numero` puede ser `null`: una NC en borrador todavía no tiene número
+     * y eso no es un dato faltante — se asigna al aprobarla.
+     */
+    no_conformidades?: { id: number; numero: string | null; estado: string; motivo: string }[]
     created_at: string
     /** Solo tiene valor si está borrada (soft delete). El motivo de la baja está en `baja.nota`. */
     deleted_at?: string | null
@@ -574,4 +581,151 @@ export interface GrupoReposicion {
     u: number
     /** Artículos que unifica. */
     i: ArticuloReposicion[]
+}
+
+/** Entrada de la bitácora de una No Conformidad. Inmutable — ver §7 del instructivo. */
+export interface NonConformityHistoryEntry {
+    id: number
+    accion: 'comentario' | 'estado' | 'aprobacion' | 'devolucion' | 'rechazo' | 'observaciones' | 'investigacion' | 'contencion' | 'responsable' | 'plan' | 'avance' | 'verificacion' | 'cierre' | 'adjunto' | 'reapertura' | 'cancelacion' | 'sistema'
+    nota: string | null
+    /** Forma según `accion`: `{de, a}` en un cambio de estado, `{sumadas, sacadas}` en el vínculo con observaciones. */
+    cambios: Record<string, unknown> | null
+    created_at: string
+    /** Null en las entradas automáticas: no tienen usuario detrás. */
+    user: { id: number; name: string; apellido: string | null } | null
+    adjuntos: { id: number; original_name: string; size: number | null }[]
+}
+
+/**
+ * No Conformidad: un incumplimiento confirmado que se investiga, se trata y se
+ * verifica. No confundir con "Nota de Crédito", que la especificación técnica
+ * también abrevia "NC".
+ */
+export interface NoConformidad {
+    id: number
+    /** ⚠️ `null` mientras no esté aprobada: el número se asigna recién ahí (§4.4). */
+    numero: string | null
+    anio: number
+    estado: 'borrador' | 'pendiente_aprobacion' | 'abierta' | 'plan_accion' | 'en_implementacion' | 'verificacion_eficacia' | 'cerrada' | 'rechazada' | 'cancelada'
+    tipo_desvio: 'interno' | 'externo'
+    fecha_deteccion: string
+    motivo: string
+    descripcion: string
+    sector_id: number | null
+    cliente_id: number | null
+    proveedor_id: number | null
+    aprobada_at: string | null
+    cerrada_at: string | null
+    created_at: string
+    /** La NC que ésta reemplaza, si nació de una verificación ineficaz. */
+    reemplaza_a_id: number | null
+    /**
+     * Quien gestiona el caso de punta a punta. `null` = la gestiona Calidad.
+     * ⚠️ No es `creador`: cualquiera carga un desvío, y quien lo trabaja se
+     * designa al aprobarlo (o después, pasando la posta).
+     */
+    responsable_id: number | null
+    // Investigación (§4.4). Todos nullable: la etapa se completa de a poco.
+    investigacion: string | null
+    alcance: string | null
+    afectados: string | null
+    evaluacion_riesgo: string | null
+    es_grave: boolean
+    es_repetitivo: boolean
+    requiere_capa: boolean
+    /**
+     * Cuándo se va a comprobar si el plan sirvió. Se carga al armar el plan
+     * (sección 5) y es lo que dispara el recordatorio.
+     *
+     * ⚠️ No es `fecha_seguimiento`, que es cuándo se verificó (sección 6).
+     */
+    fecha_verificacion_prevista: string | null
+    causa_raiz: string | null
+    /**
+     * Las 6M: solo los factores que aportaron algo. `null` = no se analizó por
+     * factores, que se lee distinto de "se analizó y ninguno aplicó".
+     */
+    causa_raiz_factores: Record<string, string> | null
+    conclusion: string | null
+    // Verificación de eficacia (§4.7).
+    metodo_seguimiento: string | null
+    fecha_seguimiento: string | null
+    evidencia_revisada: string | null
+    /** ⚠️ No es un estado: la NC se queda en verificación hasta que se pueda medir. */
+    resultado_eficacia: 'eficaz' | 'ineficaz' | 'pendiente_evaluacion' | null
+    observaciones_verificacion: string | null
+    // Cierre (§4.8).
+    resultado_final: string | null
+    observaciones_finales: string | null
+    sector: { id: number; nombre: string } | null
+    cliente: { id: number; numero: string; razon_social: string } | null
+    proveedor: { id: number; numero: string | null; razon_social: string } | null
+    creador: { id: number; name: string; apellido: string | null } | null
+    responsable?: { id: number; name: string; apellido: string | null } | null
+    aprobada_por_usuario?: { id: number; name: string; apellido: string | null } | null
+    cerrada_por_usuario?: { id: number; name: string; apellido: string | null } | null
+    /** Solo viaja en el detalle. */
+    observaciones?: { id: number; numero: string; titulo: string; estado: string }[]
+    observaciones_count?: number
+    acciones?: NonConformityAction[]
+    /** Sección 3: las acciones inmediatas de contención. */
+    contenciones?: NonConformityContainment[]
+    reemplaza_a?: { id: number; numero: string | null } | null
+    /**
+     * El "Nuevo desvío N°" de la sección 7. ⚠️ Puede no tener número todavía:
+     * nace en borrador y lo recibe al aprobarse, como cualquier otra.
+     */
+    reemplazada_por?: { id: number; numero: string | null; estado: string } | null
+    historial?: NonConformityHistoryEntry[]
+    attachments?: { id: number; original_name: string; size: number | null }[]
+}
+
+/**
+ * Una acción inmediata de contención — sección 3 del Informe de Desvío.
+ * No confundir con `NonConformityAction`, que es el plan de acción (sección 5).
+ */
+export interface NonConformityContainment {
+    id: number
+    fecha: string | null
+    accion: string
+    responsable_id: number | null
+    responsable?: { id: number; name: string; apellido: string | null } | null
+}
+
+/**
+ * Una acción del plan de una NC (§4.5). Es lo que el instructivo llama CAPA.
+ * ⚠️ Sin `tipo` desde el 24/9/2026: el formulario no lo tiene y no lo usan.
+ */
+export interface NonConformityAction {
+    id: number
+    descripcion: string
+    responsable_id: number | null
+    fecha_prevista: string
+    evidencia_requerida: string | null
+    observaciones: string | null
+    estado: 'pendiente' | 'en_curso' | 'completada' | 'vencida' | 'cancelada'
+    avance: string | null
+    fecha_real: string | null
+    motivo_cancelacion: string | null
+    responsable?: { id: number; name: string; apellido: string | null } | null
+}
+
+/** Qué puede hacer el usuario actual sobre una NC. Lo decide NoConformidadPolicy, no la pantalla. */
+export interface PermisosNoConformidad {
+    editar: boolean
+    /** Designar o cambiar el responsable del caso — incluye "pasar la posta". */
+    asignarResponsable: boolean
+    enviarAAprobacion: boolean
+    aprobar: boolean
+    gestionar: boolean
+    /**
+     * Cargar la acción inmediata (sección 3).
+     *
+     * ⚠️ **No es `gestionar`**: la sección 3 se escribe desde antes de la
+     * aprobación, cuando quien cargó el desvío todavía no es responsable del
+     * caso ni tiene `nc.gestionar`.
+     */
+    contencion: boolean
+    reabrir: boolean
+    cancelar: boolean
 }

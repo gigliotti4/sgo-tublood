@@ -41,3 +41,10 @@ $comprasConfigurado = fn () => filled(config('database.connections.erp_compras.h
 Schedule::command('compras:sync')->dailyAt('05:00')->when($comprasConfigurado);
 
 Schedule::command('observaciones:alertas')->hourly();
+
+// Los dos recordatorios de plazos de una No Conformidad: marca vencidas las
+// acciones pasadas de fecha y avisa cuando llega la fecha de verificar la
+// eficacia. Diario y no horario como el de observaciones: los dos plazos se
+// miden en días, así que correrlo cada hora repetiría el mismo trabajo 24 veces
+// para encontrar lo mismo.
+Schedule::command('nc:recordatorios')->dailyAt('07:00');

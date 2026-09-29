@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\GeneraNumeroCorrelativo;
 use App\Models\Concerns\GuardaAdjuntos;
 use App\Observers\ObservacionObserver;
-use Closure;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -13,19 +13,25 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\QueryException;
-use Illuminate\Support\Facades\DB;
 
 #[ObservedBy(ObservacionObserver::class)]
 class Observacion extends Model
 {
-    use GuardaAdjuntos, SoftDeletes;
+    use GeneraNumeroCorrelativo, GuardaAdjuntos, SoftDeletes;
 
     public const ESTADOS = [
         'pendiente_clasificacion' => 'Pendiente de clasificación',
         'clasificada' => 'Clasificada',
         'en_proceso' => 'En proceso',
         'derivada' => 'Derivada',
+        // ⚠️ NO confundir con `derivada`, que es la derivación entre SECTORES
+        // (todavía pendiente). Ésta es el escalamiento a una No Conformidad:
+        // la observación se investiga dentro del desvío y desde acá solo se
+        // navega. Se cierra a mano, por separado — decisión del cliente del
+        // 28/9/2026 — y por eso el desvío ya no exige que esté cerrada para
+        // poder cerrarse (ver `NoConformidad::condicionesDeCierre()`): si lo
+        // exigiera, los dos se esperarían para siempre.
+        'derivada_nc' => 'Derivada a No Conformidad',
         'cerrada' => 'Cerrada',
         'cancelada' => 'Cancelada',
     ];
@@ -40,7 +46,7 @@ class Observacion extends Model
      * "abierta" que comparten el Dashboard y el filtro Abierta/Cerrada del
      * listado (cerrada = cualquier otro estado: cerrada o cancelada).
      */
-    public const ESTADOS_ABIERTOS = ['pendiente_clasificacion', 'clasificada', 'en_proceso', 'derivada'];
+    public const ESTADOS_ABIERTOS = ['pendiente_clasificacion', 'clasificada', 'en_proceso', 'derivada', 'derivada_nc'];
 
     /**
      * Bandera en memoria (no es columna): la usa el alta del portal para que el
@@ -200,6 +206,20 @@ class Observacion extends Model
             ->withTimestamps();
     }
 
+    /**
+     * Los desvíos a los que se vinculó esta observación (§5).
+     *
+     * Es el inverso de `NoConformidad::observaciones()`, sobre el mismo pivot.
+     * Son varios a propósito: una observación puede escalar a un desvío y ese
+     * desvío resultar ineficaz, abriendo el que lo reemplaza — los dos siguen
+     * hablando de esta observación.
+     */
+    public function noConformidades(): BelongsToMany
+    {
+        return $this->belongsToMany(NoConformidad::class, 'non_conformity_observation', 'observation_id', 'non_conformity_id')
+            ->withTimestamps();
+    }
+
     public function cliente(): BelongsTo
     {
         return $this->belongsTo(Cliente::class);
@@ -226,70 +246,5 @@ class Observacion extends Model
     protected function carpetaDeAdjuntos(): string
     {
         return 'observaciones/'.$this->segmentoSeguro($this->numero, 'sin-numero-'.$this->id);
-    }
-
-    /**
-     * `withTrashed()` es obligatorio acá: sin él, borrar una observación libera
-     * su lugar en el correlativo y la próxima alta repite un `numero` que es
-     * `unique()` en el schema — un 500 en el portal público.
-     *
-     * Sale del **máximo** y no de `count()`: contar da el número correcto solo
-     * mientras la serie no tenga huecos, y un borrado definitivo (fuera del
-     * soft delete, que `withTrashed()` sí cubre) deja uno. El formato está
-     * zero-padded, así que el máximo alfabético es el máximo numérico.
-     */
-    public static function generarNumero(int $anio): string
-    {
-        $ultimo = static::withTrashed()->where('anio', $anio)->max('numero');
-
-        $correlativo = $ultimo ? ((int) substr($ultimo, 0, 4)) + 1 : 1;
-
-        return sprintf('%04d-%02d', $correlativo, $anio % 100);
-    }
-
-    /**
-     * Da de alta una observación dentro de una transacción, reintentando si dos
-     * altas simultáneas se pelean el mismo `numero`.
-     *
-     * Entre que `generarNumero()` lee el máximo y el INSERT lo escribe hay una
-     * ventana en la que otra request puede quedarse con ese número, y `numero`
-     * es único: la segunda se cae con violación de integridad. Es raro pero no
-     * imposible, y en el portal público el costo es perder un reclamo.
-     *
-     * El reintento va acá y no en `DB::transaction($cb, $intentos)` porque ese
-     * segundo argumento solo reintenta ante errores de concurrencia (deadlocks),
-     * y un choque de clave única no lo es: lo relanzaría en el primer intento.
-     *
-     * @template T
-     *
-     * @param  Closure(string): T  $alta  Recibe el número asignado.
-     * @return T
-     */
-    public static function altaConNumero(int $anio, Closure $alta, int $intentos = 3)
-    {
-        for ($intento = 1; ; $intento++) {
-            try {
-                return DB::transaction(fn () => $alta(static::generarNumero($anio)));
-            } catch (QueryException $e) {
-                if ($intento >= $intentos || ! static::esChoqueDeNumero($e)) {
-                    throw $e;
-                }
-            }
-        }
-    }
-
-    /**
-     * Si la excepción es el choque del índice único de `numero`.
-     *
-     * 23000 es "integrity constraint violation" en general (también una FK
-     * inválida), así que además se mira que el mensaje nombre la columna. Los
-     * dos motores del proyecto la nombran: MySQL en el nombre del índice
-     * (`observations_numero_unique`) y SQLite en el de la columna
-     * (`observations.numero`).
-     */
-    private static function esChoqueDeNumero(QueryException $e): bool
-    {
-        return (string) $e->getCode() === '23000'
-            && stripos($e->getMessage(), 'numero') !== false;
     }
 }

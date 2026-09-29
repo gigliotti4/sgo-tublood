@@ -29,6 +29,7 @@ return [
         'proveedores' => 'Proveedores',
         'ventas' => 'Ventas',
         'compras' => 'Compras',
+        'no_conformidades' => 'No Conformidades',
     ],
 
     'etiquetas' => [
@@ -77,6 +78,11 @@ return [
 
         'compras.view' => ['grupo' => 'compras', 'label' => 'Ver el tablero de reposición'],
         'compras.sync' => ['grupo' => 'compras', 'label' => 'Sincronizar con RP Sistemas'],
+
+        'nc.view' => ['grupo' => 'no_conformidades', 'label' => 'Ver No Conformidades'],
+        'nc.create' => ['grupo' => 'no_conformidades', 'label' => 'Crear No Conformidades'],
+        'nc.gestionar' => ['grupo' => 'no_conformidades', 'label' => 'Gestionar (investigación, plan de acción, cierre)'],
+        'nc.aprobar' => ['grupo' => 'no_conformidades', 'label' => 'Aprobar, devolver o rechazar la apertura'],
     ],
 
 ];

@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { Head, Link } from '@inertiajs/vue3'
+import { computed, ref } from 'vue'
+import { Head, Link, useForm } from '@inertiajs/vue3'
+import { route } from 'ziggy-js'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import Button from '@/Components/Button.vue'
+import Modal from '@/Components/Modal.vue'
 import AdjuntosObservacion from '@/Components/AdjuntosObservacion.vue'
 import BitacoraObservacion from '@/Components/BitacoraObservacion.vue'
 import Badge from '@/Components/Badge.vue'
@@ -18,10 +21,31 @@ const props = defineProps<{
     prioridades: Record<string, string>
     /** Viene de ObservacionPolicy: solo el responsable asignado (o super-admin). */
     puedeEditar: boolean
+    /** Escalar a un desvío pide `nc.create` **y** poder gestionar este caso. */
+    puedeDerivarANc: boolean
+    estadosNc: Record<string, string>
 }>()
 
 const formatFecha = (d: string | null) =>
     d ? new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'
+
+/**
+ * Escalar la observación a una No Conformidad.
+ *
+ * Se confirma en un modal y no directo: crea un caso nuevo y cambia el estado
+ * de éste, que son dos cosas que no pueden pasar de un clic de más.
+ */
+const mostrarDerivar = ref(false)
+const derivarForm = useForm({})
+
+const derivarANc = () => {
+    derivarForm.post(route('observaciones.derivar-a-nc', props.observacion.id), {
+        onSuccess: () => { mostrarDerivar.value = false },
+    })
+}
+
+/** Ya derivada: no se ofrece de nuevo si el vínculo ya existe. */
+const yaDerivada = computed(() => (props.observacion.no_conformidades ?? []).length > 0)
 
 // El cliente ingresó un N° que no matcheó ningún cliente cargado (dato para revisar).
 const clienteNoEncontrado =
@@ -71,6 +95,21 @@ const humanizar = (clave: string) =>
                     <Icon name="document" class="h-4 w-4" />
                     Descargar PDF
                 </a>
+                <!--
+                    Escalar a un desvío. No se ofrece si ya está derivada: el
+                    vínculo ya existe y el botón llevaría a abrir un segundo
+                    caso por lo mismo. Para vincular otra observación al mismo
+                    desvío se hace desde la ficha del desvío.
+                -->
+                <button
+                    v-if="puedeDerivarANc && !yaDerivada && !observacion.deleted_at"
+                    type="button"
+                    class="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-white/[0.05]"
+                    @click="mostrarDerivar = true"
+                >
+                    <Icon name="document" class="h-4 w-4" />
+                    Derivar a No Conformidad
+                </button>
                 <Link
                     v-if="puedeEditar"
                     :href="route('observaciones.index')"
@@ -80,6 +119,28 @@ const humanizar = (clave: string) =>
                     Editar en el listado
                 </Link>
             </div>
+        </div>
+
+        <!-- Los desvíos que salieron de este reclamo. -->
+        <div
+            v-if="observacion.no_conformidades?.length"
+            class="mb-6 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03]"
+        >
+            <p class="text-theme-xs font-medium uppercase tracking-wide text-gray-400">
+                No Conformidades vinculadas
+            </p>
+            <ul class="mt-2 space-y-2">
+                <li v-for="nc in observacion.no_conformidades" :key="nc.id" class="flex flex-wrap items-center gap-2">
+                    <Link
+                        :href="route('no-conformidades.show', nc.id)"
+                        class="text-theme-sm text-brand-500 hover:underline dark:text-brand-300"
+                    >
+                        <!-- Sin número = todavía en borrador. No es un dato faltante. -->
+                        <span class="font-mono">{{ nc.numero ?? 'Sin número' }}</span> · {{ nc.motivo }}
+                    </Link>
+                    <Badge variant="slate">{{ estadosNc[nc.estado] ?? nc.estado }}</Badge>
+                </li>
+            </ul>
         </div>
 
         <!-- Borrada: solo se llega acá desde la pantalla de Bajas -->
@@ -331,5 +392,27 @@ const humanizar = (clave: string) =>
                 </div>
             </div>
         </div>
+
+        <!--
+            Escalar a un desvío. Se confirma porque crea un caso nuevo y mueve
+            el estado de éste: dos cosas que no pueden salir de un clic de más.
+        -->
+        <Modal :show="mostrarDerivar" title="Derivar a No Conformidad" @close="mostrarDerivar = false">
+            <div class="space-y-4">
+                <p class="text-theme-sm text-gray-500 dark:text-gray-400">
+                    Se abre un desvío en <strong>borrador</strong> con el encuadre de esta observación ya
+                    cargado, y las dos quedan vinculadas. Como cualquier desvío, hay que mandarlo a
+                    aprobación para que reciba número.
+                </p>
+                <p class="text-theme-sm text-gray-500 dark:text-gray-400">
+                    Esta observación pasa a <strong>Derivada a No Conformidad</strong>. No se cierra sola:
+                    se sigue investigando dentro del desvío y se cierra por separado cuando corresponda.
+                </p>
+                <div class="flex justify-end gap-3">
+                    <Button variant="outline" type="button" @click="mostrarDerivar = false">Cancelar</Button>
+                    <Button :disabled="derivarForm.processing" @click="derivarANc">Derivar</Button>
+                </div>
+            </div>
+        </Modal>
     </AppLayout>
 </template>

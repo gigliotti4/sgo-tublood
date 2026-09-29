@@ -26,6 +26,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'ventas.view', 'ventas.sync', 'ventas.montos',
             'partidas.view', 'partidas.sync',
             'compras.view', 'compras.sync',
+            'nc.view', 'nc.create', 'nc.gestionar', 'nc.aprobar',
             'configuracion.view', 'configuracion.edit',
         ];
 
@@ -54,6 +55,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'ventas.view', 'ventas.sync',
             'partidas.view', 'partidas.sync',
             'compras.view', 'compras.sync',
+            'nc.view', 'nc.create', 'nc.gestionar',
             'configuracion.view', 'configuracion.edit',
         ]);
 
@@ -61,7 +63,7 @@ class RolesAndPermissionsSeeder extends Seeder
         $viewer->syncPermissions([
             'users.view', 'roles.view', 'clientes.view', 'observaciones.view',
             'articulos.view', 'proveedores.view', 'ventas.view', 'partidas.view',
-            'compras.view',
+            'compras.view', 'nc.view',
         ]);
 
         $usuarioInterno = Role::firstOrCreate(['name' => 'usuario_interno']);
@@ -73,29 +75,56 @@ class RolesAndPermissionsSeeder extends Seeder
             'ventas.view', 'ventas.sync',
             'partidas.view', 'partidas.sync',
             'compras.view', 'compras.sync',
+            // §6: "Todos los usuarios" pueden crear una NC y guardarla como
+            // borrador. Gestionarla ya es de Calidad.
+            'nc.view', 'nc.create',
         ]);
 
         $soloLectura = Role::firstOrCreate(['name' => 'solo_lectura']);
-        $soloLectura->syncPermissions(['clientes.view', 'observaciones.view']);
+        $soloLectura->syncPermissions(['clientes.view', 'observaciones.view', 'nc.view']);
 
+        // "Gestión de Calidad" del instructivo (§6): revisa la información,
+        // asigna responsables, controla la investigación, revisa el análisis de
+        // causa y el plan de acción, verifica la eficacia y cierra la NC.
         $garantiaCalidad = Role::firstOrCreate(['name' => 'garantia_calidad']);
-        $garantiaCalidad->syncPermissions(['observaciones.view', 'observaciones.edit']);
+        $garantiaCalidad->syncPermissions([
+            'observaciones.view', 'observaciones.edit',
+            'nc.view', 'nc.create', 'nc.gestionar',
+        ]);
 
         // Reparto de los reclamos del portal dentro de Garantía de Calidad: cada
         // rol atiende un tipo, según `incidencias.roles_por_tipo`. Definen a
         // quién le llega el mail del alta y a quién le aparece el reclamo en la
         // campana y en el modal de reclamos nuevos.
         $calidadProducto = Role::firstOrCreate(['name' => 'calidad_producto']);
-        $calidadProducto->syncPermissions(['observaciones.view', 'observaciones.edit']);
+        $calidadProducto->syncPermissions([
+            'observaciones.view', 'observaciones.edit',
+            'nc.view', 'nc.create',
+        ]);
 
         // Calidad de Servicio además es quien sigue los vencimientos de clientes.
         $calidadServicio = Role::firstOrCreate(['name' => 'calidad_servicio']);
         $calidadServicio->syncPermissions([
             'observaciones.view', 'observaciones.edit',
             'clientes.view', 'clientes.vencimientos',
+            'nc.view', 'nc.create',
         ]);
 
         Role::firstOrCreate(['name' => 'cliente_externo']);
+
+        // Aprobadores de No Conformidades (§4.3 del instructivo: "la NC deberá
+        // ser revisada y aprobada por Emanuel Durán o Facundo Durán").
+        //
+        // Va como permiso directo al usuario y no como rol: el instructivo
+        // nombra personas, no una función. El día que cambie quién aprueba, es
+        // esta lista y nada más — no hay ningún `if` con ids en el código.
+        //
+        // ⚠️ Si alguno todavía no existe en `users`, se saltea en silencio: el
+        // seeder corre en cada deploy y no puede caerse por eso. Al crear el
+        // usuario, basta con volver a correrlo.
+        foreach (['eduran@tublood.com', 'fduran@tublood.com'] as $email) {
+            User::where('email', $email)->first()?->givePermissionTo('nc.aprobar');
+        }
 
         $user = User::firstOrCreate(
             ['email' => 'admin@admin.com'],

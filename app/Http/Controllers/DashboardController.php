@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\NoConformidad;
 use App\Models\Observacion;
 use App\Models\ObservationProduct;
 use App\Support\TaxonomiaIncidencias;
@@ -49,9 +50,11 @@ class DashboardController extends Controller
                 // están en el gráfico por estado, más abajo).
                 'cerradas' => Observacion::where('estado', 'cerrada')->count(),
                 'asignadasAMi' => Observacion::where('responsable_id', auth()->id())->count(),
-                // TODO: requiere tabla non_conformities (pendiente).
-                'nc' => 0,
-                'ncAbiertas' => 0,
+                // "Abiertas" incluye los borradores: todavía no son una NC
+                // formal, pero son trabajo pendiente de alguien y esconderlos
+                // los sacaría del radar. Ver NoConformidad::ESTADOS_ABIERTOS.
+                'nc' => NoConformidad::count(),
+                'ncAbiertas' => NoConformidad::abiertas()->count(),
             ],
             'kpis' => [
                 'resolucion' => $this->tiempoPromedioResolucion(),

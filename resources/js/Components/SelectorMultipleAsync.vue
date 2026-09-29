@@ -20,13 +20,22 @@ const props = defineProps<{
     mapear: (item: unknown) => OpcionAsync
     label?: string
     placeholder?: string
+    /**
+     * Lo ya elegido, con su etiqueta. Sin esto, un valor que viene guardado se
+     * muestra como "1 seleccionado" hasta que el usuario lo busque de nuevo:
+     * el componente solo conoce las etiquetas que le pasaron por un resultado
+     * de búsqueda. Mismo criterio que el `inicial` de `SelectorProveedor.vue`.
+     */
+    inicial?: OpcionAsync[]
 }>()
 
 const seleccionados = defineModel<string[]>({ required: true })
 
 // Guarda el label de cada id elegido, aunque salga de los resultados de
 // búsqueda vigentes: hace falta para mostrar el resumen y los chips.
-const etiquetas = ref(new Map<string, string>())
+const etiquetas = ref(new Map<string, string>(
+    (props.inicial ?? []).map(o => [o.id, o.label])
+))
 
 const abierto = ref(false)
 const busqueda = ref('')
