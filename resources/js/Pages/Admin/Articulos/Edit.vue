@@ -9,11 +9,16 @@ import SelectorProveedor from '@/Components/SelectorProveedor.vue'
 import { useVolverAlListado } from '@/composables/useVolverAlListado'
 import type { Articulo } from '@/types'
 
-const props = defineProps<{ articulo: Articulo }>()
+const props = defineProps<{
+    articulo: Articulo
+    /** Catálogo de config/articulos.php, para poner nombre a `tipo_anmat`. */
+    tiposAnmat: Record<string, string>
+}>()
 
+// `pm` no está en el formulario: lo escribe la sincronización con el ERP desde
+// el 30/9/2026, así que se muestra arriba con el resto de los datos de RP.
 const form = useForm({
     fecha_vencimiento: props.articulo.fecha_vencimiento?.slice(0, 10) ?? '',
-    pm: props.articulo.pm ?? '',
     legajo: props.articulo.legajo ?? '',
     observaciones: props.articulo.observaciones ?? '',
     link_registro: props.articulo.link_registro ?? '',
@@ -69,6 +74,12 @@ const submit = () => form.put(aGuardar('articulos.update', { articulo: props.art
                          proveedor de verdad es el del bloque de abajo. -->
                     <dt class="text-gray-400">Cód. proveedor (ERP)</dt>
                     <dd class="text-gray-800 dark:text-white/90">{{ articulo.codigo_proveedor ?? '—' }}</dd>
+                    <dt class="text-gray-400">PM</dt>
+                    <dd class="text-gray-800 dark:text-white/90">{{ articulo.pm ?? '—' }}</dd>
+                    <dt class="text-gray-400">Tipo ANMAT</dt>
+                    <dd class="text-gray-800 dark:text-white/90">
+                        {{ articulo.tipo_anmat ? (tiposAnmat[articulo.tipo_anmat] ?? articulo.tipo_anmat) : '—' }}
+                    </dd>
                 </dl>
             </div>
 
@@ -87,12 +98,6 @@ const submit = () => form.put(aGuardar('articulos.update', { articulo: props.art
                         v-model="form.fecha_vencimiento"
                         label="Fecha de vencimiento"
                         :error="form.errors.fecha_vencimiento"
-                    />
-                    <Input
-                        v-model="form.pm"
-                        label="PM"
-                        hint="Registro de producto médico."
-                        :error="form.errors.pm"
                     />
                     <Input
                         v-model="form.legajo"

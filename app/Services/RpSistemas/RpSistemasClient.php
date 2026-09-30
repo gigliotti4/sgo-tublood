@@ -112,6 +112,15 @@ class RpSistemasClient
      * en una sola respuesta** (`tiene_pagina_siguiente: "0"`). El bucle de
      * paginación de arriba igual funciona si algún día empieza a paginar.
      *
+     * ⚠️ **Sin uso desde el 30/9/2026**: el catálogo pasó a leerse por SQL
+     * (`ArticuloSyncService`). Se conserva a propósito y no se borra, porque
+     * mientras exista, volver atrás es cambiar un servicio y nada más. Si
+     * pasado un tiempo la fuente SQL se consolida, esto se puede eliminar junto
+     * con `config('services.rpsistemas.page_size')`.
+     *
+     * ⚠️ Lo que NO se puede borrar es `config('services.rpsistemas.lista_precios')`:
+     * ahora lo usa el filtro SQL para quedarse con el catálogo vendible.
+     *
      * @return array{datos: array, paginado: array}
      *
      * @throws RpSistemasException

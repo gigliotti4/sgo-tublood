@@ -5,195 +5,378 @@ namespace Tests\Feature;
 use App\Models\Articulo;
 use App\Models\Proveedor;
 use App\Services\RpSistemas\ArticuloSyncService;
-use App\Services\RpSistemas\RpSistemasClient;
 use App\Services\VinculacionProveedores;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
+/**
+ * La sincronización del catálogo de artículos.
+ *
+ * ⚠️ **Hasta el 30/9/2026 esto entraba por HTTP** y los tests fakeaban
+ * `articulos.php`. Desde que lee SQL Server no se puede levantar una base en los
+ * tests, así que —igual que en `ProveedorSyncTest`— lo que se cubre es el
+ * **mapeo** de la tabla a columnas locales, el **contrato del upsert** y la
+ * lógica de desactivación, cada uno llamando a su método público.
+ *
+ * Los tres tests de mojibake que había acá se eliminaron a propósito: el doble
+ * encoding era un defecto del endpoint HTTP. Medido el 30/9/2026, las
+ * descripciones que devuelve el SQL coinciden con las que la API entregaba ya
+ * reparadas en 746 de 748 artículos.
+ */
 class ArticuloSyncTest extends TestCase
 {
     use RefreshDatabase;
 
-    /** Respuesta con el envoltorio real de articulos.php. */
-    private function respuesta(array $articulos, string $tieneSiguiente = '0'): array
+    /** Una fila como la devuelve la consulta, con los nombres de columna reales. */
+    private function fila(array $attrs = []): array
     {
-        return [[
-            'datos_recibidos' => [],
-            'info' => [
-                'servicio' => 'articulos.php',
-                'estado' => 200,
-                'datos' => $articulos,
-                'datos_paginado' => [[
-                    'total_registros' => (string) count($articulos),
-                    'pagina_actual' => '1',
-                    'tamano_pagina' => (string) count($articulos),
-                    'tiene_pagina_siguiente' => $tieneSiguiente,
-                    'tiene_pagina_anterior' => '0',
-                ]],
-            ],
-        ]];
+        return array_merge([
+            'COD_ARTICULO' => 'RE-1631',
+            'DESCRIP_ARTI' => 'AGUJA 40/12 TERUMO',
+            'DESC_ADICIONAL' => 'Caja x 100',
+            'COD_BARRAS' => '7791234567890',
+            'UM' => 'UN',
+            'AGRU_1' => 'DIS',
+            'AGRU_2' => '1',
+            'AGRU_3' => '2',
+            'DESCRIP_AGRU_1' => 'DISTRIBUCIÓN',
+            'DESCRIP_AGRU_2' => 'Libre venta',
+            'DESCRIP_AGRU_3' => '1',
+            'COD_PROVEEDOR' => 'PRO1',
+            'NRO_REGISTRO' => 'PM 2243-98',
+            'ID_ARTI_TIPO' => 'PM',
+            'FECHA_MODI' => '2026-09-30 14:48:00',
+            'CANT_STOCK' => 1250.5,
+        ], $attrs);
     }
 
-    private function articulo(array $attrs = []): array
+    private function service(): ArticuloSyncService
     {
-        return [
-            'codigo_articulo' => 'RE-1631',
-            'descripcion_articulo' => 'AGUJA 40/12 TERUMO',
-            'descripcion_adicional' => '',
-            'stock' => 12,
-            'cantidad_reservada' => 2,
-            'stock_disponible' => 10,
-            'precio_venta' => 19.89,
-            'UM' => 'UNI',
-            'codigo_agrupacion_1' => 'DIS',
-            'descripcion_agrupacion_1' => 'DISTRIBUCION',
-            'deposito' => '',
-            'fecha_modi' => '2026-04-22 11:55:54.807',
-            'codigo_proveedor' => 'PRO1',
-            'codigo_barras' => '011011528-1',
-            ...$attrs,
-        ];
+        return new ArticuloSyncService;
     }
 
-    /** @return array{procesados: int, activos: int, desactivados: int, proveedores_vinculados: int} */
-    private function sincronizar(): array
+    private function mapear(array $attrs = []): array
     {
-        return (new ArticuloSyncService(new RpSistemasClient))->sync();
+        return $this->service()->mapear(
+            $this->fila($attrs),
+            Carbon::parse('2026-09-30 15:00:00'),
+            '2026-09-30 15:00:00.123456'
+        );
     }
 
-    public function test_guarda_los_articulos_del_erp(): void
+    // ── Mapeo de la tabla a columnas locales ────────────────────────────────
+
+    public function test_mapea_las_columnas_de_la_tabla(): void
     {
-        Http::fake(['*articulos.php' => Http::response($this->respuesta([$this->articulo()]))]);
+        $fila = $this->mapear();
 
-        $this->assertSame(1, $this->sincronizar()['procesados']);
-
-        $a = Articulo::first();
-        $this->assertSame('RE-1631', $a->codigo);
-        $this->assertSame('AGUJA 40/12 TERUMO', $a->descripcion);
-        $this->assertSame('UNI', $a->unidad_medida);
-        $this->assertSame('011011528-1', $a->codigo_barras);
-        $this->assertSame('DIS', $a->codigo_agrupacion_1);
-        $this->assertSame('10.0000', $a->stock_disponible);
-        $this->assertSame('2026-04-22 11:55:54', $a->modificado_en->toDateTimeString());
+        $this->assertSame('RE-1631', $fila['codigo']);
+        $this->assertSame('AGUJA 40/12 TERUMO', $fila['descripcion']);
+        $this->assertSame('Caja x 100', $fila['descripcion_adicional']);
+        $this->assertSame('7791234567890', $fila['codigo_barras']);
+        $this->assertSame('UN', $fila['unidad_medida']);
+        $this->assertSame('DIS', $fila['codigo_agrupacion_1']);
+        $this->assertSame('DISTRIBUCIÓN', $fila['descripcion_agrupacion_1']);
+        $this->assertSame('PRO1', $fila['codigo_proveedor']);
+        $this->assertSame(1250.5, $fila['stock']);
+        $this->assertSame('2026-09-30 14:48:00', $fila['modificado_en']);
+        $this->assertTrue($fila['activo']);
     }
 
     /**
-     * articulos.php devuelve el texto con doble codificación: toma bytes UTF-8
-     * y los re-codifica como latin-1, así que "1½" llega como "1Â½". Afecta al
-     * ~97% del catálogo real.
+     * Las descripciones de agrupación no están en `ARTICULOS`: salen de joinear
+     * la tabla `AGRUPACIONES` por `CODI_AGRU` + `NUM_AGRU`. Verificado el
+     * 30/9/2026 contra los 734 artículos que tenían el dato por HTTP: coincide
+     * en los 734, sin una sola diferencia.
      */
-    public function test_corrige_el_doble_encoding_del_texto(): void
+    public function test_mapea_las_tres_agrupaciones_con_su_descripcion(): void
     {
-        Http::fake(['*articulos.php' => Http::response($this->respuesta([
-            $this->articulo([
-                // "1½": el ½ (U+00BD) sobrevive tal cual, precedido de Â.
-                'descripcion_articulo' => "AGUJA 40/12 (18G x 1\u{00C2}\u{00BD}) TERUMO",
-                // "Ó" (C3 93) se parte en Ã (U+00C3) + U+0093, que es un
-                // carácter de control: la forma real en la que llega el dato.
-                'descripcion_agrupacion_1' => "DISTRIBUCI\u{00C3}\u{0093}N",
-            ]),
-        ]))]);
+        $fila = $this->mapear();
 
-        $this->sincronizar();
-
-        $a = Articulo::first();
-        $this->assertSame('AGUJA 40/12 (18G x 1½) TERUMO', $a->descripcion);
-        $this->assertSame('DISTRIBUCIÓN', $a->descripcion_agrupacion_1);
+        $this->assertSame('1', $fila['codigo_agrupacion_2']);
+        $this->assertSame('Libre venta', $fila['descripcion_agrupacion_2']);
+        $this->assertSame('2', $fila['codigo_agrupacion_3']);
+        $this->assertSame('1', $fila['descripcion_agrupacion_3']);
     }
 
     /**
-     * La otra variante: el byte 0x80-0x9F llegó como su carácter de CP1252
-     * (comilla tipográfica) en vez de como control. Hay que cubrir las dos.
+     * Los dos datos que motivaron el cambio de fuente: el endpoint HTTP no los
+     * exponía y se cargaban a mano desde el Excel de Calidad.
      */
-    public function test_corrige_tambien_la_variante_cp1252(): void
+    public function test_trae_el_registro_de_anmat_y_el_tipo_de_producto(): void
     {
-        Http::fake(['*articulos.php' => Http::response($this->respuesta([
-            $this->articulo(['descripcion_articulo' => "IMPORTACI\u{00C3}\u{201C}N"]),
-        ]))]);
+        $fila = $this->mapear();
 
-        $this->sincronizar();
-
-        $this->assertSame('IMPORTACIÓN', Articulo::first()->descripcion);
+        $this->assertSame('PM 2243-98', $fila['pm']);
+        $this->assertSame('PM', $fila['tipo_anmat']);
     }
 
-    /** Un texto que ya viene bien no se tiene que romper al "corregirlo". */
-    public function test_no_toca_el_texto_que_ya_esta_bien(): void
+    /** El tipo se guarda crudo: la etiqueta vive en config/articulos.php. */
+    public function test_el_tipo_se_guarda_sin_traducir(): void
     {
-        Http::fake(['*articulos.php' => Http::response($this->respuesta([
-            $this->articulo(['descripcion_articulo' => 'ALCOHOL AL 70° X 1000CC']),
-        ]))]);
+        $this->assertSame('PMV', $this->mapear(['ID_ARTI_TIPO' => 'PMV'])['tipo_anmat']);
 
-        $this->sincronizar();
-
-        $this->assertSame('ALCOHOL AL 70° X 1000CC', Articulo::first()->descripcion);
+        // Un código que RP agregue y todavía no esté en config entra igual.
+        $this->assertSame('XX', $this->mapear(['ID_ARTI_TIPO' => 'XX'])['tipo_anmat']);
     }
 
-    public function test_es_idempotente_y_actualiza_por_codigo(): void
+    /** El ERP rellena los `char` con espacios y usa cadenas vacías en vez de null. */
+    public function test_convierte_vacios_y_espacios_en_null(): void
     {
-        // Secuencia y no dos Http::fake(): con el mismo patrón, Laravel se
-        // queda con el primer stub registrado y la segunda corrida vería lo viejo.
-        Http::fake(['*articulos.php' => Http::sequence()
-            ->push($this->respuesta([$this->articulo(['descripcion_articulo' => 'Descripción vieja'])]))
-            ->push($this->respuesta([$this->articulo(['descripcion_articulo' => 'Descripción nueva', 'stock_disponible' => 3])])),
+        $fila = $this->mapear([
+            'DESC_ADICIONAL' => '',
+            'COD_BARRAS' => '   ',
+            'UM' => null,
+            'NRO_REGISTRO' => '  ',
+            'ID_ARTI_TIPO' => '',
         ]);
 
-        $this->sincronizar();
-        $this->sincronizar();
-
-        $this->assertSame(1, Articulo::count());
-        $this->assertSame('Descripción nueva', Articulo::first()->descripcion);
-        $this->assertSame('3.0000', Articulo::first()->stock_disponible);
+        $this->assertNull($fila['descripcion_adicional']);
+        $this->assertNull($fila['codigo_barras']);
+        $this->assertNull($fila['unidad_medida']);
+        $this->assertNull($fila['pm']);
+        $this->assertNull($fila['tipo_anmat']);
     }
 
     /**
-     * Los errores de articulos.php no vienen con el envoltorio habitual, sino
-     * como {"success":false,...}. Tiene que llegar el motivo real.
+     * ⚠️ El código se normaliza a mayúsculas y sin espacios. SQL Server ignora
+     * los espacios a la derecha pero no los de la izquierda, y su collation
+     * distingue mayúsculas: sin esto, `' re-1631'` entraría como un artículo
+     * distinto y chocaría contra el índice único de MySQL.
      */
-    public function test_reporta_el_error_propio_de_articulos(): void
+    public function test_normaliza_el_codigo(): void
     {
-        Http::fake(['*articulos.php' => Http::response([
-            'success' => false,
-            'code' => 400,
-            'message' => 'Debe ingresar codigo de lista de precios',
-            'info' => ['servicio' => 'articulos.php'],
-        ])]);
-
-        $this->expectExceptionMessage('Debe ingresar codigo de lista de precios');
-        $this->sincronizar();
+        $this->assertSame('RE-1631', $this->mapear(['COD_ARTICULO' => ' re-1631 '])['codigo']);
     }
 
     /**
-     * El contrato central de los cuatro campos propios: el sync trae datos
-     * nuevos del ERP pero no los toca. Mismo test que
-     * ClienteSyncTest::test_sync_actualiza_datos_del_erp_pero_preserva_fecha_vencimiento.
+     * ⚠️ `stock_disponible` se escribe siempre en `null`, no se arrastra.
+     *
+     * Medido el 30/9/2026 contra los diez depósitos de `powerbi_stock_vista`:
+     * ninguno lo reproduce (el mejor llega a 487 de 748), así que es un cálculo
+     * propio del endpoint HTTP que ya no usamos. Dejar el último valor de la API
+     * congelaría un número viejo en el Excel, que es peor que un vacío.
      */
-    public function test_sync_actualiza_datos_del_erp_pero_preserva_los_campos_propios(): void
+    public function test_el_stock_disponible_queda_en_null(): void
+    {
+        $this->assertNull($this->mapear()['stock_disponible']);
+    }
+
+    public function test_el_stock_sin_fila_en_la_vista_cuenta_como_cero(): void
+    {
+        // La consulta ya hace ISNULL(...,0): 11 de 748 artículos no tienen fila
+        // en la vista de stock, que significa "sin existencias".
+        $this->assertSame(0.0, $this->mapear(['CANT_STOCK' => 0])['stock']);
+    }
+
+    // ── Contrato del upsert ─────────────────────────────────────────────────
+
+    /**
+     * Las columnas que el upsert actualiza, copiadas de `ArticuloSyncService`.
+     * Se repiten acá a propósito, igual que en `ProveedorSyncTest`: es lo que
+     * convierte a este test en una alarma si alguien suma una columna propia
+     * del panel a esa lista.
+     */
+    private const COLUMNAS_DEL_UPSERT = [
+        'descripcion', 'descripcion_adicional', 'codigo_barras', 'unidad_medida',
+        'codigo_agrupacion_1', 'descripcion_agrupacion_1',
+        'codigo_agrupacion_2', 'descripcion_agrupacion_2',
+        'codigo_agrupacion_3', 'descripcion_agrupacion_3',
+        'stock', 'stock_disponible', 'codigo_proveedor',
+        'tipo_anmat',
+        'modificado_en', 'synced_at', 'activo', 'updated_at',
+    ];
+
+    /** `pm` se escribe aparte: el ERP completa pero nunca borra. */
+    private function sincronizarFila(array $attrs = []): void
+    {
+        $fila = $this->mapear($attrs);
+
+        Articulo::upsert([$fila], ['codigo'], self::COLUMNAS_DEL_UPSERT);
+
+        if ($fila['pm'] !== null) {
+            Articulo::upsert([$fila], ['codigo'], ['pm', 'updated_at']);
+        }
+    }
+
+    /**
+     * El contrato central: lo que carga una persona sobrevive a la sync.
+     */
+    public function test_el_upsert_no_pisa_los_campos_propios_del_panel(): void
     {
         Articulo::create([
             'codigo' => 'RE-1631',
             'descripcion' => 'Descripción vieja',
-            'fecha_vencimiento' => '2030-10-06',
-            'pm' => '236-80',
-            'legajo' => '133',
-            'observaciones' => 'Cargado a mano por Calidad',
+            'legajo' => 'LEGAJO 133',
+            'observaciones' => 'Lo revisó Calidad',
+            'link_registro' => 'https://ejemplo/registro',
+            'fecha_vencimiento' => '2027-01-01',
         ]);
 
-        Http::fake(['*articulos.php' => Http::response($this->respuesta([
-            $this->articulo(['descripcion_articulo' => 'Descripción nueva del ERP']),
-        ]))]);
+        Articulo::upsert([$this->mapear()], ['codigo'], self::COLUMNAS_DEL_UPSERT);
 
-        $this->sincronizar();
+        $articulo = Articulo::where('codigo', 'RE-1631')->first();
 
-        $a = Articulo::first();
-        $this->assertSame('Descripción nueva del ERP', $a->descripcion);
-        $this->assertSame('2030-10-06', $a->fecha_vencimiento->toDateString());
-        $this->assertSame('236-80', $a->pm);
-        $this->assertSame('133', $a->legajo);
-        $this->assertSame('Cargado a mano por Calidad', $a->observaciones);
+        $this->assertSame('LEGAJO 133', $articulo->legajo);
+        $this->assertSame('Lo revisó Calidad', $articulo->observaciones);
+        $this->assertSame('https://ejemplo/registro', $articulo->link_registro);
+        $this->assertSame('2027-01-01', $articulo->fecha_vencimiento->toDateString());
+        // Y lo que sí es del ERP se actualiza.
+        $this->assertSame('AGUJA 40/12 TERUMO', $articulo->descripcion);
     }
 
-    /** El buscador del selector tiene que encontrar por código y por descripción. */
+    /**
+     * ⚠️ La contracara, y el cambio de dueño del 30/9/2026: `pm` **sí** se pisa.
+     *
+     * Antes era campo del panel y lo cargaba el Excel de Calidad; hoy sale de
+     * `NRO_REGISTRO`. Por eso `ArticuloImportService` y `ArticuloController`
+     * dejaron de escribirlo: si dos fuentes escribieran la misma columna, lo
+     * cargado a mano se perdería en la corrida siguiente, en silencio.
+     */
+    /** Cuando el ERP trae un registro, ése manda. */
+    public function test_el_registro_del_erp_pisa_el_que_estaba(): void
+    {
+        Articulo::create([
+            'codigo' => 'RE-1631',
+            'descripcion' => 'Descripción vieja',
+            'pm' => 'PM VIEJO CARGADO A MANO',
+        ]);
+
+        $this->sincronizarFila();
+
+        $this->assertSame('PM 2243-98', Articulo::where('codigo', 'RE-1631')->first()->pm);
+    }
+
+    /**
+     * ⚠️ **La regresión que más caro sale de todas las de este archivo.**
+     *
+     * Medido el 30/9/2026 en producción: 324 artículos con `pm` cargado a mano,
+     * y `NRO_REGISTRO` vacío para 35 de ellos. Si `pm` estuviera en la lista de
+     * columnas del upsert general, esos 35 registros regulatorios se borrarían
+     * en la primera corrida y nadie se enteraría hasta necesitarlos.
+     */
+    public function test_el_erp_sin_registro_no_borra_el_pm_que_habia(): void
+    {
+        Articulo::create([
+            'codigo' => 'RE-1631',
+            'descripcion' => 'Descripción vieja',
+            'pm' => 'PM 2459-3',
+        ]);
+
+        $this->sincronizarFila(['NRO_REGISTRO' => '']);
+
+        $this->assertSame('PM 2459-3', Articulo::where('codigo', 'RE-1631')->first()->pm);
+    }
+
+    /** Y un artículo sin nada cargado sigue sin nada, no queda en blanco raro. */
+    public function test_sin_registro_en_ninguno_de_los_dos_lados_queda_null(): void
+    {
+        $this->sincronizarFila(['NRO_REGISTRO' => null]);
+
+        $this->assertNull(Articulo::where('codigo', 'RE-1631')->first()->pm);
+    }
+
+    public function test_el_upsert_es_idempotente_por_codigo(): void
+    {
+        Articulo::upsert([$this->mapear()], ['codigo'], self::COLUMNAS_DEL_UPSERT);
+        Articulo::upsert([$this->mapear(['DESCRIP_ARTI' => 'Descripción nueva'])], ['codigo'], self::COLUMNAS_DEL_UPSERT);
+
+        $this->assertSame(1, Articulo::count());
+        $this->assertSame('Descripción nueva', Articulo::first()->descripcion);
+    }
+
+    // ── Desactivación de lo que dejó de venir ───────────────────────────────
+
+    /**
+     * ⚠️ Se inserta con el query builder y no con `Articulo::create()`.
+     *
+     * El cast `datetime` del modelo formatea con `Y-m-d H:i:s` y **se come los
+     * microsegundos**, así que un artículo sembrado con el timestamp exacto de
+     * la corrida quedaba guardado un instante antes y la desactivación se lo
+     * llevaba puesto. La sincronización real escribe el valor crudo por
+     * `upsert()`, que es lo que esta siembra reproduce — y es también el motivo
+     * de la migración que le puso precisión de microsegundos a la columna.
+     */
+    private function articuloSincronizadoEl(string $codigo, ?string $syncedAt, bool $activo = true): void
+    {
+        DB::table('articulos')->insert([
+            'codigo' => $codigo,
+            'descripcion' => "Artículo {$codigo}",
+            'synced_at' => $syncedAt,
+            'activo' => $activo,
+            'created_at' => '2026-09-29 10:00:00',
+            'updated_at' => '2026-09-29 10:00:00',
+        ]);
+    }
+
+    public function test_desactiva_lo_que_no_vino_en_esta_corrida(): void
+    {
+        $this->articuloSincronizadoEl('RE-1631', '2026-09-30 15:00:00.123456');
+        $this->articuloSincronizadoEl('RE-999', '2026-09-29 15:00:00.000000');
+
+        $desactivados = $this->service()->desactivarLosQueNoVinieron('2026-09-30 15:00:00.123456', 2);
+
+        $this->assertSame(1, $desactivados);
+        $this->assertTrue(Articulo::where('codigo', 'RE-1631')->first()->activo);
+        $this->assertFalse(Articulo::where('codigo', 'RE-999')->first()->activo);
+    }
+
+    /**
+     * Los artículos que solo cargó el Excel de Calidad ("crear faltantes",
+     * `synced_at` null) no vienen de ninguna sincronización, así que no pueden
+     * "dejar de venir": tienen que seguir activos aunque RP no los mencione.
+     */
+    public function test_un_articulo_creado_solo_por_excel_sigue_activo(): void
+    {
+        $this->articuloSincronizadoEl('EXCEL-1', null);
+
+        $this->service()->desactivarLosQueNoVinieron('2026-09-30 15:00:00.123456', 5);
+
+        $this->assertTrue(Articulo::where('codigo', 'EXCEL-1')->first()->activo);
+    }
+
+    /**
+     * ⚠️ Un resultado vacío no desactiva nada: un mal día del ERP no puede dejar
+     * el selector de productos del portal público sin una sola sugerencia.
+     */
+    public function test_un_resultado_vacio_no_desactiva_nada(): void
+    {
+        $this->articuloSincronizadoEl('RE-999', '2026-09-29 15:00:00.000000');
+
+        $desactivados = $this->service()->desactivarLosQueNoVinieron('2026-09-30 15:00:00.123456', 0);
+
+        $this->assertSame(0, $desactivados);
+        $this->assertTrue(Articulo::where('codigo', 'RE-999')->first()->activo);
+    }
+
+    /**
+     * ⚠️ `where('activo', true)` no es solo optimización: sin eso, un artículo
+     * ya desactivado vuelve a tocar `updated_at` en cada corrida y MySQL lo
+     * cuenta como fila afectada, así que el contador nunca bajaría a 0.
+     */
+    public function test_no_vuelve_a_contar_lo_que_ya_estaba_desactivado(): void
+    {
+        $this->articuloSincronizadoEl('RE-999', '2026-09-29 15:00:00.000000', activo: false);
+
+        $desactivados = $this->service()->desactivarLosQueNoVinieron('2026-09-30 15:00:00.123456', 3);
+
+        $this->assertSame(0, $desactivados);
+    }
+
+    /** Un artículo desactivado que vuelve a aparecer se reactiva con el upsert. */
+    public function test_un_articulo_desactivado_que_vuelve_se_reactiva(): void
+    {
+        $this->articuloSincronizadoEl('RE-1631', '2026-09-29 15:00:00.000000', activo: false);
+
+        Articulo::upsert([$this->mapear()], ['codigo'], self::COLUMNAS_DEL_UPSERT);
+
+        $this->assertTrue(Articulo::where('codigo', 'RE-1631')->first()->activo);
+    }
+
+    // ── Buscador ────────────────────────────────────────────────────────────
+
     public function test_el_buscador_encuentra_por_codigo_y_descripcion(): void
     {
         Articulo::create(['codigo' => 'RE-1631', 'descripcion' => 'AGUJA 40/12 TERUMO']);
@@ -202,101 +385,6 @@ class ArticuloSyncTest extends TestCase
         $this->assertSame(['RE-1631'], Articulo::buscar('RE-1631')->pluck('codigo')->all());
         $this->assertSame(['RE-999'], Articulo::buscar('gasa')->pluck('codigo')->all());
         $this->assertSame([], Articulo::buscar('inexistente')->pluck('codigo')->all());
-    }
-
-    /** Todo lo que vino en el feed de esta corrida queda activo. */
-    public function test_lo_que_viene_en_el_feed_queda_activo(): void
-    {
-        Http::fake(['*articulos.php' => Http::response($this->respuesta([$this->articulo()]))]);
-
-        $resultado = $this->sincronizar();
-
-        $this->assertTrue(Articulo::first()->activo);
-        $this->assertSame(1, $resultado['activos']);
-        $this->assertSame(0, $resultado['desactivados']);
-    }
-
-    /** Un artículo que estaba y deja de venir en la corrida siguiente queda desactivado. */
-    public function test_un_articulo_que_deja_de_venir_se_desactiva(): void
-    {
-        Http::fake(['*articulos.php' => Http::sequence()
-            ->push($this->respuesta([
-                $this->articulo(['codigo_articulo' => 'RE-1631']),
-                $this->articulo(['codigo_articulo' => 'RE-999']),
-            ]))
-            ->push($this->respuesta([
-                $this->articulo(['codigo_articulo' => 'RE-1631']),
-            ])),
-        ]);
-
-        $this->sincronizar();
-        $resultado = $this->sincronizar();
-
-        $this->assertTrue(Articulo::where('codigo', 'RE-1631')->first()->activo);
-        $this->assertFalse(Articulo::where('codigo', 'RE-999')->first()->activo);
-        $this->assertSame(1, $resultado['desactivados']);
-    }
-
-    /**
-     * Los artículos que solo cargó el Excel de Calidad ("crear faltantes",
-     * synced_at null) no vienen de ningún feed, así que no pueden "dejar de
-     * venir": tienen que seguir activos aunque RP no los mencione.
-     */
-    public function test_un_articulo_creado_solo_por_excel_sigue_activo(): void
-    {
-        Articulo::create([
-            'codigo' => 'EXCEL-1',
-            'descripcion' => 'Cargado a mano por Calidad',
-            'synced_at' => null,
-        ]);
-
-        Http::fake(['*articulos.php' => Http::response($this->respuesta([$this->articulo()]))]);
-
-        $this->sincronizar();
-
-        $this->assertTrue(Articulo::where('codigo', 'EXCEL-1')->first()->activo);
-    }
-
-    /** Un feed vacío no puede dejar el selector de productos sin nada: no desactiva nada. */
-    public function test_un_feed_vacio_no_desactiva_nada(): void
-    {
-        // Secuencia, no dos Http::fake(): con el mismo patrón, Laravel se
-        // queda con el primer stub registrado y la segunda corrida vería lo viejo.
-        Http::fake(['*articulos.php' => Http::sequence()
-            ->push($this->respuesta([$this->articulo()]))
-            ->push($this->respuesta([])),
-        ]);
-
-        $this->sincronizar();
-        $resultado = $this->sincronizar();
-
-        $this->assertTrue(Articulo::first()->activo);
-        $this->assertSame(0, $resultado['procesados']);
-        $this->assertSame(0, $resultado['desactivados']);
-    }
-
-    /** Un artículo desactivado que vuelve a aparecer en el feed se reactiva solo. */
-    public function test_un_articulo_desactivado_que_vuelve_al_feed_se_reactiva(): void
-    {
-        Http::fake(['*articulos.php' => Http::sequence()
-            ->push($this->respuesta([
-                $this->articulo(['codigo_articulo' => 'RE-1631']),
-                $this->articulo(['codigo_articulo' => 'RE-999']),
-            ]))
-            ->push($this->respuesta([
-                $this->articulo(['codigo_articulo' => 'RE-1631']),
-            ]))
-            ->push($this->respuesta([
-                $this->articulo(['codigo_articulo' => 'RE-1631']),
-                $this->articulo(['codigo_articulo' => 'RE-999']),
-            ])),
-        ]);
-
-        $this->sincronizar();
-        $this->sincronizar();
-        $this->sincronizar();
-
-        $this->assertTrue(Articulo::where('codigo', 'RE-999')->first()->activo);
     }
 
     /** El buscador público (articulos.buscar) no puede ofrecer un artículo discontinuado. */
@@ -313,48 +401,48 @@ class ArticuloSyncTest extends TestCase
         $response->assertJsonMissing(['codigo' => 'RE-999']);
     }
 
-    // ── Vinculación de proveedor por codigo_proveedor ────────────────────────
+    // ── Vinculación de proveedor por codigo_proveedor ───────────────────────
+    //
+    // Es el paso final de `sync()`. Se lo llama directo porque el mapeo ya dejó
+    // `codigo_proveedor` en su lugar y la regla de precedencia vive en
+    // `VinculacionProveedores`, no en el servicio de sincronización.
 
     /**
-     * codigo_proveedor casi nunca es un número de proveedor real, pero cuando
-     * sí coincide con proveedores.numero, es información correcta y vale la
-     * pena vincularla — ver el docblock de ArticuloSyncService::sync().
+     * codigo_proveedor casi nunca es un número de proveedor real (147 de 5.236
+     * artículos en el ERP lo tienen cargado), pero cuando coincide con
+     * proveedores.numero es información correcta y vale la pena vincularla.
      */
     public function test_vincula_el_proveedor_cuando_codigo_proveedor_coincide(): void
     {
         $proveedor = Proveedor::create(['numero' => 'PRO1', 'razon_social' => 'Distribuidora Test SA']);
 
-        Http::fake(['*articulos.php' => Http::response($this->respuesta([
-            $this->articulo(['codigo_proveedor' => 'PRO1']),
-        ]))]);
-
-        $resultado = $this->sincronizar();
+        Articulo::upsert([$this->mapear()], ['codigo'], self::COLUMNAS_DEL_UPSERT);
+        $vinculados = VinculacionProveedores::desdeCodigoProveedor();
 
         $this->assertSame($proveedor->id, Articulo::first()->proveedor_id);
-        $this->assertSame(1, $resultado['proveedores_vinculados']);
+        $this->assertSame(1, $vinculados);
     }
 
     /** Sin proveedor con ese número, proveedor_id queda en null sin romper nada. */
     public function test_no_vincula_proveedor_cuando_codigo_proveedor_no_matchea(): void
     {
-        Http::fake(['*articulos.php' => Http::response($this->respuesta([
-            $this->articulo(['codigo_proveedor' => 'CODIGO-QUE-NO-EXISTE']),
-        ]))]);
-
-        $resultado = $this->sincronizar();
+        Articulo::upsert(
+            [$this->mapear(['COD_PROVEEDOR' => 'CODIGO-QUE-NO-EXISTE'])],
+            ['codigo'],
+            self::COLUMNAS_DEL_UPSERT
+        );
+        $vinculados = VinculacionProveedores::desdeCodigoProveedor();
 
         $this->assertNull(Articulo::first()->proveedor_id);
-        $this->assertSame(0, $resultado['proveedores_vinculados']);
+        $this->assertSame(0, $vinculados);
     }
 
     /**
      * El caso central: un proveedor **corregido a mano** desde la ficha no se
      * pisa aunque codigo_proveedor matchee con OTRO proveedor.
      *
-     * ⚠️ Antes este test decía "a mano (por Excel o desde la ficha)" y trataba
-     * a los dos igual. Desde que existe `proveedor_origen` son cosas
-     * distintas: el dato del ERP **sí** corrige lo que adivinó el Excel por
-     * razón social, pero nunca una corrección de una persona. Ver
+     * ⚠️ El dato del ERP **sí** corrige lo que adivinó el Excel por razón
+     * social, pero nunca una corrección de una persona. Ver
      * `VinculacionProveedores::PRECEDENCIA` y el test de abajo.
      */
     public function test_no_pisa_un_proveedor_corregido_a_mano(): void
@@ -369,20 +457,17 @@ class ArticuloSyncTest extends TestCase
             'proveedor_origen' => VinculacionProveedores::ORIGEN_MANUAL,
         ]);
 
-        Http::fake(['*articulos.php' => Http::response($this->respuesta([
-            $this->articulo(['codigo_proveedor' => 'PRO1']),
-        ]))]);
-
-        $resultado = $this->sincronizar();
+        Articulo::upsert([$this->mapear()], ['codigo'], self::COLUMNAS_DEL_UPSERT);
+        $vinculados = VinculacionProveedores::desdeCodigoProveedor();
 
         $this->assertSame($asignadoAMano->id, Articulo::first()->proveedor_id);
-        $this->assertSame(0, $resultado['proveedores_vinculados']);
+        $this->assertSame(0, $vinculados);
         $this->assertNotSame($otro->id, Articulo::first()->proveedor_id);
     }
 
     /**
-     * La contracara, y el motivo de todo el cambio: lo que el Excel adivinó por
-     * razón social **sí** lo corrige el dato del ERP cuando RP lo carga.
+     * La contracara: lo que el Excel adivinó por razón social **sí** lo corrige
+     * el dato del ERP cuando RP lo carga.
      */
     public function test_pisa_un_proveedor_que_habia_puesto_el_excel(): void
     {
@@ -396,13 +481,10 @@ class ArticuloSyncTest extends TestCase
             'proveedor_origen' => VinculacionProveedores::ORIGEN_EXCEL,
         ]);
 
-        Http::fake(['*articulos.php' => Http::response($this->respuesta([
-            $this->articulo(['codigo_proveedor' => 'PRO1']),
-        ]))]);
-
-        $resultado = $this->sincronizar();
+        Articulo::upsert([$this->mapear()], ['codigo'], self::COLUMNAS_DEL_UPSERT);
+        $vinculados = VinculacionProveedores::desdeCodigoProveedor();
 
         $this->assertSame($correcto->id, Articulo::first()->proveedor_id);
-        $this->assertSame(1, $resultado['proveedores_vinculados']);
+        $this->assertSame(1, $vinculados);
     }
 }

@@ -32,7 +32,7 @@ class ArticuloExportService
         'UM', 'Agrupación 1', 'Agrupación 2', 'Agrupación 3',
         'Stock', 'Stock disponible',
         'Código proveedor (ERP)', 'Proveedor',
-        'PM', 'Legajo', 'Fecha de vencimiento', 'Observaciones', 'Link de registro',
+        'PM', 'Tipo ANMAT', 'Legajo', 'Fecha de vencimiento', 'Observaciones', 'Link de registro',
         'Estado', 'Origen', 'Última sincronización',
     ];
 
@@ -79,10 +79,20 @@ class ArticuloExportService
             $articulo->descripcion_agrupacion_2 ?? '',
             $articulo->descripcion_agrupacion_3 ?? '',
             $articulo->stock ?? '',
+            // ⚠️ Queda vacío desde el 30/9/2026: al pasar el catálogo a SQL se
+            // midió que ningún depósito de `powerbi_stock_vista` lo reproduce,
+            // así que es un cálculo propio del endpoint HTTP que ya no usamos.
+            // Se prefiere el vacío antes que dejar congelado el último número
+            // que trajo la API. Pendiente preguntarle a RP qué resta.
             $articulo->stock_disponible ?? '',
             $articulo->codigo_proveedor ?? '',
             $articulo->proveedor?->razon_social ?? '',
             $articulo->pm ?? '',
+            // La etiqueta, no el código: el Excel lo lee una persona. Si RP usa
+            // un tipo que todavía no está en el catálogo, sale el código crudo.
+            $articulo->tipo_anmat
+                ? (config('articulos.tipos_anmat')[$articulo->tipo_anmat] ?? $articulo->tipo_anmat)
+                : '',
             $articulo->legajo ?? '',
             $articulo->fecha_vencimiento?->format('d/m/Y') ?? '',
             $articulo->observaciones ?? '',

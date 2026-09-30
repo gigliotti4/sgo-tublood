@@ -96,7 +96,7 @@ class ArticuloControllerTest extends TestCase
         $this->actingAs($user)->get("/articulos/{$articulo->id}/edit")->assertStatus(403);
     }
 
-    public function test_update_setea_los_cuatro_campos_propios(): void
+    public function test_update_setea_los_campos_propios(): void
     {
         $articulo = Articulo::create(['codigo' => 'RE-1631', 'descripcion' => 'AGUJA 40/12 TERUMO']);
         $user = $this->userWith('articulos.view', 'articulos.edit');
@@ -104,7 +104,6 @@ class ArticuloControllerTest extends TestCase
         $this->actingAs($user)
             ->put("/articulos/{$articulo->id}", [
                 'fecha_vencimiento' => '2030-10-06',
-                'pm' => '236-80',
                 'legajo' => '133',
                 'observaciones' => 'Revisar con Calidad',
             ])
@@ -112,9 +111,33 @@ class ArticuloControllerTest extends TestCase
 
         $articulo->refresh();
         $this->assertSame('2030-10-06', $articulo->fecha_vencimiento->toDateString());
-        $this->assertSame('236-80', $articulo->pm);
         $this->assertSame('133', $articulo->legajo);
         $this->assertSame('Revisar con Calidad', $articulo->observaciones);
+    }
+
+    /**
+     * ⚠️ `pm` dejó de ser editable el 30/9/2026: lo escribe la sincronización
+     * desde `ARTICULOS.NRO_REGISTRO`. Si volviera a aceptarse por acá, una
+     * edición a mano se perdería en la corrida de las 03:00 sin avisarle a
+     * nadie — por eso el request lo manda y el test verifica que se ignore.
+     */
+    public function test_update_ignora_el_pm_porque_ahora_lo_escribe_el_erp(): void
+    {
+        $articulo = Articulo::create([
+            'codigo' => 'RE-1631',
+            'descripcion' => 'AGUJA 40/12 TERUMO',
+            'pm' => 'PM 2243-98',
+        ]);
+        $user = $this->userWith('articulos.view', 'articulos.edit');
+
+        $this->actingAs($user)
+            ->put("/articulos/{$articulo->id}", [
+                'pm' => 'INTENTO DE PISARLO',
+                'legajo' => '133',
+            ])
+            ->assertRedirect(route('articulos.index'));
+
+        $this->assertSame('PM 2243-98', $articulo->fresh()->pm);
     }
 
     public function test_update_asigna_y_limpia_el_proveedor(): void
@@ -226,14 +249,20 @@ class ArticuloControllerTest extends TestCase
         $filas = $this->filasDelExcel($this->actingAs($user)->get('/articulos/export'));
         $porCodigo = collect($filas)->skip(1)->keyBy(0);
 
-        $this->assertSame('Activo', $porCodigo['RE-1631'][17]);
-        $this->assertSame('RP Sistemas', $porCodigo['RE-1631'][18]);
+        // Los índices corrieron uno el 30/9/2026: se sumó "Tipo ANMAT" después
+        // de "PM". Se buscan por nombre de encabezado para que el próximo
+        // agregado no vuelva a romper este test por una razón que no importa.
+        $estado = array_search('Estado', $filas[0], true);
+        $origen = array_search('Origen', $filas[0], true);
 
-        $this->assertSame('Discontinuado', $porCodigo['RE-999'][17]);
-        $this->assertSame('RP Sistemas', $porCodigo['RE-999'][18]);
+        $this->assertSame('Activo', $porCodigo['RE-1631'][$estado]);
+        $this->assertSame('RP Sistemas', $porCodigo['RE-1631'][$origen]);
 
-        $this->assertSame('Activo', $porCodigo['EXCEL-1'][17]);
-        $this->assertSame('Carga manual (Excel)', $porCodigo['EXCEL-1'][18]);
+        $this->assertSame('Discontinuado', $porCodigo['RE-999'][$estado]);
+        $this->assertSame('RP Sistemas', $porCodigo['RE-999'][$origen]);
+
+        $this->assertSame('Activo', $porCodigo['EXCEL-1'][$estado]);
+        $this->assertSame('Carga manual (Excel)', $porCodigo['EXCEL-1'][$origen]);
     }
 
     private function filasDelExcel($response): array

@@ -66,19 +66,41 @@ class ArticuloImportTest extends TestCase
             ->assertStatus(403);
     }
 
-    public function test_importa_los_cuatro_campos_por_encabezado(): void
+    public function test_importa_los_campos_propios_por_encabezado(): void
     {
         Articulo::create(['codigo' => 'RE-1982', 'descripcion' => 'GUANTE NITRILO M CORONET']);
         $admin = $this->userWith('articulos.import');
 
-        $this->importar($admin, ['cod_articulo', 'descrip_arti', 'pm', 'vto', 'observaciones'], [
-            ['RE-1982', 'GUANTE NITRILO M CORONET', '236-80', '06/10/2030', 'ver ficha'],
+        $this->importar($admin, ['cod_articulo', 'descrip_arti', 'legajo', 'vto', 'observaciones'], [
+            ['RE-1982', 'GUANTE NITRILO M CORONET', '133', '06/10/2030', 'ver ficha'],
         ])->assertRedirect('/articulos');
 
         $articulo = Articulo::where('codigo', 'RE-1982')->firstOrFail();
-        $this->assertSame('236-80', $articulo->pm);
+        $this->assertSame('133', $articulo->legajo);
         $this->assertSame('2030-10-06', $articulo->fecha_vencimiento->toDateString());
         $this->assertSame('ver ficha', $articulo->observaciones);
+    }
+
+    /**
+     * ⚠️ La columna `pm` de la planilla se sigue leyendo, pero ya **no se
+     * guarda**: desde el 30/9/2026 ese campo lo escribe la sincronización desde
+     * `ARTICULOS.NRO_REGISTRO`. Si el import lo escribiera también, lo que
+     * cargue el Excel se perdería en la corrida siguiente, en silencio.
+     */
+    public function test_no_pisa_el_pm_que_trae_el_erp(): void
+    {
+        Articulo::create([
+            'codigo' => 'RE-1982',
+            'descripcion' => 'GUANTE NITRILO M CORONET',
+            'pm' => 'PM 2243-98',
+        ]);
+        $admin = $this->userWith('articulos.import');
+
+        $this->importar($admin, ['cod_articulo', 'descrip_arti', 'pm'], [
+            ['RE-1982', 'GUANTE NITRILO M CORONET', '236-80'],
+        ])->assertRedirect('/articulos');
+
+        $this->assertSame('PM 2243-98', Articulo::where('codigo', 'RE-1982')->firstOrFail()->pm);
     }
 
     /** El caso real de la planilla vieja: columnas con huecos entre medio (A, B, E, F). */

@@ -57,6 +57,7 @@ class Articulo extends Model
         'activo',
         'fecha_vencimiento',
         'pm',
+        'tipo_anmat',
         'legajo',
         'observaciones',
         'link_registro',

@@ -86,7 +86,13 @@ export interface Articulo {
     /** Vino en el último sync de RP (o lo cargó el Excel de Calidad sin sync). Ver ArticuloSyncService. */
     activo: boolean
     fecha_vencimiento: string | null
+    /**
+     * Registro de ANMAT. ⚠️ Desde el 30/9/2026 lo escribe la sincronización
+     * (`ARTICULOS.NRO_REGISTRO`): ya no es un campo propio del panel.
+     */
     pm: string | null
+    /** Tipo ANMAT crudo del ERP (`PM`, `PMV`, `ME`, `A`). Etiqueta en config/articulos.php. */
+    tipo_anmat: string | null
     legajo: string | null
     observaciones: string | null
     link_registro: string | null

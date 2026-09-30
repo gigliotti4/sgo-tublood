@@ -158,6 +158,7 @@ class ArticuloController extends Controller
 
         return inertia('Admin/Articulos/Edit', [
             'articulo' => $articulo->load('proveedor:id,numero,razon_social'),
+            'tiposAnmat' => config('articulos.tipos_anmat'),
         ]);
     }
 
@@ -166,8 +167,11 @@ class ArticuloController extends Controller
         $this->authorize('articulos.edit');
 
         $data = $request->validate([
+            // ⚠️ `pm` no está: desde el 30/9/2026 lo escribe la sincronización
+            // desde `ARTICULOS.NRO_REGISTRO`. Dejarlo acá ofrecería un campo
+            // que la corrida de las 03:00 pisa sin avisar. La ficha lo muestra
+            // junto al resto de los datos del ERP, en solo lectura.
             'fecha_vencimiento' => ['nullable', 'date'],
-            'pm' => ['nullable', 'string', 'max:255'],
             'legajo' => ['nullable', 'string', 'max:255'],
             'observaciones' => ['nullable', 'string'],
             'link_registro' => ['nullable', 'url', 'max:500'],

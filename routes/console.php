@@ -9,9 +9,6 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('clientes:sync')->everyFiveMinutes();
-// El catálogo cambia mucho menos que los clientes y la respuesta trae las
-// ~4000 filas de una, así que una vez por día alcanza y no castiga al ERP.
-Schedule::command('articulos:sync')->dailyAt('03:00');
 // Proveedores y ventas no vienen por la API: se leen de las vistas SQL que RP
 // Sistemas habilita para Power BI. El padrón de proveedores cambia poco; las
 // ventas se reemplazan enteras, así que van de noche y después de artículos.
@@ -21,6 +18,10 @@ Schedule::command('articulos:sync')->dailyAt('03:00');
 // extensión) fallarían en cada corrida y llenarían el log de errores.
 $erpConfigurado = fn () => filled(config('database.connections.erp.host'));
 
+// El catálogo de artículos también sale de SQL desde el 30/9/2026: hasta
+// entonces entraba por la API HTTP y era la única sync sin este guard. Va
+// primero porque `partidas:sync` (04:30) vincula proveedores contra él.
+Schedule::command('articulos:sync')->dailyAt('03:00')->when($erpConfigurado);
 Schedule::command('proveedores:sync')->hourly()->when($erpConfigurado);
 Schedule::command('ventas:sync')->dailyAt('04:00')->when($erpConfigurado);
 // Los lotes despachados salen del mismo kardex que las partidas, pero conservan

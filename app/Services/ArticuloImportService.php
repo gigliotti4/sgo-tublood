@@ -111,7 +111,12 @@ class ArticuloImportService
                 $actualizados++;
             }
 
-            [$pm, $legajo] = $this->pmYLegajo(
+            // ⚠️ Solo se toma el legajo. Desde el 30/9/2026 `pm` lo escribe la
+            // sincronización desde `ARTICULOS.NRO_REGISTRO`, así que escribirlo
+            // también acá haría que el Excel se pierda en la corrida siguiente,
+            // en silencio. La columna del archivo se sigue leyendo porque a
+            // veces trae un legajo disfrazado ("LEGAJO 133").
+            [, $legajo] = $this->pmYLegajo(
                 $indices['pm'] !== null ? $this->limpiar($fila[$indices['pm']] ?? null) : null,
                 $indices['legajo'] !== null ? $this->limpiar($fila[$indices['legajo']] ?? null) : null,
             );
@@ -120,7 +125,6 @@ class ArticuloImportService
                 'fecha_vencimiento' => $indices['fecha_vencimiento'] !== null
                     ? $this->fecha($fila[$indices['fecha_vencimiento']] ?? null)
                     : $articulo->fecha_vencimiento,
-                'pm' => $pm ?? $articulo->pm,
                 'legajo' => $legajo ?? $articulo->legajo,
                 'observaciones' => $indices['observaciones'] !== null
                     ? ($this->limpiar($fila[$indices['observaciones']] ?? null) ?? $articulo->observaciones)
@@ -305,6 +309,10 @@ class ArticuloImportService
      *
      * Si el archivo trae además una columna `legajo` propia, esa tiene
      * prioridad sobre lo que se pueda extraer del prefijo.
+     *
+     * ⚠️ El PM que devuelve **ya no se usa**: desde el 30/9/2026 esa columna la
+     * escribe la sincronización con el ERP. Se sigue devolviendo porque separar
+     * las dos mitades es lo que permite reconocer el legajo, que sí se guarda.
      *
      * @return array{0: ?string, 1: ?string} [pm, legajo]
      */
