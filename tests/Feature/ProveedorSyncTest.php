@@ -38,6 +38,7 @@ class ProveedorSyncTest extends TestCase
             'CP' => '1414',
             'CONTACTO' => 'Juan Pérez',
             'ESTADO' => 'A',
+            'AGRU_1' => '01',
             'FECHA_MODI' => '2026-08-14 14:48:00',
         ], $attrs);
     }
@@ -59,7 +60,28 @@ class ProveedorSyncTest extends TestCase
         $this->assertSame('BUENOS AIRES', $fila['provincia']);
         $this->assertSame('Juan Pérez', $fila['contacto']);
         $this->assertSame('A', $fila['estado']);
+        $this->assertSame('01', $fila['clasificacion_erp']);
         $this->assertSame('2026-08-14 14:48:00', $fila['modificado_en']);
+    }
+
+    /**
+     * Se guarda el código crudo de RP, sin traducir.
+     *
+     * ⚠️ La vista mezcla `NULL` con cadena vacía en `AGRU_1` (631 y 140 filas
+     * el 30/9/2026). `texto()` las colapsa en `null`, que es lo que hace que el
+     * filtro "sin clasificar" del listado no tenga que mirar las dos formas.
+     */
+    public function test_la_clasificacion_del_erp_se_guarda_cruda_y_los_vacios_quedan_en_null(): void
+    {
+        $service = $this->service();
+
+        $this->assertSame('03', $service->mapear($this->fila(['AGRU_1' => '03']), Carbon::now())['clasificacion_erp']);
+        $this->assertNull($service->mapear($this->fila(['AGRU_1' => '']), Carbon::now())['clasificacion_erp']);
+        $this->assertNull($service->mapear($this->fila(['AGRU_1' => '   ']), Carbon::now())['clasificacion_erp']);
+
+        // Un código que todavía no está en config entra igual: el catálogo es
+        // de RP y la etiqueta se resuelve recién en pantalla.
+        $this->assertSame('09', $service->mapear($this->fila(['AGRU_1' => '09']), Carbon::now())['clasificacion_erp']);
     }
 
     /** El ERP rellena los `char` con espacios y usa cadenas vacías en vez de null. */

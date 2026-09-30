@@ -41,6 +41,18 @@ const form = useForm({
     documentos: {} as ChecklistFormulario,
 })
 
+/**
+ * Las direcciones del campo de arriba, desglosadas para poder leerlas.
+ *
+ * Se parte `form.mail` y no `proveedor.mails` para que la lista acompañe lo que
+ * se está escribiendo: si alguien agrega una dirección, la ve numerada sin
+ * guardar. La regla de corte es la misma que la del backend — solo `;`, nunca
+ * espacios, porque hay mails cargados como `Nombre <dirección>`.
+ */
+const mailsDelCampo = computed(() =>
+    form.mail.split(';').map((m) => m.trim()).filter(Boolean)
+)
+
 const { documentos } = useChecklistDocumental({
     catalogo: props.catalogoDocumentos,
     cargados: props.documentosCargados,
@@ -123,12 +135,28 @@ const etiquetaDeterminante = computed(() =>
                         label="Teléfono"
                         :error="form.errors.telefono"
                     />
+                    <!--
+                        Sin `type="email"`: el ERP manda varias direcciones
+                        separadas por `;` y el navegador bloqueaba el submit de
+                        128 proveedores, incluido el 176, que es `Nombre <dir>`.
+                    -->
                     <Input
                         v-model="form.mail"
-                        type="email"
                         label="Mail"
+                        hint="Varias direcciones van separadas por punto y coma, como las manda RP Sistemas."
                         :error="form.errors.mail"
                     />
+                    <!-- El campo de arriba es la celda cruda del ERP; esto la lee. -->
+                    <ul v-if="mailsDelCampo.length > 1" class="-mt-2 space-y-1 pl-1">
+                        <li
+                            v-for="(m, i) in mailsDelCampo"
+                            :key="m"
+                            class="flex items-baseline gap-2 text-theme-xs text-gray-500 dark:text-gray-400"
+                        >
+                            <span class="tabular-nums text-gray-400">{{ i + 1 }}.</span>
+                            <span class="break-all">{{ m }}</span>
+                        </li>
+                    </ul>
                     <Textarea
                         v-model="form.observaciones"
                         label="Observaciones"

@@ -26,7 +26,7 @@ class ProveedorExportService
     private const COLUMNAS_BASE = [
         'N°', 'Razón Social', 'Nombre Fantasía', 'CUIT', 'Domicilio',
         'Localidad', 'Provincia', 'CP', 'Teléfono', 'Celular', 'Mail',
-        'Contacto', 'Estado', 'Observaciones',
+        'Contacto', 'Estado', 'Clasificación (ERP)', 'Observaciones',
         'Tipo de proveedor', 'Tiene legajo', 'Habilitado',
     ];
 
@@ -103,6 +103,11 @@ class ProveedorExportService
             $proveedor->mail ?? '',
             $proveedor->contacto ?? '',
             $proveedor->estado ?? '',
+            // La etiqueta, no el código: el Excel lo lee una persona. Si RP usa
+            // un código que todavía no está en el catálogo, sale el código.
+            $proveedor->clasificacion_erp
+                ? (config('proveedores.clasificaciones')[$proveedor->clasificacion_erp] ?? $proveedor->clasificacion_erp)
+                : '',
             $proveedor->observaciones ?? '',
             Documentacion::etiqueta($proveedor->tipo_proveedor) ?? '',
             $this->siNo($proveedor->tiene_legajo),

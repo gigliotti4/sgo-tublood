@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\ClasificacionDocumental;
 use App\Support\Documentacion;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
@@ -27,6 +28,11 @@ use Illuminate\Support\Str;
  *
  * ⚠️ `habilitado` (Sí/No del panel) **no es** `estado` (A/S/I del ERP, que la
  * sincronización pisa). Son dos cosas distintas que en pantalla se parecen.
+ *
+ * ⚠️ Y `clasificacion_erp` (AGRU_1, lo carga RP y la sync lo pisa) **no es**
+ * `tipo_proveedor` (lo elige una persona acá y decide qué documentación se le
+ * exige). Dos clasificaciones distintas de la misma empresa; ver
+ * config/proveedores.php.
  */
 class Proveedor extends Model
 {
@@ -50,6 +56,7 @@ class Proveedor extends Model
         'contacto',
         'observaciones',
         'estado',
+        'clasificacion_erp',
         'tipo_proveedor',
         'tiene_legajo',
         'habilitado',
@@ -59,6 +66,16 @@ class Proveedor extends Model
         'synced_at',
     ];
 
+    /**
+     * `mails` viaja en las props de Inertia sin que cada controller lo pida.
+     *
+     * ⚠️ El autocompletado (`ProveedorController::buscar`) selecciona solo tres
+     * columnas, así que ahí `mail` no está cargado y el accesor devuelve `[]`.
+     * Es inofensivo, pero por eso el accesor tolera que el atributo falte en
+     * vez de asumir que siempre viene.
+     */
+    protected $appends = ['mails'];
+
     protected $casts = [
         'tiene_legajo' => 'boolean',
         'habilitado' => 'boolean',
@@ -67,6 +84,28 @@ class Proveedor extends Model
         'modificado_en' => 'datetime',
         'synced_at' => 'datetime',
     ];
+
+    /**
+     * Los mails del proveedor, uno por elemento.
+     *
+     * El ERP guarda varias direcciones en la misma celda separadas por punto y
+     * coma: 127 de los 373 proveedores con mail tienen más de una, hasta 4
+     * (medido el 30/9/2026).
+     *
+     * ⚠️ **Se parte SOLO por `;`, nunca por espacios ni comas.** No hay una
+     * sola coma ni barra en la columna, y partir por espacios rompería al
+     * proveedor 176, cuyo mail es `Hugo - Libertador <hlt@...>`: quedarían
+     * cuatro pedazos y ninguno sería una dirección. Los espacios que hay son
+     * los que siguen al `;`, y de eso se encarga el `trim`.
+     *
+     * @return Attribute<array<int, string>, never>
+     */
+    protected function mails(): Attribute
+    {
+        return Attribute::get(fn (): array => array_values(array_filter(
+            array_map('trim', explode(';', (string) ($this->attributes['mail'] ?? '')))
+        )));
+    }
 
     public function articulos(): HasMany
     {

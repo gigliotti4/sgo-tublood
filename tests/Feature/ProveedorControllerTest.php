@@ -75,6 +75,131 @@ class ProveedorControllerTest extends TestCase
                 ->where('proveedores.data.0.numero', '933'));
     }
 
+    /**
+     * ⚠️ La regresión: con la regla `email` había 128 proveedores que **no se
+     * podían guardar**. El formulario devolvía el mail tal como vino de RP
+     * —varias direcciones separadas por `;`— la validación lo rechazaba, y de
+     * paso quedaban bloqueadas Observaciones y el tipo, que sí son del panel.
+     */
+    public function test_se_puede_guardar_un_proveedor_con_varios_mails(): void
+    {
+        $proveedor = $this->proveedor(['mail' => 'a@b.com;c@d.com']);
+
+        $this->actingAs($this->userWith('proveedores.edit'))
+            ->put("/proveedores/{$proveedor->id}", [
+                'razon_social' => $proveedor->razon_social,
+                'mail' => 'a@b.com;c@d.com',
+                'observaciones' => 'Corregido a mano',
+                'tiene_legajo' => '0',
+                'habilitado' => '1',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('Corregido a mano', $proveedor->fresh()->observaciones);
+    }
+
+    /** Mismo caso, con el mail que RP cargó como nombre para mostrar. */
+    public function test_se_puede_guardar_un_mail_con_nombre_para_mostrar(): void
+    {
+        $proveedor = $this->proveedor(['mail' => 'Hugo - Libertador <hlt@libertadorfactoring.com.ar>']);
+
+        $this->actingAs($this->userWith('proveedores.edit'))
+            ->put("/proveedores/{$proveedor->id}", [
+                'razon_social' => $proveedor->razon_social,
+                'mail' => 'Hugo - Libertador <hlt@libertadorfactoring.com.ar>',
+                'tiene_legajo' => '0',
+                'habilitado' => '1',
+            ])
+            ->assertSessionHasNoErrors();
+    }
+
+    /** El listado necesita `mails` para mostrar uno y contar el resto. */
+    public function test_el_listado_manda_los_mails_ya_separados(): void
+    {
+        $this->proveedor(['mail' => 'uno@x.com; dos@x.com']);
+
+        $this->actingAs($this->userWith('proveedores.view'))
+            ->get('/proveedores')
+            ->assertInertia(fn ($page) => $page
+                ->where('proveedores.data.0.mails', ['uno@x.com', 'dos@x.com']));
+    }
+
+    // ── Filtro por la clasificación del ERP (AGRU_1) ─────────────────────────
+
+    public function test_filtra_por_la_clasificacion_del_erp(): void
+    {
+        $this->proveedor(['clasificacion_erp' => '01']);
+        $this->proveedor(['numero' => '1246', 'razon_social' => 'CRONOINK SRL', 'clasificacion_erp' => '03']);
+        $user = $this->userWith('proveedores.view');
+
+        $this->actingAs($user)
+            ->get('/proveedores?clasificacion_erp=01')
+            ->assertInertia(fn ($page) => $page
+                ->has('proveedores.data', 1)
+                ->where('proveedores.data.0.numero', '933'));
+    }
+
+    /**
+     * ⚠️ "Sin clasificar" necesita un centinela propio: con la cadena vacía
+     * sería indistinguible de "sin filtro" y devolvería el padrón entero.
+     */
+    public function test_el_centinela_sin_clasificar_trae_los_que_el_erp_no_clasifico(): void
+    {
+        $this->proveedor(['clasificacion_erp' => '01']);
+        $this->proveedor(['numero' => '1246', 'razon_social' => 'CRONOINK SRL', 'clasificacion_erp' => null]);
+        $user = $this->userWith('proveedores.view');
+
+        $this->actingAs($user)
+            ->get('/proveedores?clasificacion_erp=sin_clasificar')
+            ->assertInertia(fn ($page) => $page
+                ->has('proveedores.data', 1)
+                ->where('proveedores.data.0.numero', '1246'));
+    }
+
+    /**
+     * El catálogo es de RP, no nuestro: pueden sumar un código cualquier día.
+     * Filtrar por uno que todavía no tiene etiqueta tiene que funcionar igual,
+     * mismo criterio que un `?sort=` desconocido.
+     */
+    public function test_un_codigo_fuera_del_catalogo_igual_filtra(): void
+    {
+        $this->proveedor(['clasificacion_erp' => '04']);
+        $this->proveedor(['numero' => '1246', 'razon_social' => 'CRONOINK SRL', 'clasificacion_erp' => '01']);
+        $user = $this->userWith('proveedores.view');
+
+        $this->actingAs($user)
+            ->get('/proveedores?clasificacion_erp=04')
+            ->assertInertia(fn ($page) => $page
+                ->has('proveedores.data', 1)
+                ->where('proveedores.data.0.numero', '933'));
+    }
+
+    public function test_el_listado_manda_el_catalogo_de_clasificaciones(): void
+    {
+        $this->proveedor();
+
+        $this->actingAs($this->userWith('proveedores.view'))
+            ->get('/proveedores')
+            ->assertInertia(fn ($page) => $page
+                ->where('clasificaciones.01', 'PROV. APROBADOS DE PM'));
+    }
+
+    /** El export baja lo mismo que se ve: ver el test equivalente del buscador. */
+    public function test_exportar_respeta_el_filtro_de_clasificacion(): void
+    {
+        $this->proveedor(['clasificacion_erp' => '01']);
+        $this->proveedor(['numero' => '1246', 'razon_social' => 'CRONOINK SRL', 'clasificacion_erp' => '03']);
+
+        $response = $this->actingAs($this->userWith('proveedores.view'))
+            ->get('/proveedores/export?clasificacion_erp=01');
+
+        $response->assertOk();
+        $filas = $this->filasDelExcel($response);
+
+        $this->assertCount(2, $filas, 'Encabezado + un solo proveedor.');
+        $this->assertSame('933', $filas[1][0]);
+    }
+
     /** El contador del encabezado necesita el total sin filtrar, no el del paginador. */
     public function test_el_listado_manda_el_total_sin_filtrar(): void
     {

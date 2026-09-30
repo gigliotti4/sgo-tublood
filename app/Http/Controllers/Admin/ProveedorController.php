@@ -27,6 +27,16 @@ class ProveedorController extends Controller
     /** Menos que esto devolvería medio padrón y no ayuda a completar nada. */
     private const MINIMO = 2;
 
+    /**
+     * Valor del filtro de clasificación que significa "los que RP no clasificó".
+     *
+     * Hace falta un centinela porque el filtro viaja como texto y la ausencia
+     * se expresa con `null`: sin esto, "sin clasificar" y "sin filtro" serían
+     * la misma cadena vacía. Mismo criterio que `sin_tipo` en el filtro
+     * documental.
+     */
+    private const SIN_CLASIFICAR = 'sin_clasificar';
+
     use OrdenaListados, VuelveAlListado;
 
     /**
@@ -48,6 +58,7 @@ class ProveedorController extends Controller
             'telefono' => 'proveedores.telefono',
             'mail' => 'proveedores.mail',
             'tipo' => 'proveedores.tipo_proveedor',
+            'clasificacion' => 'proveedores.clasificacion_erp',
             'documentacion' => 'proveedores.documentacion_completa',
         ];
     }
@@ -73,10 +84,13 @@ class ProveedorController extends Controller
             'filters' => [
                 'search' => $request->string('search')->trim()->value(),
                 'tipo_proveedor' => $request->string('tipo_proveedor')->trim()->value(),
+                'clasificacion_erp' => $request->string('clasificacion_erp')->trim()->value(),
                 'estado_documental' => $request->string('estado_documental')->trim()->value(),
             ],
             'orden' => $this->orden($request, $this->ordenables()),
             'tipos' => Documentacion::etiquetasTipos(Documentacion::PROVEEDORES),
+            // El catálogo de RP, para el filtro y para poner nombre al código.
+            'clasificaciones' => config('proveedores.clasificaciones'),
             // Sin filtrar: el paginador ya trae el total de la búsqueda vigente.
             'total' => Proveedor::count(),
             'lastSync' => Proveedor::max('synced_at'),
@@ -91,11 +105,13 @@ class ProveedorController extends Controller
     {
         $search = $request->string('search')->trim()->value();
         $tipo = $request->string('tipo_proveedor')->trim()->value();
+        $clasificacion = $request->string('clasificacion_erp')->trim()->value();
         $estado = $request->string('estado_documental')->trim()->value();
 
         $query = Proveedor::query()
             ->when($search, fn ($q) => $q->buscar($search))
             ->when($tipo, fn ($q) => $q->where('tipo_proveedor', $tipo))
+            ->when($clasificacion, fn ($q) => $this->filtrarPorClasificacion($q, $clasificacion))
             ->when($estado, fn ($q) => $this->filtrarPorEstadoDocumental($q, $estado));
 
         return $this->aplicarOrden(
@@ -106,6 +122,26 @@ class ProveedorController extends Controller
             fn (Builder $q) => $q->orderBy('proveedores.razon_social'),
             'proveedores.id',
         );
+    }
+
+    /**
+     * Filtro del listado por la clasificación que le puso RP (AGRU_1).
+     *
+     * ⚠️ `whereNull` cubre también a los que el ERP manda como cadena vacía:
+     * la vista mezcla `NULL` y `''` en la misma columna (631 y 140 filas
+     * respectivamente, medido el 30/9/2026) y `ProveedorSyncService::texto()`
+     * los colapsa en `null` al entrar. Filtrar además por `''` acá volvería a
+     * abrir esa distinción, que a esta altura ya no existe en nuestra tabla.
+     *
+     * Un código que no esté en el catálogo no se valida contra nada: si RP
+     * agrega uno, filtrarlo por URL tiene que seguir funcionando aunque todavía
+     * no tenga etiqueta. Mismo criterio que el `?sort=` desconocido.
+     */
+    private function filtrarPorClasificacion(Builder $query, string $clasificacion): void
+    {
+        $clasificacion === self::SIN_CLASIFICAR
+            ? $query->whereNull('clasificacion_erp')
+            : $query->where('clasificacion_erp', $clasificacion);
     }
 
     /**
@@ -238,7 +274,15 @@ class ProveedorController extends Controller
             'domicilio' => ['nullable', 'string', 'max:255'],
             'cuit' => ['nullable', 'string', 'max:255'],
             'telefono' => ['nullable', 'string', 'max:255'],
-            'mail' => ['nullable', 'email', 'max:255'],
+            // ⚠️ `string` y NO `email`: la columna es del ERP y guarda varias
+            // direcciones separadas por `;`. Con la regla `email` había 128
+            // proveedores (127 con `;` más el 176, que es `Nombre <dirección>`)
+            // que **no se podían guardar**: el formulario mandaba el mail tal
+            // como vino de RP y la validación lo rechazaba, bloqueando de paso
+            // la edición de Observaciones y del tipo, que sí son nuestras.
+            // Exigir un formato acá no tiene sentido: la sincronización pisa
+            // esta columna en cada corrida, así que el dueño del formato es RP.
+            'mail' => ['nullable', 'string', 'max:255'],
             'localidad' => ['nullable', 'string', 'max:255'],
             'observaciones' => ['nullable', 'string'],
             // `fecha_vencimiento` no está acá a propósito: es derivado, sale

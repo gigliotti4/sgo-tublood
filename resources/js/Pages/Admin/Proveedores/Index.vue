@@ -21,8 +21,10 @@ import type { PaginatedData, Proveedor } from '@/types'
 
 const props = defineProps<{
     proveedores: PaginatedData<Proveedor>
-    filters: { search: string; tipo_proveedor: string; estado_documental: string }
+    filters: { search: string; tipo_proveedor: string; clasificacion_erp: string; estado_documental: string }
     tipos: Record<string, string>
+    /** Catálogo de RP (AGRU_1). Ver config/proveedores.php: no es `tipos`. */
+    clasificaciones: Record<string, string>
     total: number
     lastSync: string | null
     /** Validado contra la whitelist del backend: `sort` es null en el orden por defecto. */
@@ -50,11 +52,16 @@ const { hasPermission } = usePermissions()
 
 const search = ref(props.filters.search ?? '')
 const tipoProveedor = ref(props.filters.tipo_proveedor ?? '')
+const clasificacionErp = ref(props.filters.clasificacion_erp ?? '')
 const filtroEstado = ref(props.filters.estado_documental ?? '')
+
+/** Centinela del backend: "sin clasificar" no es lo mismo que "sin filtro". */
+const SIN_CLASIFICAR = 'sin_clasificar'
 
 const filtrosVigentes = () => ({
     search: search.value,
     tipo_proveedor: tipoProveedor.value,
+    clasificacion_erp: clasificacionErp.value,
     estado_documental: filtroEstado.value,
 })
 
@@ -63,7 +70,7 @@ const { orden, ordenarPor, paramsDeOrden } = useOrdenamiento({
     orden: () => props.orden,
     parametros: filtrosVigentes,
     // Los textos se leen A→Z; los numeros y las fechas, de mayor a menor.
-    ascendentesPorDefecto: ['numero', 'razon_social', 'domicilio', 'localidad', 'telefono', 'mail', 'tipo'],
+    ascendentesPorDefecto: ['numero', 'razon_social', 'domicilio', 'localidad', 'telefono', 'mail', 'tipo', 'clasificacion'],
 })
 
 // El link a la ficha se lleva la página y los filtros vigentes, para que
@@ -87,7 +94,7 @@ watch(search, () => {
     debounce = setTimeout(recargar, 350)
 })
 
-watch([tipoProveedor, filtroEstado], recargar)
+watch([tipoProveedor, clasificacionErp, filtroEstado], recargar)
 
 const ESTADOS_DOCUMENTALES: Record<string, string> = {
     completa: 'Documentación completa',
@@ -107,8 +114,22 @@ const semaforoDocumental = (p: Proveedor) => {
 const urlExportar = computed(() => route('proveedores.export', {
     search: search.value || undefined,
     tipo_proveedor: tipoProveedor.value || undefined,
+    clasificacion_erp: clasificacionErp.value || undefined,
     estado_documental: filtroEstado.value || undefined,
 }))
+
+/** El código crudo si RP usa uno que todavía no está en el catálogo. */
+const etiquetaClasificacion = (p: Proveedor) =>
+    p.clasificacion_erp ? (props.clasificaciones[p.clasificacion_erp] ?? p.clasificacion_erp) : '—'
+
+/**
+ * En la tabla va **un solo mail**: el ERP mete hasta 4 en la misma celda y la
+ * fila quedaba ilegible. El resto se cuentan en un "+N" que los lista al pasar
+ * el mouse, y están todos en la ficha. `mails` lo arma el backend (ver el
+ * accesor del modelo Proveedor): la regla de corte se escribe una sola vez.
+ */
+const mailPrincipal = (p: Proveedor) => p.mails[0] ?? '—'
+const mailsExtra = (p: Proveedor) => p.mails.slice(1)
 
 const showImportModal = ref(false)
 const importForm = useForm({
@@ -174,7 +195,7 @@ const submitImport = () => {
             </div>
 
             <!-- Buscador y filtros -->
-            <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <Input v-model="search" type="text" placeholder="Buscar por número, razón social, domicilio...">
                     <template #icon>
                         <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -185,6 +206,11 @@ const submitImport = () => {
                 <Select v-model="tipoProveedor">
                     <option value="">Todos los tipos</option>
                     <option v-for="(label, slug) in tipos" :key="slug" :value="slug">{{ label }}</option>
+                </Select>
+                <Select v-model="clasificacionErp">
+                    <option value="">Toda clasificación (ERP)</option>
+                    <option v-for="(label, codigo) in clasificaciones" :key="codigo" :value="codigo">{{ label }}</option>
+                    <option :value="SIN_CLASIFICAR">Sin clasificar en el ERP</option>
                 </Select>
                 <Select v-model="filtroEstado">
                     <option value="">Toda la documentación</option>
@@ -204,6 +230,7 @@ const submitImport = () => {
                                 <ThOrdenable campo="localidad" :orden="orden" @ordenar="ordenarPor">Localidad</ThOrdenable>
                                 <ThOrdenable campo="telefono" :orden="orden" @ordenar="ordenarPor">Teléfono</ThOrdenable>
                                 <ThOrdenable campo="mail" :orden="orden" @ordenar="ordenarPor">Mail</ThOrdenable>
+                                <ThOrdenable campo="clasificacion" :orden="orden" @ordenar="ordenarPor">Clasificación (ERP)</ThOrdenable>
                                 <ThOrdenable campo="tipo" :orden="orden" @ordenar="ordenarPor">Tipo</ThOrdenable>
                                 <ThOrdenable campo="documentacion" :orden="orden" @ordenar="ordenarPor">Documentación</ThOrdenable>
                                 <th v-if="hasPermission('proveedores.edit')" class="px-4 py-3" />
@@ -211,7 +238,7 @@ const submitImport = () => {
                         </thead>
                         <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
                             <tr v-if="proveedores.data.length === 0">
-                                <td colspan="9" class="px-4 py-12 text-center text-sm text-gray-400">
+                                <td colspan="10" class="px-4 py-12 text-center text-sm text-gray-400">
                                     <template v-if="search">
                                         No se encontraron proveedores para "<span class="font-medium">{{ search }}</span>".
                                     </template>
@@ -238,7 +265,19 @@ const submitImport = () => {
                                 <td class="max-w-60 truncate px-4 py-3.5 text-theme-xs text-gray-600 dark:text-gray-300">{{ proveedor.domicilio ?? '—' }}</td>
                                 <td class="px-4 py-3.5 text-theme-xs text-gray-600 dark:text-gray-300">{{ proveedor.localidad ?? '—' }}</td>
                                 <td class="px-4 py-3.5 text-theme-xs text-gray-500 dark:text-gray-400">{{ proveedor.telefono ?? '—' }}</td>
-                                <td class="px-4 py-3.5 text-theme-xs text-gray-500 dark:text-gray-400">{{ proveedor.mail ?? '—' }}</td>
+                                <td class="px-4 py-3.5 text-theme-xs text-gray-500 dark:text-gray-400">
+                                    <span class="inline-flex items-center gap-1.5">
+                                        <span class="max-w-52 truncate">{{ mailPrincipal(proveedor) }}</span>
+                                        <span
+                                            v-if="mailsExtra(proveedor).length"
+                                            class="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 font-medium text-gray-500 dark:bg-white/[0.06] dark:text-gray-400"
+                                            :title="mailsExtra(proveedor).join('\n')"
+                                        >+{{ mailsExtra(proveedor).length }}</span>
+                                    </span>
+                                </td>
+                                <td class="px-4 py-3.5 text-theme-xs text-gray-600 dark:text-gray-300">
+                                    {{ etiquetaClasificacion(proveedor) }}
+                                </td>
                                 <td class="px-4 py-3.5 text-theme-xs text-gray-500 dark:text-gray-400">
                                     {{ proveedor.tipo_proveedor ? tipos[proveedor.tipo_proveedor] : '—' }}
                                 </td>
@@ -282,7 +321,11 @@ const submitImport = () => {
                             <DataRow label="Localidad">{{ proveedor.localidad ?? '—' }}</DataRow>
                             <DataRow label="CUIT">{{ proveedor.cuit ?? '—' }}</DataRow>
                             <DataRow label="Teléfono">{{ proveedor.telefono ?? '—' }}</DataRow>
-                            <DataRow label="Mail">{{ proveedor.mail ?? '—' }}</DataRow>
+                            <DataRow label="Mail">
+                                <span v-if="!proveedor.mails.length">—</span>
+                                <span v-for="(m, i) in proveedor.mails" v-else :key="m" class="block" :class="{ 'text-gray-400': i > 0 }">{{ m }}</span>
+                            </DataRow>
+                            <DataRow label="Clasificación (ERP)">{{ etiquetaClasificacion(proveedor) }}</DataRow>
                             <DataRow label="Tipo">{{ proveedor.tipo_proveedor ? tipos[proveedor.tipo_proveedor] : '—' }}</DataRow>
                             <DataRow label="Documentación">
                                 <Badge :variant="semaforoDocumental(proveedor).variant">{{ semaforoDocumental(proveedor).label }}</Badge>

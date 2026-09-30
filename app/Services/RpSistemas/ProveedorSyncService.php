@@ -55,8 +55,8 @@ class ProveedorSyncService
                 [
                     'razon_social', 'nombre_fantasia', 'domicilio', 'cuit',
                     'telefono', 'celular', 'mail', 'localidad', 'provincia',
-                    'codigo_postal', 'contacto', 'estado', 'modificado_en',
-                    'synced_at', 'updated_at',
+                    'codigo_postal', 'contacto', 'estado', 'clasificacion_erp',
+                    'modificado_en', 'synced_at', 'updated_at',
                 ]
             );
 
@@ -169,6 +169,9 @@ class ProveedorSyncService
             'codigo_postal' => $this->texto($fila['CP'] ?? null),
             'contacto' => $this->texto($fila['CONTACTO'] ?? null),
             'estado' => $this->texto($fila['ESTADO'] ?? null),
+            // AGRU_1: el código crudo de RP, sin traducir. La etiqueta vive en
+            // config/proveedores.php, así un código nuevo no necesita deploy.
+            'clasificacion_erp' => $this->texto($fila['AGRU_1'] ?? null),
             'modificado_en' => $this->fecha($fila['FECHA_MODI'] ?? null),
             'synced_at' => $now,
             'created_at' => $now,

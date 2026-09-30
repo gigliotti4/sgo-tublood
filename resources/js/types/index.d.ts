@@ -103,7 +103,14 @@ export interface Proveedor {
     cuit: string | null
     telefono: string | null
     celular: string | null
+    /** Celda cruda del ERP: puede traer varias direcciones separadas por `;`. */
     mail: string | null
+    /**
+     * Las direcciones de `mail` ya separadas, que arma el accesor del modelo.
+     * Siempre viene (`$appends`), aunque sea un array vacío. Es lo que usan el
+     * listado y la ficha: la regla de corte se escribe una sola vez, en PHP.
+     */
+    mails: string[]
     localidad: string | null
     provincia: string | null
     codigo_postal: string | null
@@ -112,6 +119,12 @@ export interface Proveedor {
     observaciones: string | null
     /** Estado en el ERP (A / S / I). No confundir con `habilitado`, que es del panel. */
     estado: string | null
+    /**
+     * Clasificación de RP (AGRU_1), como código crudo: `01`, `02`, `03`.
+     * La etiqueta sale de `config/proveedores.php`. La sincronización lo pisa:
+     * no confundir con `tipo_proveedor`, que es nuestro y se edita a mano.
+     */
+    clasificacion_erp: string | null
     /** Slug del catálogo compartido de config/documentacion.php. Campo propio del panel. */
     tipo_proveedor: string | null
     tiene_legajo: boolean
