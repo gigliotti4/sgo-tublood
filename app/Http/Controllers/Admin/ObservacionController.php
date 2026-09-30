@@ -258,6 +258,12 @@ class ObservacionController extends Controller
             'tipoLabels' => TaxonomiaIncidencias::etiquetasTipos(),
             'prioridades' => config('incidencias.prioridades'),
             'tiposCaso' => config('incidencias.tipos_caso'),
+            // Corregir el texto del reclamo, dentro del modal de edición. No va
+            // por fila: la habilidad no mira la observación (devuelve false
+            // para todos y solo pasa el super-admin por `Gate::before`), así
+            // que un booleano suelto dice lo mismo sin engordar el payload de
+            // las 50 filas. Ver ObservacionPolicy::editarContenido().
+            'puedeCorregirTexto' => $request->user()?->can('editarContenido', new Observacion) ?? false,
             'aniosDisponibles' => Observacion::query()->select('anio')->distinct()->orderByDesc('anio')->pluck('anio'),
         ]);
     }
@@ -314,9 +320,6 @@ class ObservacionController extends Controller
             'tipoLabels' => TaxonomiaIncidencias::etiquetasTipos(),
             'prioridades' => config('incidencias.prioridades'),
             'puedeEditar' => $request->user()?->can('update', $observacion) ?? false,
-            // Corregir el texto del reclamo es más angosto que gestionar el
-            // caso: en los hechos solo super-admin. Ver la Policy.
-            'puedeEditarContenido' => $request->user()?->can('editarContenido', $observacion) ?? false,
             // Escalar a un desvío pide las dos cosas: poder crear una NC y
             // poder gestionar ESTA observación. La Policy lo vuelve a chequear.
             'puedeDerivarANc' => ($request->user()?->can('nc.create') ?? false)

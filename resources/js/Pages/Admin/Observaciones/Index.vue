@@ -59,6 +59,12 @@ const props = defineProps<{
     prioridades: Record<string, string>
     tiposCaso: string[]
     presentaciones: Record<string, string>
+    /**
+     * Corregir el título y la descripción del reclamo. No viene por fila: la
+     * habilidad no mira la observación, en los hechos es "sos super-admin".
+     * Ver ObservacionPolicy::editarContenido().
+     */
+    puedeCorregirTexto: boolean
     aniosDisponibles: number[]
     /** Validado contra la whitelist del backend: `sort` es null en el orden por defecto. */
     orden: OrdenVigente
@@ -213,7 +219,41 @@ const abrirEdicion = (o: Observacion) => {
     form.motivo = null
 }
 
-const cerrarEdicion = () => { idEnEdicion.value = null }
+const cerrarEdicion = () => {
+    idEnEdicion.value = null
+    corrigiendoTexto.value = false
+}
+
+// ── Corrección del texto del reclamo (dentro del modal de edición) ──────────
+//
+// ⚠️ Vive acá adentro pero **no es parte del formulario de edición**: va por su
+// propia ruta (`observaciones.contenido`) porque es otro permiso. `update` lo
+// tiene el responsable del caso; esto, solo un super-admin. Por eso tiene su
+// propio `useForm` y su propio botón de guardar.
+
+const corrigiendoTexto = ref(false)
+
+const textoForm = useForm({ titulo: '', descripcion: '' })
+
+const abrirCorreccion = (o: Observacion) => {
+    // Se recarga desde la fila en cada apertura: si alguien escribe y cancela,
+    // la próxima vez tiene que ver lo guardado y no su borrador.
+    textoForm.titulo = o.titulo
+    textoForm.descripcion = o.descripcion
+    textoForm.clearErrors()
+    corrigiendoTexto.value = true
+}
+
+const guardarTexto = () => {
+    if (!observacionEnEdicion.value) return
+
+    textoForm.put(route('observaciones.contenido', { observacion: observacionEnEdicion.value.id }), {
+        preserveScroll: true,
+        // El modal queda abierto: `observacionEnEdicion` es un computed sobre
+        // las props, así que al volver muestra el texto ya corregido.
+        onSuccess: () => { corrigiendoTexto.value = false },
+    })
+}
 
 /**
  * Abre el modal directo cuando se llega con `?editar=<id>`.
@@ -618,16 +658,61 @@ const guardar = () => {
                                 <p class="text-theme-xs font-medium uppercase tracking-wide text-gray-400">Tipo</p>
                                 <p class="mt-0.5 text-sm text-gray-800 dark:text-white/90">{{ tipoLabels[observacionEnEdicion.tipo] ?? observacionEnEdicion.tipo }}</p>
                             </div>
-                            <div>
-                                <p class="text-theme-xs font-medium uppercase tracking-wide text-gray-400">Título</p>
+                            <div v-if="!corrigiendoTexto">
+                                <div class="flex items-center gap-2">
+                                    <p class="text-theme-xs font-medium uppercase tracking-wide text-gray-400">Título</p>
+                                    <!--
+                                        El lápiz solo lo ve un super-admin. Abre
+                                        la corrección del texto, que NO es parte
+                                        del formulario de gestión: otro permiso,
+                                        otra ruta y su propio botón de guardar.
+                                    -->
+                                    <button
+                                        v-if="puedeCorregirTexto"
+                                        type="button"
+                                        class="cursor-pointer text-gray-400 transition-colors hover:text-brand-500 dark:hover:text-brand-300"
+                                        title="Corregir el título y la descripción"
+                                        @click="abrirCorreccion(observacionEnEdicion)"
+                                    >
+                                        <Icon name="pencil" class="h-3.5 w-3.5" />
+                                        <span class="sr-only">Corregir el texto de la observación</span>
+                                    </button>
+                                </div>
                                 <p class="mt-0.5 text-sm text-gray-800 dark:text-white/90">{{ observacionEnEdicion.titulo }}</p>
                             </div>
                         </div>
 
-                        <div>
+                        <div v-if="!corrigiendoTexto">
                             <p class="text-theme-xs font-medium uppercase tracking-wide text-gray-400">Descripción</p>
                             <p class="mt-0.5 max-h-40 overflow-y-auto whitespace-pre-line pr-2 text-sm text-gray-600 dark:text-gray-300">{{ observacionEnEdicion.descripcion }}</p>
                         </div>
+
+                        <!--
+                            Modo corrección. El aviso no es decorativo: la
+                            descripción suele ser lo que escribió el cliente, y
+                            quien corrige tiene que saber que queda registrado
+                            con el texto original entero.
+                        -->
+                        <form v-else class="space-y-3 rounded-xl border border-warning-200 p-4 dark:border-warning-500/30" @submit.prevent="guardarTexto">
+                            <p class="rounded-lg bg-warning-50 px-3 py-2 text-theme-xs text-warning-700 dark:bg-warning-500/10 dark:text-warning-400">
+                                La descripción suele ser lo que escribió el cliente. La corrección queda
+                                en la bitácora junto con el texto original, y no se puede borrar.
+                            </p>
+                            <Input v-model="textoForm.titulo" label="Título" required :error="textoForm.errors.titulo" />
+                            <Textarea
+                                v-model="textoForm.descripcion"
+                                label="Descripción"
+                                :rows="6"
+                                required
+                                :error="textoForm.errors.descripcion"
+                            />
+                            <div class="flex justify-end gap-2">
+                                <Button variant="outline" type="button" @click="corrigiendoTexto = false">Cancelar</Button>
+                                <Button type="submit" :disabled="textoForm.processing">
+                                    {{ textoForm.processing ? 'Guardando...' : 'Guardar corrección' }}
+                                </Button>
+                            </div>
+                        </form>
 
                         <!-- Cliente -->
                         <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">

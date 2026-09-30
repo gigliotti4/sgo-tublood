@@ -50,7 +50,11 @@ class ObservacionPolicy
      * eso el cambio queda en la bitácora con el valor original entero, y por
      * eso la habilidad es más angosta que la de gestión.
      *
-     * Una observación borrada no se corrige: primero se restaura.
+     * ⚠️ A diferencia de `update()`, acá no se chequea `trashed()`: como el
+     * método devuelve `false` para todos y el único que entra es el super-admin
+     * por `Gate::before`, cualquier condición que se escriba se saltea igual.
+     * En los hechos, un super-admin puede corregir el texto de una observación
+     * borrada — igual que puede hacer el resto de las cosas sobre una.
      */
     public function editarContenido(User $user, Observacion $observacion): bool
     {

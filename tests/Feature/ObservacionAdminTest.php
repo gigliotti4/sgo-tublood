@@ -1532,17 +1532,21 @@ class ObservacionAdminTest extends TestCase
             ->assertSessionHasErrors(['titulo', 'descripcion']);
     }
 
-    /** La ficha dice si el usuario puede corregir: el botón no se dibuja si no. */
-    public function test_la_ficha_informa_si_se_puede_corregir_el_texto(): void
+    /**
+     * El lápiz vive dentro del modal de edición del listado, así que la
+     * habilidad viaja con el listado y no con la ficha. Sin la prop en `false`,
+     * un usuario común vería un lápiz que le devuelve 403 al guardar.
+     */
+    public function test_el_listado_informa_si_se_puede_corregir_el_texto(): void
     {
-        $observacion = $this->observacion();
+        $this->observacion();
 
         $this->actingAs($this->superAdmin())
-            ->get("/observaciones/{$observacion->id}")
-            ->assertInertia(fn ($page) => $page->where('puedeEditarContenido', true));
+            ->get('/observaciones')
+            ->assertInertia(fn ($page) => $page->where('puedeCorregirTexto', true));
 
         $this->actingAs($this->userWith('observaciones.view'))
-            ->get("/observaciones/{$observacion->id}")
-            ->assertInertia(fn ($page) => $page->where('puedeEditarContenido', false));
+            ->get('/observaciones')
+            ->assertInertia(fn ($page) => $page->where('puedeCorregirTexto', false));
     }
 }
