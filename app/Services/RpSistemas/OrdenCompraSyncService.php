@@ -10,7 +10,8 @@ use Illuminate\Support\Facades\Log;
 /**
  * Espeja `powerbi_ordenescompra_pend_vista` en `compras_ordenes_pendientes`.
  *
- * Va por la conexión `erp_compras` (el usuario `api_lucas` no tiene SELECT).
+ * Hasta el 29/9/2026 iba por una conexión aparte, porque `api_lucas` no tenía
+ * SELECT sobre esta vista. Hoy hay una sola credencial — ver config/database.php.
  *
  * Son ~21.500 renglones. Se guardan crudos y no agregados por artículo: el
  * agregado se hace al armar el dataset, y tener el proveedor y la fecha de
@@ -32,7 +33,7 @@ class OrdenCompraSyncService
         Log::info('RpSistemas: iniciando sincronización de OC pendientes');
 
         // Solo lo que todavía debe entrar: una OC con saldo 0 ya se entregó.
-        $filas = DB::connection('erp_compras')
+        $filas = DB::connection('erp')
             ->table(self::VISTA)
             ->where('CANT_PEND', '>', 0)
             ->get();

@@ -10,7 +10,8 @@ use Illuminate\Support\Facades\Log;
 /**
  * Espeja `powerbi_pedidos_vista` en `compras_pedidos_pendientes`.
  *
- * Va por la conexión `erp_compras` (el usuario `api_lucas` no tiene SELECT).
+ * Hasta el 29/9/2026 iba por una conexión aparte, porque `api_lucas` no tenía
+ * SELECT sobre esta vista. Hoy hay una sola credencial — ver config/database.php.
  *
  * ⚠️ Se filtra solo por `cant_pend > 0` (35.635 de 122.752 filas) y NO por la
  * regla de reserva. Guardar únicamente las reservadas ahorraría 35.000 filas,
@@ -33,7 +34,7 @@ class PedidoPendienteSyncService
 
         Log::info('RpSistemas: iniciando sincronización de pedidos pendientes');
 
-        $filas = DB::connection('erp_compras')
+        $filas = DB::connection('erp')
             ->table(self::VISTA)
             ->where('cant_pend', '>', 0)
             ->get();

@@ -31,14 +31,11 @@ Schedule::command('venta-partidas:sync')->dailyAt('04:15')->when($erpConfigurado
 // carga con horas o días de diferencia. Una vez por día alcanza.
 Schedule::command('partidas:sync')->dailyAt('04:30')->when($erpConfigurado);
 
-// Compras lee por un segundo login SQL (`erp_compras`), con otros permisos:
-// tiene el catálogo maestro y las vistas de compras, pero NO el kardex. Por eso
-// el guard mira su propio host y no el de `erp` — una puede estar configurada y
-// la otra no. Corre después de `ventas:sync` (04:00) para que el tablero abra
-// con las ventas del día ya cargadas.
-$comprasConfigurado = fn () => filled(config('database.connections.erp_compras.host'));
-
-Schedule::command('compras:sync')->dailyAt('05:00')->when($comprasConfigurado);
+// Compras corre después de `ventas:sync` (04:00) para que el tablero abra con
+// las ventas del día ya cargadas. Hasta el 29/9/2026 tenía un guard propio
+// (`$comprasConfigurado`) porque leía por una segunda conexión con otras
+// credenciales; hoy hay una sola y comparte el guard con el resto.
+Schedule::command('compras:sync')->dailyAt('05:00')->when($erpConfigurado);
 
 Schedule::command('observaciones:alertas')->hourly();
 
@@ -48,3 +45,24 @@ Schedule::command('observaciones:alertas')->hourly();
 // miden en días, así que correrlo cada hora repetiría el mismo trabajo 24 veces
 // para encontrar lo mismo.
 Schedule::command('nc:recordatorios')->dailyAt('07:00');
+
+// ── Higiene de tablas que crecen solas ──────────────────────────────────────
+//
+// Ninguna de las tres se limpiaba sola. Medido en producción el 29/9/2026:
+// `failed_jobs` con 311 filas acumuladas desde agosto y la tabla `cache` con
+// 36,5 MB en 72 entradas, 66 de ellas ya vencidas.
+
+// Una semana de retención: alcanza para investigar algo que pasó el fin de
+// semana, y corta el crecimiento. El comando lo trae Laravel.
+Schedule::command('queue:prune-failed --hours=168')->daily();
+
+// ⚠️ El driver `database` de caché borra una entrada vencida **solo cuando
+// alguien vuelve a leer esa clave**, así que las del tablero de Compras —que
+// llevan un hash de los filtros y no se repiten— quedan para siempre. Ver
+// `PodarCacheCommand`.
+Schedule::command('cache:podar')->daily();
+
+// El único de los tres que cambia algo: sin esto, una tarea puede fallar
+// durante semanas sin que nadie se entere. Corre después de la poda para no
+// contar lo que `queue:prune-failed` acaba de borrar.
+Schedule::command('colas:revisar-fallos')->dailyAt('08:00');

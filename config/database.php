@@ -138,6 +138,24 @@ return [
          * NO vienen instalados por defecto (ni en Laragon ni en hosting
          * compartido).
          */
+        /*
+         * RP Sistemas (ERP) — SQL Server, una sola conexión desde el 29/9/2026.
+         *
+         * ⚠️ Hasta esa fecha había DOS (`erp` y `erp_compras`) porque los dos
+         * usuarios que dio RP tenían permisos complementarios: `api_lucas` leía
+         * el kardex pero no `ARTICULOS`, y `powerbi_tublood` al revés. Se
+         * volvió a medir contra el ERP y `powerbi_tublood` hoy lee **todo** lo
+         * que usamos —incluido `COMPRO_PARTIDAS`, que antes no— así que quedó
+         * como única credencial. Verificado corriendo las consultas reales de
+         * cada sync por las dos conexiones: mismo resultado, mismo tiempo.
+         *
+         * ⚠️ Ese usuario ve 406 objetos del ERP cuando el sistema usa 6. Es de
+         * SOLO LECTURA (0 permisos de INSERT/UPDATE/DELETE, medido), así que no
+         * hay forma de que la app escriba en el ERP. Lo prolijo a futuro es
+         * pedirle a RP que acote esos grants, o que le sume a `api_lucas` los
+         * tres que le faltan y volver a esa credencial: es un cambio de `.env`,
+         * el código ya no distingue.
+         */
         'erp' => [
             'driver' => 'sqlsrv',
             'host' => env('ERP_DB_HOST'),
@@ -150,43 +168,6 @@ return [
             'prefix_indexes' => true,
             'encrypt' => env('ERP_DB_ENCRYPT', 'yes'),
             'trust_server_certificate' => env('ERP_DB_TRUST_SERVER_CERTIFICATE', 'true'),
-        ],
-
-        /*
-         * RP Sistemas (ERP) — segundo login, para el módulo Compras.
-         *
-         * ⚠️ Es el MISMO servidor y la MISMA base que `erp` de arriba: lo único
-         * distinto son las credenciales. Hay dos conexiones porque los dos
-         * usuarios que nos dio RP tienen permisos COMPLEMENTARIOS, no
-         * solapados — medido el 8/9/2026:
-         *
-         *   objeto                            api_lucas   powerbi_tublood
-         *   ARTICULOS                            ✗              ✓
-         *   COMPRO_PARTIDAS                      ✓              ✗
-         *   powerbi_ordenescompra_pend_vista     ✗              ✓
-         *   powerbi_pedidos_vista                ✗              ✓
-         *   powerbi_ventas_vista                 ✓              ✓
-         *   powerbi_proveedores_vista            ✓              ✓
-         *
-         * Por eso NO se puede unificar moviendo las credenciales: pisar
-         * `ERP_DB_*` con este usuario rompe `partidas:sync` y
-         * `venta-partidas:sync`, que leen el kardex `COMPRO_PARTIDAS`.
-         *
-         * Pendiente con RP: pedir un único usuario con los dos conjuntos de
-         * grants para poder colapsar las dos conexiones en una.
-         */
-        'erp_compras' => [
-            'driver' => 'sqlsrv',
-            'host' => env('ERP_COMPRAS_DB_HOST'),
-            'port' => env('ERP_COMPRAS_DB_PORT'),
-            'database' => env('ERP_COMPRAS_DB_DATABASE'),
-            'username' => env('ERP_COMPRAS_DB_USERNAME'),
-            'password' => env('ERP_COMPRAS_DB_PASSWORD'),
-            'charset' => 'utf8',
-            'prefix' => '',
-            'prefix_indexes' => true,
-            'encrypt' => env('ERP_COMPRAS_DB_ENCRYPT', 'yes'),
-            'trust_server_certificate' => env('ERP_COMPRAS_DB_TRUST_SERVER_CERTIFICATE', 'true'),
         ],
 
     ],

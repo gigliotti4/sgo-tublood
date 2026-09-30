@@ -10,8 +10,10 @@ use Illuminate\Support\Facades\Log;
 /**
  * Espeja el catálogo maestro `ARTICULOS` del ERP en `compras_articulos`.
  *
- * ⚠️ Va por la conexión `erp_compras`, no `erp`: el usuario `api_lucas` NO tiene
- * SELECT sobre `ARTICULOS`. Ver config/database.php.
+ * ⚠️ `ARTICULOS` es lo que obligaba a tener una segunda conexión: el usuario
+ * `api_lucas` no tiene SELECT sobre esta tabla. Se unificó el 29/9/2026, cuando
+ * se midió que `powerbi_tublood` ya podía leer también el kardex y pasó a ser
+ * la única credencial. Ver config/database.php.
  *
  * ⚠️ `ARTICULOS` es una TABLA BASE del ERP, no una vista habilitada para
  * nosotros. Las vistas `powerbi_*` son un contrato: RP las expuso a propósito.
@@ -34,7 +36,7 @@ class ComprasArticuloSyncService
 
         Log::info('RpSistemas: iniciando sincronización del catálogo de compras');
 
-        $filas = DB::connection('erp_compras')->select($this->sql());
+        $filas = DB::connection('erp')->select($this->sql());
 
         DB::transaction(function () use ($filas, $syncedAt, &$total) {
             ComprasArticulo::query()->delete();
