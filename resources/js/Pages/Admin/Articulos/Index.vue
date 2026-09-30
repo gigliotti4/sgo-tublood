@@ -21,7 +21,9 @@ import type { Articulo, PaginatedData } from '@/types'
 
 const props = defineProps<{
     articulos: PaginatedData<Articulo>
-    filters: { search: string; estado: string; proveedor: string }
+    filters: { search: string; estado: string; proveedor: string; tipo_anmat: string }
+    /** Catálogo de config/articulos.php (ID_ARTI_TIPO del ERP). */
+    tiposAnmat: Record<string, string>
     /** Validado contra la whitelist del backend: `sort` es null en el orden por defecto. */
     orden: OrdenVigente
     lastSync: string | null
@@ -38,12 +40,21 @@ const { hasPermission } = usePermissions()
 const search = ref(props.filters.search ?? '')
 const estado = ref(props.filters.estado ?? '')
 const proveedor = ref(props.filters.proveedor ?? '')
+const tipoAnmat = ref(props.filters.tipo_anmat ?? '')
+
+/** Centinela del backend: "sin tipo" no es lo mismo que "sin filtro". */
+const SIN_TIPO_ANMAT = 'sin_tipo'
 
 const filtrosVigentes = () => ({
     search: search.value,
     estado: estado.value,
     proveedor: proveedor.value,
+    tipo_anmat: tipoAnmat.value,
 })
+
+/** El código crudo si RP usa uno que todavía no está en el catálogo. */
+const etiquetaTipo = (a: Articulo) =>
+    a.tipo_anmat ? (props.tiposAnmat[a.tipo_anmat] ?? a.tipo_anmat) : '—'
 
 const { orden, ordenarPor, paramsDeOrden } = useOrdenamiento({
     ruta: 'articulos.index',
@@ -52,7 +63,7 @@ const { orden, ordenarPor, paramsDeOrden } = useOrdenamiento({
     // Texto A→Z. Estado, proveedor y vencimiento arrancan al revés: lo que se
     // busca es "los discontinuados", "los que ya tienen proveedor" y "lo que
     // vence primero".
-    ascendentesPorDefecto: ['codigo', 'descripcion', 'pm', 'legajo', 'vencimiento'],
+    ascendentesPorDefecto: ['codigo', 'descripcion', 'pm', 'tipo', 'legajo', 'vencimiento'],
 })
 
 // El link a la ficha se lleva la página y los filtros vigentes, para que
@@ -77,12 +88,13 @@ watch(search, () => {
     debounce = setTimeout(recargar, 350)
 })
 
-watch([estado, proveedor], recargar)
+watch([estado, proveedor, tipoAnmat], recargar)
 
 const urlExportar = computed(() => route('articulos.export', {
     search: search.value || undefined,
     estado: estado.value || undefined,
     proveedor: proveedor.value || undefined,
+    tipo_anmat: tipoAnmat.value || undefined,
     // El Excel baja en el orden de la pantalla: "lo que ves es lo que baja".
     ...paramsDeOrden.value,
 }))
@@ -210,6 +222,13 @@ const submitImport = () => {
                         <option value="con">Con proveedor</option>
                     </Select>
                 </div>
+                <div class="w-56">
+                    <Select v-model="tipoAnmat">
+                        <option value="">Todos los tipos ANMAT</option>
+                        <option v-for="(label, codigo) in tiposAnmat" :key="codigo" :value="codigo">{{ label }}</option>
+                        <option :value="SIN_TIPO_ANMAT">Sin tipo en el ERP</option>
+                    </Select>
+                </div>
             </div>
 
             <!--
@@ -249,6 +268,7 @@ const submitImport = () => {
                                 <ThOrdenable campo="estado" :orden="orden" @ordenar="ordenarPor">Estado</ThOrdenable>
                                 <ThOrdenable campo="proveedor" :orden="orden" @ordenar="ordenarPor">Proveedor</ThOrdenable>
                                 <ThOrdenable campo="pm" :orden="orden" @ordenar="ordenarPor">PM</ThOrdenable>
+                                <ThOrdenable campo="tipo" :orden="orden" @ordenar="ordenarPor">Tipo ANMAT</ThOrdenable>
                                 <ThOrdenable campo="legajo" :orden="orden" @ordenar="ordenarPor">Legajo</ThOrdenable>
                                 <ThOrdenable campo="vencimiento" :orden="orden" @ordenar="ordenarPor">Vencimiento</ThOrdenable>
                                 <!-- Texto libre largo: ordenarlo no responde ninguna pregunta. -->
@@ -258,7 +278,7 @@ const submitImport = () => {
                         </thead>
                         <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
                             <tr v-if="articulos.data.length === 0">
-                                <td colspan="9" class="px-4 py-12 text-center text-sm text-gray-400">
+                                <td colspan="10" class="px-4 py-12 text-center text-sm text-gray-400">
                                     <template v-if="search">
                                         No se encontraron artículos para "<span class="font-medium">{{ search }}</span>".
                                     </template>
@@ -286,6 +306,7 @@ const submitImport = () => {
                                 </td>
                                 <td class="max-w-52 truncate px-4 py-3.5 text-theme-xs text-gray-600 dark:text-gray-300">{{ articulo.proveedor?.razon_social ?? '—' }}</td>
                                 <td class="px-4 py-3.5 text-theme-xs text-gray-600 dark:text-gray-300">{{ articulo.pm ?? '—' }}</td>
+                                <td class="px-4 py-3.5 text-theme-xs text-gray-500 dark:text-gray-400">{{ etiquetaTipo(articulo) }}</td>
                                 <td class="px-4 py-3.5 text-theme-xs text-gray-600 dark:text-gray-300">{{ articulo.legajo ?? '—' }}</td>
                                 <td class="px-4 py-3.5 text-theme-xs text-gray-500 dark:text-gray-400">{{ formatFecha(articulo.fecha_vencimiento) }}</td>
                                 <td class="max-w-60 truncate px-4 py-3.5 text-theme-xs text-gray-500 dark:text-gray-400">{{ articulo.observaciones ?? '—' }}</td>
@@ -330,6 +351,7 @@ const submitImport = () => {
                             </DataRow>
                             <DataRow label="Proveedor">{{ articulo.proveedor?.razon_social ?? '—' }}</DataRow>
                             <DataRow label="PM">{{ articulo.pm ?? '—' }}</DataRow>
+                            <DataRow label="Tipo ANMAT">{{ etiquetaTipo(articulo) }}</DataRow>
                             <DataRow label="Legajo">{{ articulo.legajo ?? '—' }}</DataRow>
                             <DataRow label="Vencimiento">{{ formatFecha(articulo.fecha_vencimiento) }}</DataRow>
                             <DataRow label="Observaciones">{{ articulo.observaciones ?? '—' }}</DataRow>

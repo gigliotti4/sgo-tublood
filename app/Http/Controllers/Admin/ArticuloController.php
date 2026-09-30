@@ -19,6 +19,9 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ArticuloController extends Controller
 {
+    /** Valor del filtro de tipo que significa "los que el ERP no clasificó". */
+    private const SIN_TIPO_ANMAT = 'sin_tipo';
+
     use OrdenaListados, VuelveAlListado;
 
     /**
@@ -53,6 +56,7 @@ class ArticuloController extends Controller
                 $dir,
             ),
             'pm' => 'articulos.pm',
+            'tipo' => 'articulos.tipo_anmat',
             'legajo' => 'articulos.legajo',
             'vencimiento' => 'articulos.fecha_vencimiento',
         ];
@@ -66,6 +70,7 @@ class ArticuloController extends Controller
         $estado = $request->string('estado')->trim()->value();
 
         $proveedor = $request->string('proveedor')->trim()->value();
+        $tipoAnmat = $request->string('tipo_anmat')->trim()->value();
 
         // Sin `orderBy` acá: lo resuelve `filtrados()`, que es lo que hace que
         // el export herede el mismo orden.
@@ -75,8 +80,10 @@ class ArticuloController extends Controller
 
         return inertia('Admin/Articulos/Index', [
             'articulos' => $articulos,
-            'filters' => ['search' => $search, 'estado' => $estado, 'proveedor' => $proveedor],
+            'filters' => ['search' => $search, 'estado' => $estado, 'proveedor' => $proveedor, 'tipo_anmat' => $tipoAnmat],
             'orden' => $this->orden($request, $this->ordenables()),
+            // El catálogo de RP, para el filtro y para ponerle nombre al código.
+            'tiposAnmat' => config('articulos.tipos_anmat'),
             'lastSync' => $lastSync,
             // Sin filtrar: el paginador ya trae el total de la búsqueda vigente.
             'total' => Articulo::count(),
@@ -113,6 +120,7 @@ class ArticuloController extends Controller
         $search = $request->string('search')->trim()->value();
         $estado = $request->string('estado')->trim()->value();
         $proveedor = $request->string('proveedor')->trim()->value();
+        $tipoAnmat = $request->string('tipo_anmat')->trim()->value();
 
         $query = Articulo::query()
             ->with('proveedor:id,numero,razon_social')
@@ -125,7 +133,18 @@ class ArticuloController extends Controller
             // filtro solo — bajar la lista de pendientes sale gratis.
             ->when($proveedor, fn ($q) => $proveedor === 'sin'
                 ? $q->whereNull('proveedor_id')
-                : $q->whereNotNull('proveedor_id'));
+                : $q->whereNotNull('proveedor_id'))
+            // El tipo que le pone ANMAT, de `ARTICULOS.ID_ARTI_TIPO`. El
+            // centinela hace falta porque el filtro viaja como texto y la
+            // ausencia se expresa con `null`: sin él, "sin tipo" y "sin filtro"
+            // serían la misma cadena vacía. Mismo criterio que en Proveedores.
+            //
+            // Un código que no esté en el catálogo de config no se valida
+            // contra nada: si RP agrega uno, filtrarlo por URL tiene que seguir
+            // funcionando aunque todavía no tenga etiqueta.
+            ->when($tipoAnmat, fn ($q) => $tipoAnmat === self::SIN_TIPO_ANMAT
+                ? $q->whereNull('tipo_anmat')
+                : $q->where('tipo_anmat', $tipoAnmat));
 
         return $this->aplicarOrden(
             $query,

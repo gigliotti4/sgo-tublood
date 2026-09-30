@@ -88,6 +88,76 @@ class ArticuloControllerTest extends TestCase
         Queue::assertPushed(SyncArticulosJob::class);
     }
 
+    // ── Filtro por el tipo que le pone ANMAT (ID_ARTI_TIPO) ─────────────────
+
+    public function test_filtra_por_el_tipo_de_anmat(): void
+    {
+        Articulo::create(['codigo' => 'RE-1631', 'descripcion' => 'AGUJA', 'tipo_anmat' => 'PM']);
+        Articulo::create(['codigo' => 'RE-999', 'descripcion' => 'GASA', 'tipo_anmat' => 'PMV']);
+        $user = $this->userWith('articulos.view');
+
+        $this->actingAs($user)
+            ->get('/articulos?tipo_anmat=PM')
+            ->assertInertia(fn ($page) => $page
+                ->has('articulos.data', 1)
+                ->where('articulos.data.0.codigo', 'RE-1631'));
+    }
+
+    /**
+     * ⚠️ "Sin tipo" necesita un centinela propio: con la cadena vacía sería
+     * indistinguible de "sin filtro" y devolvería el catálogo entero. En
+     * producción son 415 de 738, así que el filtro se usa.
+     */
+    public function test_el_centinela_sin_tipo_trae_los_que_el_erp_no_clasifico(): void
+    {
+        Articulo::create(['codigo' => 'RE-1631', 'descripcion' => 'AGUJA', 'tipo_anmat' => 'PM']);
+        Articulo::create(['codigo' => 'RE-999', 'descripcion' => 'GASA', 'tipo_anmat' => null]);
+        $user = $this->userWith('articulos.view');
+
+        $this->actingAs($user)
+            ->get('/articulos?tipo_anmat=sin_tipo')
+            ->assertInertia(fn ($page) => $page
+                ->has('articulos.data', 1)
+                ->where('articulos.data.0.codigo', 'RE-999'));
+    }
+
+    /** El catálogo es de RP: un código nuevo tiene que poder filtrarse igual. */
+    public function test_un_tipo_fuera_del_catalogo_igual_filtra(): void
+    {
+        Articulo::create(['codigo' => 'RE-1631', 'descripcion' => 'AGUJA', 'tipo_anmat' => 'XX']);
+        Articulo::create(['codigo' => 'RE-999', 'descripcion' => 'GASA', 'tipo_anmat' => 'PM']);
+        $user = $this->userWith('articulos.view');
+
+        $this->actingAs($user)
+            ->get('/articulos?tipo_anmat=XX')
+            ->assertInertia(fn ($page) => $page
+                ->has('articulos.data', 1)
+                ->where('articulos.data.0.codigo', 'RE-1631'));
+    }
+
+    public function test_el_listado_manda_el_catalogo_de_tipos(): void
+    {
+        $this->actingAs($this->userWith('articulos.view'))
+            ->get('/articulos')
+            ->assertInertia(fn ($page) => $page->where('tiposAnmat.PM', 'Producto Medico'));
+    }
+
+    /** El Excel baja lo mismo que se ve: mismo criterio que el resto de filtros. */
+    public function test_exportar_respeta_el_filtro_de_tipo(): void
+    {
+        Articulo::create(['codigo' => 'RE-1631', 'descripcion' => 'AGUJA', 'tipo_anmat' => 'PM']);
+        Articulo::create(['codigo' => 'RE-999', 'descripcion' => 'GASA', 'tipo_anmat' => 'PMV']);
+
+        $response = $this->actingAs($this->userWith('articulos.view'))
+            ->get('/articulos/export?tipo_anmat=PM');
+
+        $response->assertOk();
+        $filas = $this->filasDelExcel($response);
+
+        $this->assertCount(2, $filas, 'Encabezado + un solo artículo.');
+        $this->assertSame('RE-1631', $filas[1][0]);
+    }
+
     public function test_edit_requiere_permiso_articulos_edit(): void
     {
         $articulo = Articulo::create(['codigo' => 'RE-1631', 'descripcion' => 'AGUJA 40/12 TERUMO']);
