@@ -5,6 +5,8 @@ import { route } from 'ziggy-js'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import Button from '@/Components/Button.vue'
 import Modal from '@/Components/Modal.vue'
+import Input from '@/Components/Input.vue'
+import Textarea from '@/Components/Textarea.vue'
 import AdjuntosObservacion from '@/Components/AdjuntosObservacion.vue'
 import BitacoraObservacion from '@/Components/BitacoraObservacion.vue'
 import Badge from '@/Components/Badge.vue'
@@ -21,6 +23,8 @@ const props = defineProps<{
     prioridades: Record<string, string>
     /** Viene de ObservacionPolicy: solo el responsable asignado (o super-admin). */
     puedeEditar: boolean
+    /** Corregir el texto del reclamo. Más angosto que `puedeEditar`: solo super-admin. */
+    puedeEditarContenido: boolean
     /** Escalar a un desvío pide `nc.create` **y** poder gestionar este caso. */
     puedeDerivarANc: boolean
     estadosNc: Record<string, string>
@@ -37,6 +41,35 @@ const formatFecha = (d: string | null) =>
  */
 const mostrarDerivar = ref(false)
 const derivarForm = useForm({})
+
+/**
+ * Corregir el texto del reclamo.
+ *
+ * ⚠️ Va en un modal aparte y no en el modal de gestión del listado a propósito:
+ * son dos permisos distintos (acá, solo super-admin) y dos cosas distintas.
+ * Reescribir lo que reportó el cliente no es gestionar el caso.
+ */
+const mostrarEditarTexto = ref(false)
+const textoForm = useForm({
+    titulo: props.observacion.titulo,
+    descripcion: props.observacion.descripcion,
+})
+
+const abrirEditarTexto = () => {
+    // Se recarga desde las props en cada apertura: si alguien cancela después
+    // de escribir, la próxima vez tiene que ver lo guardado, no su borrador.
+    textoForm.titulo = props.observacion.titulo
+    textoForm.descripcion = props.observacion.descripcion
+    textoForm.clearErrors()
+    mostrarEditarTexto.value = true
+}
+
+const guardarTexto = () => {
+    textoForm.put(route('observaciones.contenido', { observacion: props.observacion.id }), {
+        preserveScroll: true,
+        onSuccess: () => { mostrarEditarTexto.value = false },
+    })
+}
 
 const derivarANc = () => {
     derivarForm.post(route('observaciones.derivar-a-nc', props.observacion.id), {
@@ -174,7 +207,17 @@ const humanizar = (clave: string) =>
                         </div>
                     </dl>
                     <div class="mt-4">
-                        <p class="text-theme-xs font-medium uppercase tracking-wide text-gray-400">Descripción</p>
+                        <div class="flex items-start justify-between gap-3">
+                            <p class="text-theme-xs font-medium uppercase tracking-wide text-gray-400">Descripción</p>
+                            <button
+                                v-if="puedeEditarContenido"
+                                type="button"
+                                class="shrink-0 text-theme-xs font-medium text-brand-500 transition-colors hover:text-brand-600 dark:text-brand-300"
+                                @click="abrirEditarTexto"
+                            >
+                                Corregir texto
+                            </button>
+                        </div>
                         <p class="mt-1 whitespace-pre-line text-sm text-gray-600 dark:text-gray-300">{{ observacion.descripcion }}</p>
                     </div>
                 </div>
@@ -413,6 +456,34 @@ const humanizar = (clave: string) =>
                     <Button :disabled="derivarForm.processing" @click="derivarANc">Derivar</Button>
                 </div>
             </div>
+        </Modal>
+
+        <!--
+            Corregir el texto del reclamo. El aviso no es decorativo: la
+            descripción suele ser lo que escribió el cliente, y quien corrige
+            tiene que saber que queda registrado con el texto original entero.
+        -->
+        <Modal :show="mostrarEditarTexto" size="lg" title="Corregir el texto de la observación" @close="mostrarEditarTexto = false">
+            <form class="space-y-4" @submit.prevent="guardarTexto">
+                <p class="rounded-lg bg-warning-50 px-3 py-2 text-theme-xs text-warning-700 dark:bg-warning-500/10 dark:text-warning-400">
+                    La descripción suele ser lo que escribió el cliente. La corrección queda en la
+                    bitácora junto con el texto original, y no se puede borrar.
+                </p>
+                <Input v-model="textoForm.titulo" label="Título" required :error="textoForm.errors.titulo" />
+                <Textarea
+                    v-model="textoForm.descripcion"
+                    label="Descripción"
+                    :rows="8"
+                    required
+                    :error="textoForm.errors.descripcion"
+                />
+                <div class="flex justify-end gap-3">
+                    <Button variant="outline" type="button" @click="mostrarEditarTexto = false">Cancelar</Button>
+                    <Button type="submit" :disabled="textoForm.processing">
+                        {{ textoForm.processing ? 'Guardando...' : 'Guardar corrección' }}
+                    </Button>
+                </div>
+            </form>
         </Modal>
     </AppLayout>
 </template>

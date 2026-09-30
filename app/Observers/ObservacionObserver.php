@@ -248,6 +248,24 @@ class ObservacionObserver
             ]);
         }
 
+        // El texto del reclamo. Solo lo corrige un super-admin (ver
+        // ObservacionPolicy::editarContenido) y queda el valor viejo entero:
+        // la descripción suele ser lo que escribió el cliente.
+        if ($observacion->wasChanged('titulo') || $observacion->wasChanged('descripcion')) {
+            $cambios = [];
+
+            foreach (['titulo', 'descripcion'] as $campo) {
+                if ($observacion->wasChanged($campo)) {
+                    $cambios[$campo] = [
+                        'de' => (string) $observacion->getOriginal($campo),
+                        'a' => (string) $observacion->{$campo},
+                    ];
+                }
+            }
+
+            $this->registrar($observacion, ObservationHistory::ACCION_CONTENIDO, $cambios);
+        }
+
         // Prioridad y tipo de caso van juntos: así se cargan en el formulario de
         // clasificación, y separarlos en dos entradas no aporta nada al relato.
         if ($observacion->wasChanged('prioridad') || $observacion->wasChanged('tipo_caso')) {

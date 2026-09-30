@@ -14,6 +14,8 @@ export interface CambioSimple { de: string; a: string }
 export interface CambioClasificacion { prioridad: CambioSimple; tipo_caso: CambioSimple }
 export interface CambioNotificados { sumados: string[]; sacados: string[] }
 export interface CambioBaja { tipo: 'cancelacion' | 'borrado' }
+/** Solo los campos que cambiaron, con el texto viejo y el nuevo completos. */
+export interface CambioContenido { titulo?: CambioSimple; descripcion?: CambioSimple }
 
 export const esClasificacion = (
     entrada: ObservationHistoryEntry,
@@ -28,6 +30,10 @@ export const esBaja = (
     entrada: ObservationHistoryEntry,
 ): entrada is ObservationHistoryEntry & { cambios: CambioBaja } => entrada.accion === 'baja'
 
+export const esContenido = (
+    entrada: ObservationHistoryEntry,
+): entrada is ObservationHistoryEntry & { cambios: CambioContenido } => entrada.accion === 'contenido'
+
 export const comoCambioSimple = (cambios: ObservationHistoryEntry['cambios']): CambioSimple | null =>
     cambios && 'de' in cambios && 'a' in cambios ? (cambios as unknown as CambioSimple) : null
 
@@ -37,6 +43,7 @@ export const accionLabels: Record<string, string> = {
     responsable: 'Cambio de responsable',
     sector: 'Derivación de sector',
     clasificacion: 'Clasificación',
+    contenido: 'Corrección del texto',
     adjunto: 'Archivo adjunto',
     notificados: 'Usuarios a notificar',
     sistema: 'Sistema',
@@ -50,6 +57,7 @@ export const accionVariant: Record<string, 'slate' | 'blue' | 'indigo' | 'purple
     responsable: 'indigo',
     sector: 'purple',
     clasificacion: 'blue',
+    contenido: 'amber',
     adjunto: 'slate',
     notificados: 'emerald',
     sistema: 'slate',

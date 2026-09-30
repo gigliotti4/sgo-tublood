@@ -1413,4 +1413,136 @@ class ObservacionAdminTest extends TestCase
             ->get("/observaciones/{$observacion->id}/pdf")
             ->assertOk();
     }
+
+    // ── Corrección del texto del reclamo (solo super-admin) ─────────────────
+
+    private function superAdmin(): User
+    {
+        $user = User::factory()->create();
+        Role::firstOrCreate(['name' => 'super-admin', 'guard_name' => 'web']);
+        $user->assignRole('super-admin');
+
+        return $user;
+    }
+
+    public function test_un_super_admin_corrige_el_titulo_y_la_descripcion(): void
+    {
+        $observacion = $this->observacion(['titulo' => 'Titulo con herror', 'descripcion' => 'Texto viejo']);
+
+        $this->actingAs($this->superAdmin())
+            ->put("/observaciones/{$observacion->id}/contenido", [
+                'titulo' => 'Título corregido',
+                'descripcion' => 'Texto nuevo',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $observacion->refresh();
+        $this->assertSame('Título corregido', $observacion->titulo);
+        $this->assertSame('Texto nuevo', $observacion->descripcion);
+    }
+
+    /**
+     * ⚠️ El corazón de la función: la corrección **deja el texto original
+     * entero** en la bitácora. La descripción suele ser lo que escribió el
+     * cliente, y si se pudiera reescribir sin rastro, el reclamo tal como entró
+     * dejaría de existir.
+     */
+    public function test_la_correccion_deja_el_texto_original_en_la_bitacora(): void
+    {
+        $observacion = $this->observacion(['titulo' => 'Titulo con herror', 'descripcion' => 'Lo que dijo el cliente']);
+
+        $this->actingAs($this->superAdmin())
+            ->put("/observaciones/{$observacion->id}/contenido", [
+                'titulo' => 'Título corregido',
+                'descripcion' => 'Lo que dijo el cliente, redactado',
+            ]);
+
+        $entrada = $observacion->historial()
+            ->where('accion', ObservationHistory::ACCION_CONTENIDO)
+            ->firstOrFail();
+
+        $this->assertSame('Titulo con herror', $entrada->cambios['titulo']['de']);
+        $this->assertSame('Título corregido', $entrada->cambios['titulo']['a']);
+        $this->assertSame('Lo que dijo el cliente', $entrada->cambios['descripcion']['de']);
+        $this->assertSame('Lo que dijo el cliente, redactado', $entrada->cambios['descripcion']['a']);
+    }
+
+    /** Solo se registra lo que cambió: guardar sin tocar nada no ensucia el historial. */
+    public function test_solo_registra_el_campo_que_cambio(): void
+    {
+        $observacion = $this->observacion(['titulo' => 'Título', 'descripcion' => 'Descripción']);
+
+        $this->actingAs($this->superAdmin())
+            ->put("/observaciones/{$observacion->id}/contenido", [
+                'titulo' => 'Título nuevo',
+                'descripcion' => 'Descripción',
+            ]);
+
+        $entrada = $observacion->historial()
+            ->where('accion', ObservationHistory::ACCION_CONTENIDO)
+            ->firstOrFail();
+
+        $this->assertArrayHasKey('titulo', $entrada->cambios);
+        $this->assertArrayNotHasKey('descripcion', $entrada->cambios);
+    }
+
+    public function test_guardar_sin_cambiar_nada_no_deja_entrada(): void
+    {
+        $observacion = $this->observacion(['titulo' => 'Título', 'descripcion' => 'Descripción']);
+
+        $this->actingAs($this->superAdmin())
+            ->put("/observaciones/{$observacion->id}/contenido", [
+                'titulo' => 'Título',
+                'descripcion' => 'Descripción',
+            ]);
+
+        $this->assertSame(0, $observacion->historial()
+            ->where('accion', ObservationHistory::ACCION_CONTENIDO)->count());
+    }
+
+    /**
+     * ⚠️ Lo que este endpoint NO es: el responsable del caso gestiona el caso,
+     * pero no reescribe lo que reportó el cliente. Sin este test, alguien podría
+     * "unificar" esta habilidad con `update` y ensanchar el permiso sin querer.
+     */
+    public function test_el_responsable_del_caso_no_puede_corregir_el_texto(): void
+    {
+        $responsable = $this->userWith('observaciones.view', 'observaciones.edit');
+        $observacion = $this->observacion([
+            'titulo' => 'Título original',
+            'responsable_id' => $responsable->id,
+        ]);
+
+        $this->actingAs($responsable)
+            ->put("/observaciones/{$observacion->id}/contenido", [
+                'titulo' => 'Intento de corrección',
+                'descripcion' => 'Texto nuevo',
+            ])
+            ->assertStatus(403);
+
+        $this->assertSame('Título original', $observacion->fresh()->titulo);
+    }
+
+    public function test_el_texto_corregido_se_valida_igual_que_en_el_alta(): void
+    {
+        $observacion = $this->observacion();
+
+        $this->actingAs($this->superAdmin())
+            ->put("/observaciones/{$observacion->id}/contenido", ['titulo' => '', 'descripcion' => ''])
+            ->assertSessionHasErrors(['titulo', 'descripcion']);
+    }
+
+    /** La ficha dice si el usuario puede corregir: el botón no se dibuja si no. */
+    public function test_la_ficha_informa_si_se_puede_corregir_el_texto(): void
+    {
+        $observacion = $this->observacion();
+
+        $this->actingAs($this->superAdmin())
+            ->get("/observaciones/{$observacion->id}")
+            ->assertInertia(fn ($page) => $page->where('puedeEditarContenido', true));
+
+        $this->actingAs($this->userWith('observaciones.view'))
+            ->get("/observaciones/{$observacion->id}")
+            ->assertInertia(fn ($page) => $page->where('puedeEditarContenido', false));
+    }
 }

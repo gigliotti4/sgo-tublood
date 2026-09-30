@@ -9,7 +9,7 @@ import Pagination from '@/Components/Pagination.vue'
 import Select from '@/Components/Select.vue'
 import TableCard from '@/Components/TableCard.vue'
 import DataRow from '@/Components/DataRow.vue'
-import { accionLabels, accionVariant, comoCambioSimple, esBaja, esClasificacion, esNotificados, formatFechaHora, formatSize, nombreAutor } from '@/lib/bitacora'
+import { accionLabels, accionVariant, comoCambioSimple, esBaja, esClasificacion, esContenido, esNotificados, formatFechaHora, formatSize, nombreAutor } from '@/lib/bitacora'
 import ThOrdenable from '@/Components/ThOrdenable.vue'
 import { useOrdenamiento, type OrdenVigente } from '@/composables/useOrdenamiento'
 import type { ObservationHistoryEntry, PaginatedData } from '@/types'
@@ -195,6 +195,15 @@ const limpiarFiltros = () => {
                                         <p>Prioridad: {{ entrada.cambios.prioridad.de }} → {{ entrada.cambios.prioridad.a }}</p>
                                         <p>Tipo de caso: {{ entrada.cambios.tipo_caso.de }} → {{ entrada.cambios.tipo_caso.a }}</p>
                                     </div>
+                                    <!--
+                                        Acá solo se dice QUÉ se corrigió, no el
+                                        texto viejo: es un listado transversal y
+                                        una descripción entera lo haría ilegible.
+                                        El original completo está en la ficha.
+                                    -->
+                                    <p v-else-if="esContenido(entrada)">
+                                        Se corrigió {{ [entrada.cambios.titulo && 'el título', entrada.cambios.descripcion && 'la descripción'].filter(Boolean).join(' y ') }}
+                                    </p>
                                     <div v-else-if="esNotificados(entrada)" class="space-y-0.5">
                                         <p v-if="entrada.cambios.sumados.length">Se sumó a {{ entrada.cambios.sumados.join(', ') }}</p>
                                         <p v-if="entrada.cambios.sacados.length">Se sacó a {{ entrada.cambios.sacados.join(', ') }}</p>

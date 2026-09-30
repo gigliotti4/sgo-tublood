@@ -5,7 +5,7 @@ import Badge from '@/Components/Badge.vue'
 import Button from '@/Components/Button.vue'
 import Icon from '@/Components/Icon.vue'
 import Textarea from '@/Components/Textarea.vue'
-import { accionLabels, accionVariant, comoCambioSimple, esBaja, esClasificacion, esNotificados, formatFechaHora, formatSize, nombreAutor } from '@/lib/bitacora'
+import { accionLabels, accionVariant, comoCambioSimple, esBaja, esClasificacion, esContenido, esNotificados, formatFechaHora, formatSize, nombreAutor } from '@/lib/bitacora'
 import { erroresDeArchivos } from '@/lib/errores'
 import type { ObservationHistoryEntry } from '@/types'
 
@@ -106,6 +106,24 @@ const enviar = () => {
                     <div>
                         Tipo de caso: de <span class="font-medium text-gray-800 dark:text-white/90">{{ entrada.cambios.tipo_caso.de }}</span>
                         a <span class="font-medium text-gray-800 dark:text-white/90">{{ entrada.cambios.tipo_caso.a }}</span>
+                    </div>
+                </dl>
+
+                <!--
+                    Corrección del texto. Se muestra el original completo y no
+                    un resumen: es la única forma de saber qué decía el reclamo
+                    antes de que alguien lo corrigiera.
+                -->
+                <dl v-else-if="esContenido(entrada)" class="mt-2 space-y-2 text-theme-sm">
+                    <div v-if="entrada.cambios.titulo">
+                        <dt class="text-theme-xs uppercase tracking-wide text-gray-400">Título</dt>
+                        <dd class="text-gray-400 line-through">{{ entrada.cambios.titulo.de }}</dd>
+                        <dd class="font-medium text-gray-800 dark:text-white/90">{{ entrada.cambios.titulo.a }}</dd>
+                    </div>
+                    <div v-if="entrada.cambios.descripcion">
+                        <dt class="text-theme-xs uppercase tracking-wide text-gray-400">Descripción</dt>
+                        <dd class="whitespace-pre-line text-gray-400 line-through">{{ entrada.cambios.descripcion.de }}</dd>
+                        <dd class="mt-1 whitespace-pre-line font-medium text-gray-800 dark:text-white/90">{{ entrada.cambios.descripcion.a }}</dd>
                     </div>
                 </dl>
 

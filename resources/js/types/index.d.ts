@@ -532,7 +532,7 @@ export interface ObservationAttachment {
  */
 export interface ObservationHistoryEntry {
     id: number
-    accion: 'comentario' | 'estado' | 'responsable' | 'sector' | 'clasificacion' | 'adjunto' | 'notificados' | 'sistema' | 'baja' | 'restauracion'
+    accion: 'comentario' | 'estado' | 'responsable' | 'sector' | 'clasificacion' | 'contenido' | 'adjunto' | 'notificados' | 'sistema' | 'baja' | 'restauracion'
     nota: string | null
     /** Forma según `accion`: `{de, a}` para estado/responsable/sector, `{prioridad: {de,a}, tipo_caso: {de,a}}` para clasificacion. */
     cambios: Record<string, unknown> | null

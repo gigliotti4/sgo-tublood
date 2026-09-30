@@ -28,6 +28,18 @@ class ObservationHistory extends Model
 
     public const ACCION_CLASIFICACION = 'clasificacion';
 
+    /**
+     * Corrección del texto del reclamo (título y/o descripción).
+     *
+     * ⚠️ `cambios` guarda el valor **viejo y el nuevo completos**, solo de los
+     * campos que cambiaron: `['titulo' => ['de' => ..., 'a' => ...], ...]`. No
+     * es verborragia — la descripción suele ser lo que escribió el cliente, y
+     * si se pudiera reescribir sin dejar el original, el reclamo tal como entró
+     * dejaría de existir. Por eso esta acción es la única que duplica texto
+     * largo en la bitácora.
+     */
+    public const ACCION_CONTENIDO = 'contenido';
+
     public const ACCION_ADJUNTO = 'adjunto';
 
     public const ACCION_NOTIFICADOS = 'notificados';
@@ -45,6 +57,7 @@ class ObservationHistory extends Model
         self::ACCION_RESPONSABLE,
         self::ACCION_SECTOR,
         self::ACCION_CLASIFICACION,
+        self::ACCION_CONTENIDO,
         self::ACCION_ADJUNTO,
         self::ACCION_NOTIFICADOS,
         self::ACCION_SISTEMA,
@@ -63,6 +76,7 @@ class ObservationHistory extends Model
         self::ACCION_RESPONSABLE => 'Cambio de responsable',
         self::ACCION_SECTOR => 'Derivación de sector',
         self::ACCION_CLASIFICACION => 'Clasificación',
+        self::ACCION_CONTENIDO => 'Corrección del texto',
         self::ACCION_ADJUNTO => 'Archivo adjunto',
         self::ACCION_NOTIFICADOS => 'Usuarios a notificar',
         self::ACCION_SISTEMA => 'Sistema',

@@ -314,6 +314,9 @@ class ObservacionController extends Controller
             'tipoLabels' => TaxonomiaIncidencias::etiquetasTipos(),
             'prioridades' => config('incidencias.prioridades'),
             'puedeEditar' => $request->user()?->can('update', $observacion) ?? false,
+            // Corregir el texto del reclamo es más angosto que gestionar el
+            // caso: en los hechos solo super-admin. Ver la Policy.
+            'puedeEditarContenido' => $request->user()?->can('editarContenido', $observacion) ?? false,
             // Escalar a un desvío pide las dos cosas: poder crear una NC y
             // poder gestionar ESTA observación. La Policy lo vuelve a chequear.
             'puedeDerivarANc' => ($request->user()?->can('nc.create') ?? false)
@@ -909,6 +912,42 @@ class ObservacionController extends Controller
         // que no lo manda) `back()` devolvería a `/`.
         return back(fallback: route('observaciones.index'))
             ->with('success', 'Observación actualizada correctamente.');
+    }
+
+    /**
+     * Corrige el texto del reclamo: título y descripción.
+     *
+     * ⚠️ **Solo super-admin**, y va por una ruta propia en vez de sumarse a
+     * `update()`. Aquélla es gestionar el caso —reasignar, reclasificar, mover
+     * el estado— y la tiene el responsable asignado; ésta reescribe lo que
+     * reportó el cliente, que es otra cosa y merece otra llave. Ver
+     * `ObservacionPolicy::editarContenido()`.
+     *
+     * No hace falta escribir la bitácora acá: `titulo` y `descripcion` son
+     * columnas del modelo, así que `ObservacionObserver` ve el cambio solo y
+     * deja la entrada con el valor viejo entero. Es la diferencia con
+     * `sincronizarNotificados()`, que sí la escribe a mano porque `sync()`
+     * sobre una relación no dispara el evento `updated`.
+     *
+     * ⚠️ El `tipo` queda afuera a propósito: decide el sector, el destinatario
+     * de los avisos y si la observación puede tener productos cargados.
+     * Cambiarlo es reencuadrar el caso, no corregir un texto.
+     */
+    public function actualizarContenido(Request $request, Observacion $observacion)
+    {
+        $this->authorize('editarContenido', $observacion);
+
+        // Mismas reglas que el alta: una corrección no puede dejar el caso en
+        // un estado que el formulario original no habría aceptado.
+        $observacion->update($request->validate([
+            'titulo' => ['required', 'string', 'max:255'],
+            'descripcion' => ['required', 'string'],
+        ]));
+
+        // `back()`: esto se dispara desde la ficha del caso, y corregir un typo
+        // no tiene por qué sacarte de la pantalla que estabas mirando.
+        return back(fallback: route('observaciones.show', $observacion))
+            ->with('success', 'Texto de la observación corregido.');
     }
 
     /**

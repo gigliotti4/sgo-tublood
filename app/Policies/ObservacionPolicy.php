@@ -35,4 +35,25 @@ class ObservacionPolicy
 
         return $user->id === $observacion->responsable_id;
     }
+
+    /**
+     * Corregir el **texto** del reclamo: título y descripción.
+     *
+     * Devuelve `false` para todos a propósito: el único que pasa es el
+     * super-admin, por el bypass de `Gate::before`. Es el mismo molde que
+     * `NoConformidadPolicy::reabrir()` y `::cancelar()`, y por el mismo motivo
+     * — que no parezca parte del flujo normal de gestión del caso.
+     *
+     * ⚠️ **No es lo mismo que `update()`**, que es gestionar el caso (reasignar,
+     * reclasificar, cambiar estado) y sí tiene el responsable. Acá se reescribe
+     * lo que reportó el cliente, que en un sistema de calidad es evidencia: por
+     * eso el cambio queda en la bitácora con el valor original entero, y por
+     * eso la habilidad es más angosta que la de gestión.
+     *
+     * Una observación borrada no se corrige: primero se restaura.
+     */
+    public function editarContenido(User $user, Observacion $observacion): bool
+    {
+        return false;
+    }
 }

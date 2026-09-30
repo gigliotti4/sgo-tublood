@@ -224,6 +224,13 @@ Route::middleware(['auth'])->group(function () {
         // Comentar en la bitácora usa la misma regla, sin excepción para notificados ni sector.
         Route::put('/observaciones/{observacion}', [AdminObservacionController::class, 'update'])
             ->middleware('can:update,observacion')->name('observaciones.update');
+        // Corregir el texto del reclamo (título y descripción): **solo
+        // super-admin**, vía el bypass de Gate::before sobre una habilidad que
+        // devuelve false para todos. Va aparte de `update` a propósito: aquélla
+        // es gestionar el caso y la tiene el responsable; ésta reescribe lo que
+        // reportó el cliente. Ver ObservacionPolicy::editarContenido().
+        Route::put('/observaciones/{observacion}/contenido', [AdminObservacionController::class, 'actualizarContenido'])
+            ->middleware('can:editarContenido,observacion')->name('observaciones.contenido');
     });
     Route::middleware('can:observaciones.edit')->group(function () {
         // Selector "Crear nuevo registro" (interna / No Conformidad). La externa es solo portal público.
