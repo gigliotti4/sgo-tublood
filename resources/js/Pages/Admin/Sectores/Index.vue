@@ -17,13 +17,13 @@ const props = defineProps<{ sectores: Sector[] }>()
 
 // ── Ordenamiento, en el cliente ─────────────────────────────────────
 //
-// Y no en el servidor como los otros listados: son 9 filas fijas que ya viajan
+// Y no en el servidor como los otros listados: son 10 filas fijas que ya viajan
 // enteras (`SectorController::index()` hace `->get()`, sin paginar), sin
 // filtros ni URL que preservar. Un roundtrip por click sería el único del
 // panel que recarga una tabla que ya está en memoria. Mismo criterio que
 // Compras. El `<th>` sí se comparte: `ThOrdenable` no sabe de Inertia.
 
-type ClaveOrden = 'sector' | 'plazo' | 'usuarios' | 'estado'
+type ClaveOrden = 'sector' | 'plazo' | 'tope' | 'usuarios' | 'estado'
 
 const orden = ref<{ sort: ClaveOrden | null; dir: 'asc' | 'desc' }>({ sort: 'sector', dir: 'asc' })
 
@@ -42,6 +42,9 @@ const valorDeOrden = (s: Sector, clave: ClaveOrden): string | number => {
         // Sin plazo cargado, las observaciones de ese sector nunca alertan: va
         // al fondo en vez de mezclarse con los plazos cortos.
         case 'plazo': return s.dias_gestion ?? Number.MAX_VALUE
+        // Mismo criterio: sin tope cargado, ese sector nunca avisa por
+        // saturación, así que va al fondo y no entre los topes chicos.
+        case 'tope': return s.tope_observaciones ?? Number.MAX_VALUE
         case 'usuarios': return s.usuarios_count ?? 0
         case 'estado': return s.activo ? 1 : 0
     }
@@ -73,6 +76,7 @@ const creando = ref(false)
 const form = useForm({
     nombre: '',
     dias_gestion: null as number | null,
+    tope_observaciones: null as number | null,
     activo: true,
 })
 
@@ -85,6 +89,7 @@ const abrirNueva = () => {
 const abrirEdicion = (sector: Sector) => {
     form.nombre = sector.nombre
     form.dias_gestion = sector.dias_gestion
+    form.tope_observaciones = sector.tope_observaciones
     form.activo = sector.activo
     form.clearErrors()
     editando.value = sector
@@ -140,6 +145,7 @@ const guardar = () => {
                     <tr class="border-b border-gray-100 dark:border-gray-800">
                         <ThOrdenable campo="sector" :orden="orden" pad="px-6" @ordenar="ordenarPor">Sector</ThOrdenable>
                         <ThOrdenable campo="plazo" :orden="orden" pad="px-6" @ordenar="ordenarPor">Plazo de gestión</ThOrdenable>
+                        <ThOrdenable campo="tope" :orden="orden" pad="px-6" @ordenar="ordenarPor">Tope de abiertas</ThOrdenable>
                         <ThOrdenable campo="usuarios" :orden="orden" pad="px-6" @ordenar="ordenarPor">Usuarios</ThOrdenable>
                         <ThOrdenable campo="estado" :orden="orden" pad="px-6" @ordenar="ordenarPor">Estado</ThOrdenable>
                         <ThOrdenable :orden="orden" pad="px-6">Acciones</ThOrdenable>
@@ -151,6 +157,10 @@ const guardar = () => {
                         <td class="px-6 py-3.5 text-theme-sm text-gray-500 dark:text-gray-400">
                             <span v-if="sector.dias_gestion">{{ sector.dias_gestion }} días hábiles</span>
                             <span v-else class="text-warning-600 dark:text-warning-400">sin plazo — no alerta</span>
+                        </td>
+                        <td class="px-6 py-3.5 text-theme-sm text-gray-500 dark:text-gray-400">
+                            <span v-if="sector.tope_observaciones">{{ sector.tope_observaciones }} abiertas</span>
+                            <span v-else class="text-gray-400">sin tope</span>
                         </td>
                         <td class="px-6 py-3.5 text-theme-sm text-gray-500 dark:text-gray-400">{{ sector.usuarios_count ?? 0 }}</td>
                         <td class="px-6 py-3.5">
@@ -172,7 +182,7 @@ const guardar = () => {
                         </td>
                     </tr>
                     <tr v-if="sectores.length === 0">
-                        <td colspan="5" class="px-6 py-10 text-center text-sm text-gray-400">
+                        <td colspan="6" class="px-6 py-10 text-center text-sm text-gray-400">
                             Todavía no hay sectores.
                         </td>
                     </tr>
@@ -182,7 +192,7 @@ const guardar = () => {
 
             <!-- Cards: mismos datos que la tabla, en formato de lista para mobile -->
             <div v-if="sectores.length" class="space-y-3 p-4 md:hidden">
-                <TableCard v-for="sector in sectores" :key="sector.id">
+                <TableCard v-for="sector in sectoresOrdenados" :key="sector.id">
                     <template #header>
                         <div class="flex flex-wrap items-center gap-2">
                             <p class="text-theme-sm font-medium text-gray-800 dark:text-white/90">{{ sector.nombre }}</p>
@@ -205,6 +215,10 @@ const guardar = () => {
                         <DataRow label="Plazo de gestión">
                             <span v-if="sector.dias_gestion">{{ sector.dias_gestion }} días hábiles</span>
                             <span v-else class="text-warning-600 dark:text-warning-400">sin plazo — no alerta</span>
+                        </DataRow>
+                        <DataRow label="Tope de abiertas">
+                            <span v-if="sector.tope_observaciones">{{ sector.tope_observaciones }} abiertas</span>
+                            <span v-else class="text-gray-400">sin tope</span>
                         </DataRow>
                         <DataRow label="Usuarios">{{ sector.usuarios_count ?? 0 }}</DataRow>
                     </template>
@@ -229,6 +243,17 @@ const guardar = () => {
                 />
                 <p class="-mt-2 text-xs text-gray-500 dark:text-gray-400">
                     Sin plazo, las observaciones de este sector nunca disparan alertas.
+                </p>
+
+                <Input
+                    v-model="form.tope_observaciones"
+                    type="number"
+                    label="Tope de observaciones abiertas"
+                    :error="form.errors.tope_observaciones"
+                />
+                <p class="-mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    Al superarlo se le avisa al gerente del sector, una vez por cada episodio de
+                    saturación. Sin tope, este sector nunca avisa.
                 </p>
 
                 <label class="flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">

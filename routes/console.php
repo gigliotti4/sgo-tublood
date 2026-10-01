@@ -40,6 +40,13 @@ Schedule::command('compras:sync')->dailyAt('05:00')->when($erpConfigurado);
 
 Schedule::command('observaciones:alertas')->hourly();
 
+// La carga agregada de cada sector, que es otra pregunta que la de arriba: aquél
+// escala casos vencidos de a uno, éste avisa cuando un área acumula más
+// observaciones abiertas que su tope. Horario y no diario porque
+// `sectors.tope_avisado_at` ya impide la repetición: el aviso sale una sola vez
+// por episodio de saturación, así que que salga dentro de la hora es gratis.
+Schedule::command('sectores:tope')->hourly();
+
 // Los dos recordatorios de plazos de una No Conformidad: marca vencidas las
 // acciones pasadas de fecha y avisa cuando llega la fecha de verificar la
 // eficacia. Diario y no horario como el de observaciones: los dos plazos se

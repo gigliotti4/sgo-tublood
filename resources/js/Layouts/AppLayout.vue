@@ -717,14 +717,23 @@ const icons: Record<string, string> = {
                                             class="block px-5 py-3 transition-colors hover:bg-gray-50 dark:hover:bg-white/[0.03]"
                                             @click="notificacionesOpen = false"
                                         >
-                                            <p class="truncate text-sm font-medium text-gray-800 dark:text-white/90">
+                                            <!--
+                                                El encabezado es de una observación puntual. Hay
+                                                avisos que no lo son —un sector saturado, tareas de
+                                                fondo fallando— y sin este `v-if` mostraban un
+                                                guion suelto entre dos vacíos.
+                                            -->
+                                            <p v-if="a.data.numero" class="truncate text-sm font-medium text-gray-800 dark:text-white/90">
                                                 {{ a.data.numero }} — {{ a.data.titulo }}
                                             </p>
                                             <p
-                                                class="mt-0.5 text-theme-xs"
-                                                :class="a.data.tipo === 'observacion_finalizada'
-                                                    ? 'text-success-600 dark:text-success-400'
-                                                    : 'text-error-500'"
+                                                class="text-theme-xs"
+                                                :class="[
+                                                    a.data.numero ? 'mt-0.5' : '',
+                                                    a.data.tipo === 'observacion_finalizada'
+                                                        ? 'text-success-600 dark:text-success-400'
+                                                        : 'text-error-500',
+                                                ]"
                                             >
                                                 {{ a.data.mensaje }}
                                             </p>

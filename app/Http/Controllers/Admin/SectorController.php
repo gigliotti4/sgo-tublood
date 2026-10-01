@@ -64,6 +64,12 @@ class SectorController extends Controller
         return $request->validate([
             'nombre' => ['required', 'string', 'max:255', Rule::unique('sectors', 'nombre')->ignore($sector)],
             'dias_gestion' => ['nullable', 'integer', 'min:1', 'max:365'],
+            // ⚠️ `min:1`: un tope de 0 se superaría con la primera observación
+            // y avisaría siempre. Vacío significa "sin tope", que es distinto.
+            //
+            // `tope_avisado_at` NO se valida ni se expone: es la marca de
+            // idempotencia que maneja `sectores:tope`, no un campo del panel.
+            'tope_observaciones' => ['nullable', 'integer', 'min:1', 'max:999'],
             'activo' => ['boolean'],
         ]);
     }

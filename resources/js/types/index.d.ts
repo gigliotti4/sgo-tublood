@@ -17,6 +17,8 @@ export interface Sector {
     nombre: string
     slug: string
     dias_gestion: number | null
+    /** Tope de observaciones abiertas. `null` = sin tope, nunca avisa. */
+    tope_observaciones: number | null
     activo: boolean
     usuarios_count?: number
 }
@@ -25,10 +27,16 @@ export interface AlertaNotificacion {
     id: string
     created_at: string
     data: {
-        tipo: 'observacion_asignada' | 'observacion_reasignada' | 'observacion_seguimiento' | 'observacion_critica' | 'observacion_vencida' | 'observacion_escalada' | 'observacion_finalizada'
-        observacion_id: number
-        numero: string
-        titulo: string
+        /**
+         * ⚠️ No todos los avisos de la campana son de una observación:
+         * `sector_saturado` y `jobs_fallando` son de otra cosa. Por eso los
+         * campos del caso puntual son opcionales y `AppLayout` dibuja el
+         * encabezado solo cuando hay `numero`.
+         */
+        tipo: 'observacion_asignada' | 'observacion_reasignada' | 'observacion_seguimiento' | 'observacion_critica' | 'observacion_vencida' | 'observacion_escalada' | 'observacion_finalizada' | 'sector_saturado' | 'jobs_fallando'
+        observacion_id?: number
+        numero?: string
+        titulo?: string
         mensaje: string
         url: string
         /** `null` mientras el caso no esté clasificado. Pinta el aviso en rojo si es `critica`. */
