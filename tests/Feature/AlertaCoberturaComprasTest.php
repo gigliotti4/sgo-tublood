@@ -59,11 +59,10 @@ class AlertaCoberturaComprasTest extends TestCase
         }
     }
 
-    private function usuarioDeCompras(): User
+    /** El destinatario que es usuario del sistema (en la config de producción, Emanuel Durán). */
+    private function eduran(): User
     {
-        Permission::firstOrCreate(['name' => 'compras.view', 'guard_name' => 'web']);
-
-        return tap(User::factory()->create())->givePermissionTo('compras.view');
+        return User::factory()->create(['email' => 'eduran@tublood.com', 'name' => 'EMANUEL']);
     }
 
     public function test_el_periodo_son_los_ultimos_meses_cerrados(): void
@@ -80,33 +79,52 @@ class AlertaCoberturaComprasTest extends TestCase
      * Una venta del 1/11 no puede bajar el promedio: con el mes en curso adentro
      * serían (30+30+5)/3 y el producto de abajo cubriría.
      */
-    public function test_le_llega_a_quien_ve_compras_con_el_detalle_en_excel(): void
+    public function test_le_llega_a_las_direcciones_de_la_config_con_el_detalle_en_excel(): void
     {
         $this->productoQueNoCubre();
         $this->venta('RE-1', '2026-11-01', 5);
-        $deCompras = $this->usuarioDeCompras();
-        $otro = User::factory()->create();
+        $eduran = $this->eduran();
 
         $this->artisan('compras:alerta-cobertura')->assertSuccessful();
 
-        Notification::assertSentTo($deCompras, ComprasCoberturaNotification::class, function ($n) {
+        // La dirección que es de un usuario le llega a él (el saludo lleva su nombre)…
+        Notification::assertSentTo($eduran, ComprasCoberturaNotification::class, function ($n) {
             Storage::disk('local')->assertExists($n->excel);
 
             return $n->total === 1 && $n->periodo === 'Ago 26 – Oct 26' && $n->top[0]['comprar'] === 30.0;
         });
-        Notification::assertNotSentTo($otro, ComprasCoberturaNotification::class);
+        // …y la casilla compartida, que no es usuario, va suelta.
+        Notification::assertSentOnDemand(
+            ComprasCoberturaNotification::class,
+            fn ($n, $canales, AnonymousNotifiable $destino) => $destino->routes['mail'] === 'compras@tublood.com',
+        );
+        Notification::assertSentTimes(ComprasCoberturaNotification::class, 2);
     }
 
-    public function test_tambien_le_llega_a_quien_tiene_el_permiso_por_rol(): void
+    /**
+     * El permiso `compras.view` lo tenían 22 usuarios en producción (viene con
+     * roles generales): no es la lista de a quién le llega el mail.
+     */
+    public function test_quien_ve_compras_pero_no_esta_en_la_lista_no_lo_recibe(): void
     {
         $this->productoQueNoCubre();
         Permission::firstOrCreate(['name' => 'compras.view', 'guard_name' => 'web']);
-        Role::firstOrCreate(['name' => 'compras', 'guard_name' => 'web'])->givePermissionTo('compras.view');
-        $porRol = tap(User::factory()->create())->assignRole('compras');
+        Role::firstOrCreate(['name' => 'ventas', 'guard_name' => 'web'])->givePermissionTo('compras.view');
+        $deVentas = tap(User::factory()->create())->assignRole('ventas');
 
         $this->artisan('compras:alerta-cobertura')->assertSuccessful();
 
-        Notification::assertSentTo($porRol, ComprasCoberturaNotification::class);
+        Notification::assertNotSentTo($deVentas, ComprasCoberturaNotification::class);
+    }
+
+    public function test_sin_destinatarios_configurados_no_manda_nada(): void
+    {
+        $this->productoQueNoCubre();
+        config(['compras.alerta.destinatarios' => []]);
+
+        $this->artisan('compras:alerta-cobertura')->assertSuccessful();
+
+        Notification::assertNothingSent();
     }
 
     /** Un mail mensual que dice "0" se aprende a ignorar. */
@@ -116,7 +134,7 @@ class AlertaCoberturaComprasTest extends TestCase
         foreach (['2026-08-10', '2026-09-10', '2026-10-10'] as $fecha) {
             $this->venta('RE-1', $fecha, 30);
         }
-        $this->usuarioDeCompras();
+        $this->eduran();
 
         $this->artisan('compras:alerta-cobertura')->assertSuccessful();
 
@@ -130,18 +148,17 @@ class AlertaCoberturaComprasTest extends TestCase
         ComprasArticulo::where('codigo', 'RE-IMP')->update(['agru_1' => 'IMP']);
         $this->productoQueNoCubre('RE-INACTIVO');
         ComprasArticulo::where('codigo', 'RE-INACTIVO')->update(['activo' => false]);
-        $this->usuarioDeCompras();
+        $eduran = $this->eduran();
 
         $this->artisan('compras:alerta-cobertura')->assertSuccessful();
 
-        Notification::assertSentTimes(ComprasCoberturaNotification::class, 1);
-        Notification::assertSentTo(User::first(), ComprasCoberturaNotification::class, fn ($n) => $n->total === 1);
+        Notification::assertSentTo($eduran, ComprasCoberturaNotification::class, fn ($n) => $n->total === 1);
     }
 
     public function test_ver_no_manda_nada_y_a_manda_solo_a_esa_direccion(): void
     {
         $this->productoQueNoCubre();
-        $this->usuarioDeCompras();
+        $this->eduran();
 
         $this->artisan('compras:alerta-cobertura --ver')->assertSuccessful();
         Notification::assertNothingSent();
@@ -157,14 +174,15 @@ class AlertaCoberturaComprasTest extends TestCase
     public function test_el_mail_lleva_el_excel_adjunto_y_el_criterio_desde_la_config(): void
     {
         $this->productoQueNoCubre();
-        $this->usuarioDeCompras();
+        $eduran = $this->eduran();
 
         $this->artisan('compras:alerta-cobertura')->assertSuccessful();
 
-        Notification::assertSentTo(User::first(), ComprasCoberturaNotification::class, function ($n, $canales, $notifiable) {
+        Notification::assertSentTo($eduran, ComprasCoberturaNotification::class, function ($n, $canales, $notifiable) {
             $mail = $n->toMail($notifiable);
 
             return count($mail->attachments) === 1
+                && $mail->greeting === 'Hola EMANUEL,'
                 && str_contains($n->criterio, 'DISTRIBUCIÓN')
                 && str_contains($mail->subject, '1 producto para comprar');
         });

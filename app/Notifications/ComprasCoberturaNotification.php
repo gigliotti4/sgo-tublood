@@ -44,6 +44,7 @@ class ComprasCoberturaNotification extends Notification implements ShouldQueue
 
         $mail = (new MailMessage)
             ->subject("Compras: {$productos} para comprar")
+            // Una casilla compartida (compras@) no es un usuario y no tiene nombre.
             ->greeting(isset($notifiable->name) ? "Hola {$notifiable->name}," : 'Hola,')
             ->line("Tenés **{$productos}** que no cubren el stock objetivo, según las ventas de {$this->periodo}.")
             ->line('Los que más faltan:');

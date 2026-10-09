@@ -6,18 +6,21 @@ use App\Models\User;
 use App\Notifications\ComprasCoberturaNotification;
 use App\Services\Compras\AlertaCobertura;
 use Illuminate\Console\Command;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 
 /**
  * Mail mensual a Compras con los productos que no cubren stock.
  *
- * Los filtros viven en `config('compras.alerta')`. Le llega a todos los
- * usuarios que pueden ver el tablero (`compras.view`, directo o por rol). Si no
+ * Los filtros y los destinatarios viven en `config('compras.alerta')`. Si no
  * hay nada para comprar no se manda nada: un mail mensual que dice "0" se
  * aprende a ignorar, y entonces se ignora también el que importa.
+ *
+ * ⚠️ Los destinatarios son una LISTA FIJA de direcciones y no "quien tenga
+ * `compras.view`": medido el 9/10/2026, ese permiso lo tenían 22 usuarios
+ * (ventas, cobranzas, depósito…) porque viene con roles generales, y el mail le
+ * habría llegado a media empresa. Compras pidió que vaya a compras@ y a
+ * Emanuel Durán.
  */
 class AlertaCoberturaComprasCommand extends Command
 {
@@ -79,38 +82,43 @@ class AlertaCoberturaComprasCommand extends Command
             return Command::SUCCESS;
         }
 
-        $destinatarios = $this->destinatarios();
+        $direcciones = $this->destinatarios();
 
-        if ($destinatarios->isEmpty()) {
-            Log::warning('compras:alerta-cobertura: nadie tiene compras.view, el aviso no llega a nadie');
-            $this->warn('Nadie tiene el permiso compras.view: no hay a quién mandarlo.');
+        if ($direcciones === []) {
+            Log::warning('compras:alerta-cobertura: no hay destinatarios en config(compras.alerta.destinatarios)');
+            $this->warn('No hay destinatarios configurados: no se manda nada.');
 
             return Command::SUCCESS;
         }
 
-        Notification::send($destinatarios, $notificacion);
-        $this->info("Mandado a {$destinatarios->count()} usuarios.");
+        // Un mail por dirección y no uno con todos en copia. Si la dirección es
+        // de un usuario del sistema se le manda a él, así el saludo lleva su
+        // nombre; si no (una casilla compartida como compras@), va suelta.
+        foreach ($direcciones as $direccion) {
+            $usuario = User::where('email', $direccion)->first();
+
+            $usuario
+                ? $usuario->notify($notificacion)
+                : Notification::route('mail', $direccion)->notify($notificacion);
+        }
+
+        $this->info('Mandado a '.implode(', ', $direcciones).'.');
 
         return Command::SUCCESS;
     }
 
     /**
-     * Quien puede ver el tablero de Compras, directo o por rol.
+     * Las direcciones de la config, limpias y sin repetidos.
      *
-     * ⚠️ Con `whereHas` y NUNCA con el scope `permission()` de Spatie: ese tira
-     * excepción si el permiso no existe, y una tarea agendada no puede caerse
-     * por eso. Misma trampa que `User::role()` en el alta del portal.
-     *
-     * @return Collection<int, User>
+     * @return list<string>
      */
-    private function destinatarios()
+    private function destinatarios(): array
     {
-        $tienePermiso = fn (Builder $q) => $q->where('name', 'compras.view');
+        $direcciones = array_map(
+            fn ($d) => mb_strtolower(trim((string) $d)),
+            (array) config('compras.alerta.destinatarios', []),
+        );
 
-        return User::query()
-            ->where(fn (Builder $q) => $q
-                ->whereHas('permissions', $tienePermiso)
-                ->orWhereHas('roles.permissions', $tienePermiso))
-            ->get();
+        return array_values(array_unique(array_filter($direcciones, fn ($d) => filter_var($d, FILTER_VALIDATE_EMAIL))));
     }
 }

@@ -106,10 +106,16 @@ return [
     | Alerta mensual de productos que no cubren stock
     |--------------------------------------------------------------------------
     |
-    | La manda `compras:alerta-cobertura` el día 1 de cada mes, por mail y con
-    | el detalle en Excel, a todos los usuarios con `compras.view`. Son los
-    | filtros que Compras marcó en el tablero (pedido del 8/10/2026), con los
-    | mismos valores que las botoneras: ver `FiltrosCompras` en lib/compras.ts.
+    | La manda `compras:alerta-cobertura` el día 1 de cada mes a las 08:00 (hora
+    | argentina), por mail y con el detalle en Excel, a las direcciones de
+    | `destinatarios`. Son los filtros que Compras marcó en el tablero (pedido
+    | del 8/10/2026), con los mismos valores que las botoneras: ver
+    | `FiltrosCompras` en lib/compras.ts.
+    |
+    | ⚠️ `destinatarios` es una lista fija y no "quien tenga compras.view": ese
+    | permiso lo tenían 22 usuarios (viene con roles generales) y el mail le
+    | habría llegado a media empresa. Sumar o sacar a alguien es editar esta
+    | lista y desplegar.
     |
     | ⚠️ `ultimos_meses` cuenta meses CERRADOS. El día 1 el mes recién empezado
     | trae ventas casi en 0 y, si entrara en el período, bajaría el promedio y
@@ -134,6 +140,11 @@ return [
         'agrupar' => false,
         // Cuántos productos se listan en el cuerpo del mail; el resto va en el Excel.
         'top' => 10,
+        // A quién le llega. Pedido de Compras del 9/10/2026.
+        'destinatarios' => [
+            'compras@tublood.com',
+            'eduran@tublood.com',
+        ],
     ],
 
 ];
