@@ -3,9 +3,13 @@
 namespace Tests\Feature;
 
 use App\Jobs\SyncComprasJob;
+use App\Models\Articulo;
 use App\Models\CompraOrdenPendiente;
 use App\Models\CompraPedidoPendiente;
 use App\Models\ComprasArticulo;
+use App\Models\CompraStockDeposito;
+use App\Models\Partida;
+use App\Models\Proveedor;
 use App\Models\User;
 use App\Models\Venta;
 use App\Services\Compras\ReposicionService;
@@ -362,5 +366,95 @@ class ComprasTest extends TestCase
         $this->assertSame([], $this->dataset()['meses']);
 
         $this->actingAs($this->userWith('compras.view'))->get('/compras')->assertOk();
+    }
+
+    // ── Proveedor, depósitos, entregas y venta estimada (8/10/2026) ──────
+
+    /** El primer artículo con ese código en el dataset. */
+    private function item(array $dataset, string $codigo): array
+    {
+        foreach ($dataset['groups'] as $g) {
+            foreach ($g['i'] as $it) {
+                if ($it['c'] === $codigo) {
+                    return $it;
+                }
+            }
+        }
+
+        $this->fail("No está {$codigo} en el dataset");
+    }
+
+    public function test_el_proveedor_sale_del_padron_de_articulos(): void
+    {
+        $proveedor = Proveedor::create(['numero' => '38', 'razon_social' => 'LENTERDIT S A']);
+        Articulo::create(['codigo' => 'RE-765', 'descripcion' => 'ZALEAS', 'proveedor_id' => $proveedor->id]);
+        $this->articulo('RE-765');
+
+        $this->assertSame('LENTERDIT S A', $this->item($this->dataset(), 'RE-765')['p']);
+    }
+
+    /**
+     * Fuera del padrón, el kardex: pero solo si el artículo le compró siempre al
+     * mismo proveedor. Con dos, elegir sería adivinar.
+     */
+    public function test_sin_padron_el_proveedor_sale_del_kardex_solo_si_es_unico(): void
+    {
+        Proveedor::create(['numero' => '10', 'razon_social' => 'UNICO SA']);
+        Proveedor::create(['numero' => '20', 'razon_social' => 'OTRO SA']);
+        Partida::create(['codigo_articulo' => 'RE-1', 'codigo_partida' => 'L1', 'proveedor_numero' => '10']);
+        Partida::create(['codigo_articulo' => 'RE-1', 'codigo_partida' => 'L2', 'proveedor_numero' => '10']);
+        Partida::create(['codigo_articulo' => 'RE-2', 'codigo_partida' => 'L1', 'proveedor_numero' => '10']);
+        Partida::create(['codigo_articulo' => 'RE-2', 'codigo_partida' => 'L2', 'proveedor_numero' => '20']);
+        $this->articulo('RE-1');
+        $this->articulo('RE-2');
+
+        $dataset = $this->dataset();
+
+        $this->assertSame('UNICO SA', $this->item($dataset, 'RE-1')['p']);
+        $this->assertArrayNotHasKey('p', $this->item($dataset, 'RE-2'));
+    }
+
+    public function test_el_stock_por_deposito_viaja_crudo_y_sin_los_ceros(): void
+    {
+        $this->articulo('RE-1', ['cant_stock' => 80]);
+        foreach ([['DEP', 'Deposito unico', 100], ['DPR', 'PRODUCCION', -20], ['MUE', 'MUESTRAS', 0]] as [$dep, $nombre, $cant]) {
+            CompraStockDeposito::create(['articulo' => 'RE-1', 'deposito' => $dep, 'nombre' => $nombre, 'cant_stock' => $cant, 'synced_at' => now()]);
+        }
+
+        $dataset = $this->dataset();
+
+        $this->assertSame(['DEP' => 100.0, 'DPR' => -20.0], $this->item($dataset, 'RE-1')['sd']);
+        $this->assertSame(
+            [['c' => 'DEP', 'n' => 'Deposito unico'], ['c' => 'DPR', 'n' => 'PRODUCCION'], ['c' => 'MUE', 'n' => 'MUESTRAS']],
+            $dataset['depositos'],
+            'La botonera lista todos los depósitos, aunque un artículo tenga 0 en alguno',
+        );
+    }
+
+    public function test_las_entregas_van_de_la_mas_proxima_a_la_mas_lejana_y_las_sin_fecha_al_final(): void
+    {
+        $this->articulo('RE-765');
+        foreach ([['2026-10-23', 100], [null, 50], ['2026-10-02', 2400]] as $i => [$fecha, $cant]) {
+            CompraOrdenPendiente::create([
+                'tipo' => 'OC', 'numero' => 9996, 'item' => $i + 1, 'articulo' => 'RE-765',
+                'fecha_entrega' => $fecha, 'cant_pend' => $cant, 'synced_at' => now(),
+            ]);
+        }
+
+        $this->assertSame(
+            [['2026-10-02', 2400.0], ['2026-10-23', 100.0], [null, 50.0]],
+            $this->item($this->dataset(), 'RE-765')['e'],
+        );
+    }
+
+    public function test_la_venta_estimada_viaja_solo_si_esta_cargada(): void
+    {
+        $this->articulo('RE-NUEVO', ['venta_estimada' => 100]);
+        $this->articulo('RE-VIEJO');
+
+        $dataset = $this->dataset();
+
+        $this->assertSame(100.0, $this->item($dataset, 'RE-NUEVO')['ve']);
+        $this->assertArrayNotHasKey('ve', $this->item($dataset, 'RE-VIEJO'));
     }
 }

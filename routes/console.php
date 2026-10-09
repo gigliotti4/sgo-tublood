@@ -38,6 +38,12 @@ Schedule::command('partidas:sync')->dailyAt('04:30')->when($erpConfigurado);
 // credenciales; hoy hay una sola y comparte el guard con el resto.
 Schedule::command('compras:sync')->dailyAt('05:00')->when($erpConfigurado);
 
+// El mail mensual de Compras con lo que no cubre stock. A las 08:00, después
+// de `compras:sync` (05:00), para que salga con el stock y las OC del día. Sin
+// guard del ERP: lee las tablas locales, y si la sync no corrió, avisa con lo
+// último que haya.
+Schedule::command('compras:alerta-cobertura')->monthlyOn(1, '08:00');
+
 Schedule::command('observaciones:alertas')->hourly();
 
 // La carga agregada de cada sector, que es otra pregunta que la de arriba: aquél

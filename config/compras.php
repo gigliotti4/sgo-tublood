@@ -101,4 +101,37 @@ return [
     // lo que hay en `ventas` (la sync cubre desde 2024-08).
     'meses_historial' => 25,
 
+    /*
+    |--------------------------------------------------------------------------
+    | Alerta mensual de productos que no cubren stock
+    |--------------------------------------------------------------------------
+    |
+    | La manda `compras:alerta-cobertura` el día 1 de cada mes, por mail y con
+    | el detalle en Excel, a todos los usuarios con `compras.view`. Son los
+    | filtros que Compras marcó en el tablero (pedido del 8/10/2026), con los
+    | mismos valores que las botoneras: ver `FiltrosCompras` en lib/compras.ts.
+    |
+    | ⚠️ `ultimos_meses` cuenta meses CERRADOS. El día 1 el mes recién empezado
+    | trae ventas casi en 0 y, si entrara en el período, bajaría el promedio y
+    | escondería productos que sí hay que comprar. El tablero, en cambio, sí
+    | incluye el mes en curso (y lo avisa arriba).
+    |
+    */
+
+    'alerta' => [
+        'meses_objetivo' => 1,
+        'ultimos_meses' => 3,
+        // Códigos de AGRU_1 (ver `categorias`). DIS = DISTRIBUCIÓN.
+        'categorias' => ['DIS'],
+        'activo' => 'si',
+        'stock' => 'all',
+        'cubre' => 'no',
+        'pareto' => 'all',
+        // Vacío = todos los depósitos (el total del ERP).
+        'depositos' => [],
+        'agrupar' => true,
+        // Cuántos productos se listan en el cuerpo del mail; el resto va en el Excel.
+        'top' => 10,
+    ],
+
 ];

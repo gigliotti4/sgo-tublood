@@ -6,6 +6,7 @@ use App\Jobs\SyncComprasJob;
 use App\Services\RpSistemas\ComprasArticuloSyncService;
 use App\Services\RpSistemas\OrdenCompraSyncService;
 use App\Services\RpSistemas\PedidoPendienteSyncService;
+use App\Services\RpSistemas\StockDepositoSyncService;
 use Illuminate\Console\Command;
 use Throwable;
 
@@ -13,12 +14,13 @@ class SyncComprasCommand extends Command
 {
     protected $signature = 'compras:sync {--sync : Ejecutar sincronamente (sin queue, útil para debug)}';
 
-    protected $description = 'Sincroniza catálogo, OC pendientes y pedidos desde la base SQL de RP Sistemas';
+    protected $description = 'Sincroniza catálogo, OC pendientes, pedidos y stock por depósito desde la base SQL de RP Sistemas';
 
     public function handle(
         ComprasArticuloSyncService $articulos,
         OrdenCompraSyncService $ordenes,
         PedidoPendienteSyncService $pedidos,
+        StockDepositoSyncService $depositos,
     ): int {
         if (! $this->option('sync')) {
             SyncComprasJob::dispatch();
@@ -41,6 +43,10 @@ class SyncComprasCommand extends Command
             $this->line('  Pedidos pendientes...');
             $p = $pedidos->sync();
             $this->line("  ✓ {$p} renglones de pedido.");
+
+            $this->line('  Stock por depósito...');
+            $d = $depositos->sync();
+            $this->line("  ✓ {$d} filas.");
         } catch (Throwable $e) {
             $this->error("Error leyendo la base de RP Sistemas: {$e->getMessage()}");
 

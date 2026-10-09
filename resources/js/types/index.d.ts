@@ -589,6 +589,20 @@ export interface ArticuloReposicion {
     v?: number[]
     /** Importe neto vendido por mes. Ausente si el artículo nunca vendió. */
     m?: number[]
+    /** Razón social del proveedor (padrón de artículos, o el único del kardex). Ausente si no se sabe. */
+    p?: string
+    /** Stock en envases por código de depósito, crudo (puede ser negativo). Solo los distintos de 0. */
+    sd?: Record<string, number>
+    /** OC pendientes: [fecha de entrega `YYYY-MM-DD` o null, cantidad en envases]. */
+    e?: [string | null, number][]
+    /** Venta mensual cargada a mano en el ERP (`STOCK_SEGURIDAD`), en envases. Manda sobre el promedio. */
+    ve?: number
+}
+
+/** Un depósito del ERP, para la botonera de stock. */
+export interface DepositoCompras {
+    c: string
+    n: string
 }
 
 /** Producto unificado del tablero: uno o varios artículos con el mismo GTIN. */

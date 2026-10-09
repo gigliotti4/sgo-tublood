@@ -4,12 +4,15 @@ import Input from '@/Components/Input.vue'
 import Select from '@/Components/Select.vue'
 import type { FiltrosCompras } from '@/lib/compras'
 import { etiquetaMes } from '@/lib/formato'
+import type { DepositoCompras } from '@/types'
 
 const props = defineProps<{
     meses: string[]
     /** Categorías presentes en los datos, ya ordenadas por nombre. */
     categoriasPresentes: { codigo: string; nombre: string }[]
     opcionesObjetivo: number[]
+    /** Depósitos del ERP. Vacío si todavía no se sincronizó el stock por depósito. */
+    depositos: DepositoCompras[]
 }>()
 
 const emit = defineEmits<{ limpiar: [] }>()
@@ -52,10 +55,15 @@ const cambiarHasta = (valor: number) => {
 
 const menuAbierto = ref(false)
 const menuRef = ref<HTMLElement | null>(null)
+const menuDepositosAbierto = ref(false)
+const menuDepositosRef = ref<HTMLElement | null>(null)
 
 const cerrarSiEsAfuera = (e: MouseEvent) => {
     if (menuAbierto.value && menuRef.value && !menuRef.value.contains(e.target as Node)) {
         menuAbierto.value = false
+    }
+    if (menuDepositosAbierto.value && menuDepositosRef.value && !menuDepositosRef.value.contains(e.target as Node)) {
+        menuDepositosAbierto.value = false
     }
 }
 
@@ -76,6 +84,35 @@ const alternarCategoria = (codigo: string) => {
         ? filtros.value.cats.filter(c => c !== codigo)
         : [...filtros.value.cats, codigo]
     filtros.value = { ...filtros.value, cats }
+}
+
+const nombreDeposito = (codigo: string) => props.depositos.find(d => d.c === codigo)?.n ?? codigo
+
+const etiquetaDepositos = computed(() => {
+    const elegidos = filtros.value.depositos
+    if (elegidos.length === 0) return 'Todos'
+    if (elegidos.length === 1) return nombreDeposito(elegidos[0]!)
+    return `${elegidos.length} seleccionados`
+})
+
+/**
+ * Marcar los diez a mano se guarda como "todos" (lista vacía). No es cosmético:
+ * "todos" usa el total del ERP y la suma de los depósitos difiere en ~32
+ * artículos, así que sin esto la misma selección daría dos números. Ver
+ * `stockDe()` en lib/compras.ts.
+ */
+const alternarDeposito = (codigo: string) => {
+    // "Todos" es la lista vacía, pero en pantalla se ven todos tildados: destildar
+    // uno tiene que dejar los demás, no solo ese.
+    const actuales = filtros.value.depositos.length ? filtros.value.depositos : props.depositos.map(d => d.c)
+    const depositos = actuales.includes(codigo)
+        ? actuales.filter(d => d !== codigo)
+        : [...actuales, codigo]
+
+    // Sin ningún depósito no hay stock que mirar: se ignora el último destilde.
+    if (!depositos.length) return
+
+    set('depositos', depositos.length === props.depositos.length ? [] : depositos)
 }
 
 const set = <K extends keyof FiltrosCompras>(clave: K, valor: FiltrosCompras[K]) => {
@@ -211,6 +248,79 @@ const claseTog = (activo: boolean) =>
                     >
                     {{ c.nombre }}
                 </label>
+            </div>
+        </div>
+
+        <!-- Depósitos -->
+        <div v-if="depositos.length" ref="menuDepositosRef" class="relative flex flex-col gap-1.5">
+            <label class="text-theme-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                Depósitos
+            </label>
+            <button
+                type="button"
+                class="flex min-w-[170px] cursor-pointer items-center justify-between gap-2 rounded-lg border px-3 py-2 text-theme-sm dark:bg-gray-800"
+                :class="filtros.depositos.length
+                    ? 'border-brand-500 bg-brand-50 text-brand-600 dark:text-brand-300'
+                    : 'border-gray-300 bg-white text-gray-700 dark:border-gray-700 dark:text-gray-300'"
+                @click="menuDepositosAbierto = !menuDepositosAbierto"
+            >
+                <span class="truncate">{{ etiquetaDepositos }}</span>
+                <span class="text-gray-400">▾</span>
+            </button>
+            <div
+                v-if="menuDepositosAbierto"
+                class="absolute top-full z-20 mt-1 max-h-80 w-72 overflow-auto rounded-xl border border-gray-200 bg-white p-1.5 shadow-theme-lg dark:border-gray-700 dark:bg-gray-800"
+            >
+                <p class="px-2 pb-1 pt-1.5 text-theme-xs text-gray-400">
+                    El stock suma solo los depósitos marcados. Con <strong>todos</strong> es el total del ERP.
+                </p>
+                <div class="flex justify-between gap-2 px-1 pb-1">
+                    <button
+                        type="button"
+                        class="cursor-pointer px-1 text-theme-xs font-semibold text-brand-500 hover:underline"
+                        @click="set('depositos', [])"
+                    >
+                        Todos
+                    </button>
+                </div>
+                <div class="my-1 h-px bg-gray-100 dark:bg-gray-700" />
+                <label
+                    v-for="d in depositos"
+                    :key="d.c"
+                    class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-theme-sm text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-white/[0.05]"
+                    :title="`Código ${d.c}`"
+                >
+                    <input
+                        type="checkbox"
+                        class="h-4 w-4 cursor-pointer accent-brand-500"
+                        :checked="!filtros.depositos.length || filtros.depositos.includes(d.c)"
+                        @change="alternarDeposito(d.c)"
+                    >
+                    {{ d.n }}
+                    <span class="ml-auto text-theme-xs text-gray-400">{{ d.c }}</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Agrupar por GTIN -->
+        <div class="flex flex-col gap-1.5">
+            <label
+                class="cursor-help text-theme-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
+                title="Los artículos con la misma clasificación GTIN (multimarca) van en un solo renglón. Con «No», cada artículo va en su propia fila."
+            >
+                Agrupar por GTIN
+            </label>
+            <div class="inline-flex gap-1.5">
+                <button
+                    v-for="o in [{ v: true, t: 'Sí' }, { v: false, t: 'No' }]"
+                    :key="o.t"
+                    type="button"
+                    class="cursor-pointer rounded-lg border px-2.5 py-1.5 text-theme-sm font-semibold transition"
+                    :class="claseTog(filtros.agrupar === o.v)"
+                    @click="set('agrupar', o.v)"
+                >
+                    {{ o.t }}
+                </button>
             </div>
         </div>
 

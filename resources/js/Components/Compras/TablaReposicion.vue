@@ -3,8 +3,10 @@ import { computed, ref } from 'vue'
 import Sparkline from '@/Components/Sparkline.vue'
 import GraficoMensual from '@/Components/Compras/GraficoMensual.vue'
 import FilaDetalleArticulo from '@/Components/Compras/FilaDetalleArticulo.vue'
-import type { ClaveOrden, FilaReposicion, FiltrosCompras, TotalesCompras } from '@/lib/compras'
+import { estaAtrasada, type ClaveOrden, type FilaReposicion, type FiltrosCompras, type TotalesCompras } from '@/lib/compras'
+import { describirEntregas, fechaEntrega } from '@/lib/comprasEntregas'
 import { decimal, etiquetaMes, moneda, numero } from '@/lib/formato'
+import type { DepositoCompras } from '@/types'
 
 const props = defineProps<{
     /** Solo las filas de la página visible. */
@@ -19,6 +21,7 @@ const props = defineProps<{
     orden: { key: ClaveOrden | null; dir: 'asc' | 'desc' }
     mostrarMeses: boolean
     hayFiltros: boolean
+    depositos: DepositoCompras[]
 }>()
 
 const emit = defineEmits<{ ordenar: [ClaveOrden] }>()
@@ -48,8 +51,22 @@ const rotuloPeriodo = computed(
     () => `(${etiquetasMes.value[props.filtros.desde] ?? ''}–${etiquetasMes.value[props.filtros.hasta] ?? ''}, u.)`,
 )
 
-/** 15 columnas fijas; al abrir los meses, la de "Ventas del período" se parte en N. */
-const totalColumnas = computed(() => 15 + (props.mostrarMeses ? props.meses.length - 1 : 0))
+/** 17 columnas fijas; al abrir los meses, la de "Ventas del período" se parte en N. */
+const totalColumnas = computed(() => 17 + (props.mostrarMeses ? props.meses.length - 1 : 0))
+
+const nombreDeposito = (codigo: string) => props.depositos.find(d => d.c === codigo)?.n ?? codigo
+
+/** El ⚠ dice de dónde sale el negativo: casi siempre es un depósito puntual (Producción, Armado). */
+const tituloAnomalia = (fila: FilaReposicion) => {
+    const base = 'El ERP trae stock negativo en este producto; se contó como 0.'
+    if (!fila.depositosNegativos.length) return base
+    return `${base} En negativo: ${fila.depositosNegativos.map(nombreDeposito).join(', ')}.`
+}
+
+const textoProveedor = (fila: FilaReposicion) =>
+    fila.proveedores.length > 1 ? `Varios (${fila.proveedores.length})` : (fila.proveedores[0] ?? '')
+
+const TITULO_ESTIMADA = 'Usa la venta mensual cargada a mano en el ERP (campo Stock de seguridad) en lugar del promedio de venta'
 
 const flecha = (key: ClaveOrden) => {
     if (props.orden.key !== key) return '⇅'
@@ -70,10 +87,12 @@ const columnasFinales: { key: ClaveOrden; label: string; ancho: string; sep?: bo
     { key: 'prom', label: 'Prom. mensual', ancho: 'w-[70px]' },
     { key: 'reservado', label: 'Reservado', ancho: 'w-[64px]', sep: true },
     { key: 'oc', label: 'OC pend.', ancho: 'w-[62px]' },
+    { key: 'entrega', label: 'Entrega', ancho: 'w-[70px]' },
     { key: 'total', label: 'Stock total disp.', ancho: 'w-[74px]' },
     { key: 'cubre', label: '¿Cubre?', ancho: 'w-[58px]', sep: true, destacada: true },
     { key: 'meses', label: 'Meses cubro', ancho: 'w-[64px]', destacada: true },
     { key: 'comprar', label: 'Cant. a comprar', ancho: 'w-[76px]', destacada: true },
+    { key: 'proveedor', label: 'Proveedor', ancho: 'w-[150px]', sep: true },
 ]
 
 const claseEstado = (fila: FilaReposicion) =>
@@ -140,7 +159,7 @@ const sep = 'border-l border-gray-200 dark:border-gray-700'
                         v-for="c in columnasFinales"
                         :key="c.label"
                         class="sticky top-0 z-[5] cursor-pointer select-none bg-gray-50 hover:text-brand-500 dark:bg-gray-900"
-                        :class="[th, c.ancho, c.sep ? sep : '', c.destacada ? 'text-brand-500 dark:text-brand-300' : '']"
+                        :class="[th, c.ancho, c.sep ? sep : '', c.destacada ? 'text-brand-500 dark:text-brand-300' : '', c.key === 'proveedor' ? '!text-left' : '']"
                         @click="emit('ordenar', c.key)"
                     >
                         {{ c.label }}
@@ -186,7 +205,7 @@ const sep = 'border-l border-gray-200 dark:border-gray-700'
                                     <span
                                         v-if="fila.anomalia"
                                         class="cursor-help text-warning-500"
-                                        title="El ERP trae stock negativo en este producto; se contó como 0"
+                                        :title="tituloAnomalia(fila)"
                                     >⚠</span>
                                 </span>
                             </div>
@@ -234,9 +253,27 @@ const sep = 'border-l border-gray-200 dark:border-gray-700'
                         </template>
                         <td v-else :class="td">{{ numero(fila.ventaPeriodo) }}</td>
 
-                        <td :class="td">{{ decimal(fila.promMensual) }}</td>
+                        <td :class="td">
+                            {{ decimal(fila.promMensual) }}
+                            <span
+                                v-if="fila.estimada"
+                                class="ml-0.5 cursor-help rounded bg-brand-50 px-1 text-[9px] font-bold text-brand-500 dark:bg-brand-500/20 dark:text-brand-300"
+                                :title="TITULO_ESTIMADA"
+                            >est.</span>
+                        </td>
                         <td :class="[td, sep]">{{ numero(fila.reservado) }}</td>
                         <td :class="td">{{ numero(fila.ocPend) }}</td>
+                        <td :class="td" :title="describirEntregas(fila.entregas)">
+                            <template v-if="fila.entregas.length">
+                                <span
+                                    v-if="fila.proximaEntrega"
+                                    :class="estaAtrasada(fila.proximaEntrega) ? 'font-bold text-error-500' : ''"
+                                >{{ fechaEntrega(fila.proximaEntrega) }}</span>
+                                <span v-else class="text-gray-400">s/fecha</span>
+                                <span v-if="fila.entregas.length > 1" class="ml-0.5 text-[10px] text-gray-400">+{{ fila.entregas.length - 1 }}</span>
+                            </template>
+                            <span v-else class="text-gray-400">–</span>
+                        </td>
                         <td
                             :class="[td, fila.stockTotal < 0 ? 'font-bold text-error-500' : '']"
                             :title="fila.stockTotal < 0 ? 'Déficit: hay más reservado que disponible' : undefined"
@@ -256,6 +293,15 @@ const sep = 'border-l border-gray-200 dark:border-gray-700'
                         </td>
                         <td :class="[td, 'font-bold', fila.cantComprar > 0 ? 'text-error-500' : 'text-success-600 dark:text-success-400']">
                             {{ fila.cantComprar > 0 ? decimal(fila.cantComprar) : '0' }}
+                        </td>
+                        <td
+                            class="truncate px-1.5 py-2 text-left text-[11px] font-normal text-gray-600 dark:text-gray-300"
+                            :class="sep"
+                            :title="fila.proveedores.join(' · ') || 'Sin proveedor cargado en el padrón de artículos'"
+                        >
+                            <span v-if="fila.proveedores.length > 1" class="font-semibold text-warning-600 dark:text-warning-400">{{ textoProveedor(fila) }}</span>
+                            <template v-else-if="fila.proveedores.length">{{ textoProveedor(fila) }}</template>
+                            <span v-else class="text-gray-400">–</span>
                         </td>
                     </tr>
 
@@ -281,6 +327,7 @@ const sep = 'border-l border-gray-200 dark:border-gray-700'
                         :total-meses="meses.length"
                         :mostrar-meses="mostrarMeses"
                         :cat-name="catName"
+                        :depositos="depositos"
                     />
                 </template>
             </tbody>
@@ -301,10 +348,12 @@ const sep = 'border-l border-gray-200 dark:border-gray-700'
                     <td :class="td">{{ decimal(totales.promMensual) }}</td>
                     <td :class="[td, sep]">{{ numero(totales.reservado) }}</td>
                     <td :class="td">{{ numero(totales.ocPend) }}</td>
+                    <td />
                     <td :class="td">{{ numero(totales.stockTotal) }}</td>
                     <td :class="sep" />
                     <td />
                     <td :class="[td, 'text-error-500']">{{ decimal(totales.cantComprar) }}</td>
+                    <td :class="sep" />
                 </tr>
             </tfoot>
         </table>

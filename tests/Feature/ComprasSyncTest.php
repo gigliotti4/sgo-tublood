@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Services\RpSistemas\ComprasArticuloSyncService;
 use App\Services\RpSistemas\OrdenCompraSyncService;
 use App\Services\RpSistemas\PedidoPendienteSyncService;
+use App\Services\RpSistemas\StockDepositoSyncService;
 use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
@@ -41,6 +42,37 @@ class ComprasSyncTest extends TestCase
             'ACTIVO' => 'S',
             'CODIGO_REFERENCIA' => '500',
         ], $attrs);
+    }
+
+    /**
+     * La venta mensual cargada a mano viaja en `STOCK_SEGURIDAD`. 0 o vacío
+     * significa "sin estimación" y se guarda null, para que el tablero siga con
+     * el promedio.
+     */
+    public function test_la_venta_estimada_sale_de_stock_seguridad(): void
+    {
+        $servicio = new ComprasArticuloSyncService;
+
+        $this->assertSame(100.0, $servicio->mapear($this->filaArticulo(['STOCK_SEGURIDAD' => '100.0000']), $this->syncedAt)['venta_estimada']);
+        $this->assertNull($servicio->mapear($this->filaArticulo(['STOCK_SEGURIDAD' => '.0000']), $this->syncedAt)['venta_estimada']);
+        $this->assertNull($servicio->mapear($this->filaArticulo(['STOCK_SEGURIDAD' => null]), $this->syncedAt)['venta_estimada']);
+    }
+
+    // ── Stock por depósito (powerbi_stock_vista) ────────────────────────────
+
+    public function test_mapea_el_stock_por_deposito_y_guarda_los_negativos_crudos(): void
+    {
+        $fila = (new StockDepositoSyncService)->mapear([
+            'COD_ARTICULO' => ' re-765 ',
+            'deposito' => 'dpr ',
+            'descrip_deposito' => 'PRODUCCION',
+            'cant_stock' => '-420.0000',
+        ], $this->syncedAt);
+
+        $this->assertSame('RE-765', $fila['articulo'], 'Es la clave del cruce con el catálogo');
+        $this->assertSame('DPR', $fila['deposito']);
+        $this->assertSame('PRODUCCION', $fila['nombre']);
+        $this->assertSame(-420.0, $fila['cant_stock'], 'El negativo es un error del ERP: se guarda tal cual y lo resuelve la pantalla');
     }
 
     public function test_mapea_el_catalogo(): void
@@ -141,6 +173,30 @@ class ComprasSyncTest extends TestCase
         $this->assertSame('2026-10-15', $fila['fecha_entrega']);
         $this->assertSame('RE-1573', $fila['articulo'], 'El código es la clave del cruce: se normaliza');
         $this->assertSame(1500.0, $fila['cant_pend']);
+    }
+
+    /**
+     * La fecha de entrega que carga Compras es la del RENGLÓN (`OC_ITEMS`); la
+     * de la cabecera casi siempre viene vacía. Una OC con tres entregas
+     * escalonadas tiene tres fechas distintas.
+     */
+    public function test_la_fecha_de_entrega_del_renglon_manda_sobre_la_de_la_cabecera(): void
+    {
+        $servicio = new OrdenCompraSyncService;
+
+        $conRenglon = $servicio->mapear([
+            'ARTICULO' => 'RE-765',
+            'FECHA_ENTRE' => null,
+            'FECHA_ENTRE_ITEM' => '2026-10-09 00:00:00.000',
+        ], $this->syncedAt);
+        $soloCabecera = $servicio->mapear([
+            'ARTICULO' => 'RE-765',
+            'FECHA_ENTRE' => '2026-10-15 00:00:00.000',
+            'FECHA_ENTRE_ITEM' => null,
+        ], $this->syncedAt);
+
+        $this->assertSame('2026-10-09', $conRenglon['fecha_entrega']);
+        $this->assertSame('2026-10-15', $soloCabecera['fecha_entrega'], 'Sin fecha en el renglón, queda la de la cabecera');
     }
 
     /** `UM_COMPRA` viene con basura en el 64% de las filas. Se guarda igual, pero no se usa. */

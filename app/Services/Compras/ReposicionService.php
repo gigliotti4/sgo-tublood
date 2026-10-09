@@ -5,6 +5,9 @@ namespace App\Services\Compras;
 use App\Models\CompraOrdenPendiente;
 use App\Models\CompraPedidoPendiente;
 use App\Models\ComprasArticulo;
+use App\Models\CompraStockDeposito;
+use App\Models\Partida;
+use App\Models\Proveedor;
 use App\Models\Venta;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
@@ -43,7 +46,7 @@ class ReposicionService
      * como `undefined` sin que nada falle a la vista. Ya pasó una vez, al
      * agregar `id`.
      */
-    private const VERSION_DATASET = 2;
+    private const VERSION_DATASET = 3;
 
     /**
      * Dataset listo para el tablero, cacheado.
@@ -53,7 +56,7 @@ class ReposicionService
      * y al tocar una regla de config/compras.php. No hace falta limpiarla a mano
      * en ningún lado.
      *
-     * @return array{meses: list<string>, groups: list<array<string, mixed>>}
+     * @return array{meses: list<string>, groups: list<array<string, mixed>>, depositos: list<array{c: string, n: string}>}
      */
     public function dataset(): array
     {
@@ -63,7 +66,7 @@ class ReposicionService
     /**
      * Igual que `dataset()` pero sin cache. Es el punto de entrada de los tests.
      *
-     * @return array{meses: list<string>, groups: list<array<string, mixed>>}
+     * @return array{meses: list<string>, groups: list<array<string, mixed>>, depositos: list<array{c: string, n: string}>}
      */
     public function construir(): array
     {
@@ -73,6 +76,9 @@ class ReposicionService
         $ventas = $this->ventasPorArticuloYMes($meses, $indiceMes);
         $ocPendiente = $this->totalPorArticulo(CompraOrdenPendiente::query());
         $reservado = $this->totalPorArticulo(CompraPedidoPendiente::query()->reservadas());
+        $entregas = $this->entregasPorArticulo();
+        $proveedores = $this->proveedorPorArticulo();
+        [$stockPorDeposito, $depositos] = $this->stockPorDeposito();
 
         $grupos = [];
 
@@ -115,10 +121,30 @@ class ReposicionService
             ];
 
             // `v` y `m` se omiten cuando el artículo nunca vendió: son ~4.400 de
-            // ~5.200 artículos, y serían dos arrays de 25 ceros cada uno.
+            // ~5.200 artículos, y serían dos arrays de 25 ceros cada uno. Mismo
+            // criterio para el resto de los campos opcionales: solo viajan si
+            // hay algo que decir.
             if (isset($ventas[$codigo])) {
                 $item['v'] = $ventas[$codigo]['v'];
                 $item['m'] = $ventas[$codigo]['m'];
+            }
+
+            if (isset($proveedores[$codigo])) {
+                $item['p'] = $proveedores[$codigo];
+            }
+
+            if (isset($stockPorDeposito[$codigo])) {
+                $item['sd'] = $stockPorDeposito[$codigo];
+            }
+
+            if (isset($entregas[$codigo])) {
+                $item['e'] = $entregas[$codigo];
+            }
+
+            // Venta mensual cargada a mano en el ERP (en envases). Si está, el
+            // tablero la usa en lugar del promedio de venta.
+            if ($articulo->venta_estimada !== null && (float) $articulo->venta_estimada > 0) {
+                $item['ve'] = $this->limpiar((float) $articulo->venta_estimada);
             }
 
             $grupos[$clave]['i'][] = $item;
@@ -142,7 +168,121 @@ class ReposicionService
         return [
             'meses' => $meses,
             'groups' => array_values($grupos),
+            'depositos' => $depositos,
         ];
+    }
+
+    /**
+     * Las OC pendientes de cada artículo con su fecha de entrega, ordenadas de
+     * la más próxima a la más lejana (las sin fecha al final).
+     *
+     * Se mandan todas y no solo la próxima: Compras carga entregas escalonadas
+     * (una OC con tres renglones del mismo artículo, cada uno con su fecha) y
+     * la pantalla las lista en el tooltip.
+     *
+     * @return array<string, list<array{0: ?string, 1: float}>>
+     */
+    private function entregasPorArticulo(): array
+    {
+        $entregas = [];
+
+        $filas = CompraOrdenPendiente::query()
+            ->select('articulo', 'fecha_entrega', 'cant_pend')
+            ->toBase()
+            ->get();
+
+        foreach ($filas as $fila) {
+            $fecha = $fila->fecha_entrega === null ? null : substr((string) $fila->fecha_entrega, 0, 10);
+            $entregas[$fila->articulo][] = [$fecha, $this->limpiar((float) $fila->cant_pend)];
+        }
+
+        foreach ($entregas as &$lista) {
+            usort($lista, fn ($a, $b) => [$a[0] === null, $a[0]] <=> [$b[0] === null, $b[0]]);
+        }
+
+        return $entregas;
+    }
+
+    /**
+     * La razón social del proveedor de cada artículo.
+     *
+     * Primero el padrón de artículos (`articulos.proveedor_id`), que es donde
+     * `VinculacionProveedores` ya resolvió las cuatro fuentes con su
+     * precedencia. Para los que no están en ese catálogo o no tienen proveedor,
+     * el kardex, pero SOLO si el artículo le compró siempre al mismo: con más de
+     * un proveedor histórico elegir sería adivinar (mismo criterio que
+     * `VinculacionProveedores::desdeKardex()`).
+     *
+     * @return array<string, string>
+     */
+    private function proveedorPorArticulo(): array
+    {
+        $proveedores = [];
+
+        $padron = DB::table('articulos')
+            ->join('proveedores', 'proveedores.id', '=', 'articulos.proveedor_id')
+            ->select('articulos.codigo', 'proveedores.razon_social')
+            ->get();
+
+        foreach ($padron as $fila) {
+            $proveedores[mb_strtoupper(trim((string) $fila->codigo))] = $fila->razon_social;
+        }
+
+        $unicos = Partida::query()
+            ->whereNotNull('proveedor_numero')
+            ->groupBy('codigo_articulo')
+            ->havingRaw('COUNT(DISTINCT proveedor_numero) = 1')
+            ->select('codigo_articulo', DB::raw('MAX(proveedor_numero) as proveedor_numero'))
+            ->toBase()
+            ->get();
+
+        $razones = Proveedor::query()
+            ->whereNotNull('numero')
+            ->pluck('razon_social', 'numero');
+
+        foreach ($unicos as $fila) {
+            $codigo = mb_strtoupper(trim((string) $fila->codigo_articulo));
+            $razon = $razones[(string) $fila->proveedor_numero] ?? null;
+
+            if ($razon !== null && ! isset($proveedores[$codigo])) {
+                $proveedores[$codigo] = $razon;
+            }
+        }
+
+        return $proveedores;
+    }
+
+    /**
+     * Stock de cada artículo partido por depósito, y la lista de depósitos.
+     *
+     * Solo se mandan los depósitos con stock distinto de 0: la mayoría de los
+     * artículos está en uno o dos de los diez.
+     *
+     * @return array{0: array<string, array<string, float>>, 1: list<array{c: string, n: string}>}
+     */
+    private function stockPorDeposito(): array
+    {
+        $stock = [];
+        $nombres = [];
+
+        foreach (CompraStockDeposito::query()->select('articulo', 'deposito', 'nombre', 'cant_stock')->toBase()->get() as $fila) {
+            $nombres[$fila->deposito] ??= $fila->nombre ?? $fila->deposito;
+
+            $cantidad = $this->limpiar((float) $fila->cant_stock);
+
+            if ($cantidad != 0.0) {
+                $stock[$fila->articulo][$fila->deposito] = $cantidad;
+            }
+        }
+
+        ksort($nombres);
+
+        $depositos = [];
+        foreach ($nombres as $codigo => $nombre) {
+            $depositos[] = ['c' => (string) $codigo, 'n' => (string) $nombre];
+        }
+
+        return [$stock, $depositos];
     }
 
     /**
@@ -309,6 +449,7 @@ class ReposicionService
             ComprasArticulo::max('synced_at'),
             CompraOrdenPendiente::max('synced_at'),
             CompraPedidoPendiente::max('synced_at'),
+            CompraStockDeposito::max('synced_at'),
             Venta::max('synced_at'),
             md5(serialize(config('compras'))),
         ];

@@ -18,10 +18,21 @@ use Illuminate\Support\Facades\Log;
  * entrega permite explicar de dónde sale el número de una fila del tablero.
  *
  * Refresh completo: no hay campos propios del panel.
+ *
+ * ⚠️ La fecha de entrega sale de `OC_ITEMS`, una TABLA BASE del ERP y no una
+ * vista. La vista tiene `FECHA_ENTRE`, pero es la de la cabecera y casi
+ * siempre viene vacía: la fecha que Compras carga es la de cada renglón (una OC
+ * con tres entregas escalonadas tiene tres fechas distintas). Se cruza por
+ * `TIPO + NUM + RENGLON`, que es lo que la vista llama `ITEM` — verificado
+ * contra la OC 9996 del 8/10/2026. Mismo riesgo que `ARTICULOS` y
+ * `COMPRO_PARTIDAS`: la leemos porque tenemos SELECT, sin contrato. Si se rompe,
+ * la sync no se cae por eso: queda la fecha de la cabecera.
  */
 class OrdenCompraSyncService
 {
     private const VISTA = 'powerbi_ordenescompra_pend_vista';
+
+    private const ITEMS = 'OC_ITEMS';
 
     private const CHUNK = 500;
 
@@ -34,8 +45,14 @@ class OrdenCompraSyncService
 
         // Solo lo que todavía debe entrar: una OC con saldo 0 ya se entregó.
         $filas = DB::connection('erp')
-            ->table(self::VISTA)
-            ->where('CANT_PEND', '>', 0)
+            ->table(self::VISTA.' as v')
+            ->leftJoin(self::ITEMS.' as i', function ($join) {
+                $join->on('i.TIPO', '=', 'v.TIPO')
+                    ->on('i.NUM', '=', 'v.NUM')
+                    ->on('i.RENGLON', '=', 'v.ITEM');
+            })
+            ->where('v.CANT_PEND', '>', 0)
+            ->select('v.*', 'i.FECHA_ENTRE as FECHA_ENTRE_ITEM')
             ->get();
 
         DB::transaction(function () use ($filas, $syncedAt, &$total) {
@@ -74,7 +91,8 @@ class OrdenCompraSyncService
             'proveedor_numero' => $this->entero($fila['PROVE'] ?? null),
             'razon_social' => $this->texto($fila['RAZON'] ?? null),
             'fecha' => $this->fecha($fila['FECHA'] ?? null),
-            'fecha_entrega' => $this->fecha($fila['FECHA_ENTRE'] ?? null),
+            // La del renglón, y si no está, la de la cabecera. Ver la clase.
+            'fecha_entrega' => $this->fecha($fila['FECHA_ENTRE_ITEM'] ?? $fila['FECHA_ENTRE'] ?? null),
             // Se normaliza igual que en el catálogo: es la clave del cruce.
             'articulo' => mb_strtoupper(trim((string) ($fila['ARTICULO'] ?? ''))),
             'descrip_arti' => $this->texto($fila['DESCRIP_ARTI'] ?? null),

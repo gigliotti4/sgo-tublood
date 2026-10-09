@@ -5,13 +5,14 @@ namespace App\Jobs;
 use App\Services\RpSistemas\ComprasArticuloSyncService;
 use App\Services\RpSistemas\OrdenCompraSyncService;
 use App\Services\RpSistemas\PedidoPendienteSyncService;
+use App\Services\RpSistemas\StockDepositoSyncService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * Sincroniza las tres fuentes del módulo Compras de una sola vez.
+ * Sincroniza las cuatro fuentes del módulo Compras de una sola vez.
  *
  * ⚠️ Un solo job para las tres tablas, a diferencia del resto del proyecto que
  * tiene un job por tabla. El tablero cruza catálogo, OC y pedidos entre sí: un
@@ -33,13 +34,15 @@ class SyncComprasJob implements ShouldQueue
         ComprasArticuloSyncService $articulos,
         OrdenCompraSyncService $ordenes,
         PedidoPendienteSyncService $pedidos,
+        StockDepositoSyncService $depositos,
     ): void {
         try {
             $a = $articulos->sync();
             $o = $ordenes->sync();
             $p = $pedidos->sync();
+            $d = $depositos->sync();
 
-            Log::info("SyncComprasJob: completado — {$a} artículos, {$o} OC pendientes, {$p} pedidos pendientes");
+            Log::info("SyncComprasJob: completado — {$a} artículos, {$o} OC pendientes, {$p} pedidos pendientes, {$d} filas de stock por depósito");
         } catch (Throwable $e) {
             // Acá no hay `RpSistemasException`: lo que puede fallar es la
             // conexión SQL (driver ausente, firewall, credenciales) y viene

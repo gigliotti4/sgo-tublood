@@ -21,7 +21,7 @@ use Illuminate\Support\Facades\Log;
  * de que no le cambien una columna. Si el sync se rompe de golpe, empezar por
  * ahí; lo correcto a futuro es pedirles una vista.
  *
- * Se traen 8 de las 142 columnas. Refresh completo: no hay campos propios.
+ * Se traen 9 de las 142 columnas. Refresh completo: no hay campos propios.
  */
 class ComprasArticuloSyncService
 {
@@ -67,6 +67,7 @@ class ComprasArticuloSyncService
             SELECT UPPER(LTRIM(RTRIM(COD_ARTICULO))) COD_ARTICULO,
                    DESCRIP_ARTI,
                    CANT_STOCK,
+                   STOCK_SEGURIDAD,
                    AGRU_1,
                    GTIN,
                    SIN_STOCK,
@@ -93,6 +94,7 @@ class ComprasArticuloSyncService
             'codigo' => mb_strtoupper(trim((string) ($fila['COD_ARTICULO'] ?? ''))),
             'descripcion' => $this->texto($fila['DESCRIP_ARTI'] ?? null),
             'cant_stock' => (float) ($fila['CANT_STOCK'] ?? 0),
+            'venta_estimada' => $this->ventaEstimada($fila['STOCK_SEGURIDAD'] ?? null),
             'agru_1' => $this->texto($fila['AGRU_1'] ?? null),
             // Crudo: los comodines los filtra el dataset, no la sync.
             'gtin' => $this->texto($fila['GTIN'] ?? null),
@@ -103,6 +105,21 @@ class ComprasArticuloSyncService
             'created_at' => $now,
             'updated_at' => $now,
         ];
+    }
+
+    /**
+     * La venta mensual que Compras carga a mano, en envases.
+     *
+     * ⚠️ Viaja en `STOCK_SEGURIDAD` aunque el campo se llame así: es el que el
+     * sector eligió para cargarla (estaba vacío en todos los artículos). Ver la
+     * migración del 8/10/2026 para por qué no `STOCK_MIN`. 0 o vacío = sin
+     * estimación, y el tablero sigue con el promedio de venta.
+     */
+    private function ventaEstimada(mixed $valor): ?float
+    {
+        $valor = (float) $valor;
+
+        return $valor > 0 ? $valor : null;
     }
 
     /** El ERP usa char(1) 'S'/'N', y rellena con espacios. */

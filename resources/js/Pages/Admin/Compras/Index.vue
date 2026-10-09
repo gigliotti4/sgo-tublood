@@ -19,7 +19,7 @@ import {
 } from '@/lib/compras'
 import { exportarDetalle, exportarResumen } from '@/lib/comprasCsv'
 import { etiquetaMes, fechaHora, numero } from '@/lib/formato'
-import type { GrupoReposicion } from '@/types'
+import type { DepositoCompras, GrupoReposicion } from '@/types'
 
 /**
  * Tablero de reposición de stock.
@@ -34,6 +34,7 @@ import type { GrupoReposicion } from '@/types'
 const props = defineProps<{
     meses: string[]
     groups: GrupoReposicion[]
+    depositos: DepositoCompras[]
     categorias: Record<string, string>
     mesesObjetivo: number[]
     mesesObjetivoDefault: number
@@ -66,6 +67,7 @@ const hayFiltros = computed(() => {
     return !!(
         f.q || f.cats.length || f.activo !== 'all' || f.stock !== 'all'
         || f.cubre !== 'all' || f.pareto !== 'all' || f.servicios
+        || f.depositos.length || !f.agrupar
         || f.desde !== 0 || f.hasta !== props.meses.length - 1
     )
 })
@@ -100,8 +102,9 @@ const irA = (p: number) => {
 const ordenarPor = (key: ClaveOrden) => {
     orden.value = orden.value.key === key
         ? { key, dir: orden.value.dir === 'asc' ? 'desc' : 'asc' }
-        // Texto arranca A→Z; los números, de mayor a menor (que es lo que se busca).
-        : { key, dir: key === 'gtin' || key === 'cat' ? 'asc' : 'desc' }
+        // Texto arranca A→Z, la entrega de la más próxima a la más lejana, y los
+        // números de mayor a menor (que es lo que se busca).
+        : { key, dir: ['gtin', 'cat', 'proveedor', 'entrega'].includes(key) ? 'asc' : 'desc' }
 }
 
 /** Solo las categorías que existen en los datos: ofrecer las 23 del catálogo confundiría. */
@@ -201,6 +204,7 @@ const sincronizacionMasVieja = computed(() => {
                 :meses="meses"
                 :categorias-presentes="categoriasPresentes"
                 :opciones-objetivo="mesesObjetivo"
+                :depositos="depositos"
                 @limpiar="limpiar"
             />
 
@@ -214,6 +218,7 @@ const sincronizacionMasVieja = computed(() => {
                 :orden="orden"
                 :mostrar-meses="mostrarMeses"
                 :hay-filtros="hayFiltros"
+                :depositos="depositos"
                 @ordenar="ordenarPor"
             />
 
@@ -285,7 +290,9 @@ const sincronizacionMasVieja = computed(() => {
                     ventas, promedio, reservado, OC pendiente, stock total y cantidad a comprar también se multiplican por
                     el envase: todo el tablero está en <strong>unidades</strong> ·
                     <strong>Stock total disp.</strong> = Stock (u.) − Reservado + OC pendiente ·
-                    <strong>Prom. mensual</strong> = ventas del período ÷ meses del período ·
+                    <strong>Prom. mensual</strong> = ventas del período ÷ meses del período, salvo que el artículo
+                    tenga una venta mensual cargada a mano en el ERP (campo <strong>Stock de seguridad</strong>): ahí manda
+                    esa, y la fila lo marca con <strong>est.</strong> ·
                     <strong>Meses cubro</strong> = Stock total disp. ÷ Prom. mensual ·
                     <strong>Cant. a comprar</strong> = (Prom. mensual × meses objetivo) − Stock total disp.
                 </p>
@@ -293,7 +300,10 @@ const sincronizacionMasVieja = computed(() => {
                     Los artículos con la misma <strong>clasificación GTIN</strong> se unifican en un renglón
                     (multimarca); “NO APLICA”, “N/A” y “0” se ignoran y esos artículos van individuales ·
                     las notas de crédito ya vienen en negativo del ERP y por eso restan solas ·
-                    un stock negativo del ERP se cuenta como 0 y el producto queda marcado con ⚠ ·
+                    un stock negativo del ERP se cuenta como 0 y el producto queda marcado con ⚠ (el tooltip dice qué
+                    depósito está en negativo) · <strong>Depósitos</strong>: con todos, el stock es el total del ERP; al
+                    elegir algunos, es la suma de esos · <strong>Entrega</strong> = la fecha más próxima de las OC
+                    pendientes (en rojo si ya pasó; el resto en el tooltip) ·
                     los productos que <strong>no mueven stock</strong> quedan en la categoría SERVICIOS y fuera del
                     cálculo salvo que los incluyas.
                 </p>

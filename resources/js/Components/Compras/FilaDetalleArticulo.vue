@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import Sparkline from '@/Components/Sparkline.vue'
-import { detalleDeItem, type FiltrosCompras } from '@/lib/compras'
-import type { ArticuloReposicion } from '@/types'
+import { detalleDeItem, estaAtrasada, type FiltrosCompras } from '@/lib/compras'
+import { describirEntregas, fechaEntrega } from '@/lib/comprasEntregas'
+import type { ArticuloReposicion, DepositoCompras } from '@/types'
 import { decimal, numero } from '@/lib/formato'
 
 /**
@@ -22,9 +23,19 @@ const props = defineProps<{
     totalMeses: number
     mostrarMeses: boolean
     catName: (codigo: string) => string
+    depositos: DepositoCompras[]
 }>()
 
 const d = computed(() => detalleDeItem(props.item, props.filtros, props.totalMeses))
+
+/** El stock partido por depósito, para el tooltip de la celda. */
+const tituloStock = computed(() => {
+    const partes = Object.entries(props.item.sd ?? {})
+        .map(([c, cant]) => `${props.depositos.find(x => x.c === c)?.n ?? c}: ${numero(cant)}`)
+    return partes.length ? `Por depósito (env.) — ${partes.join(' · ')}` : 'Sin stock por depósito en el ERP'
+})
+
+const proxima = computed(() => d.value.entregas.find(e => e.fecha !== null)?.fecha ?? null)
 
 const td = 'whitespace-nowrap px-1.5 py-2 text-right text-[11.5px] tabular-nums'
 const sep = 'border-l border-gray-200 dark:border-gray-700'
@@ -49,7 +60,7 @@ const fueraDelPeriodo = (i: number) => i < props.filtros.desde || i > props.filt
             <span v-else class="text-gray-400">–</span>
         </td>
         <td :class="td">{{ numero(d.stockU) }}</td>
-        <td :class="td">{{ numero(d.stockEnv) }}</td>
+        <td :class="[td, 'cursor-help']" :title="tituloStock">{{ numero(d.stockEnv) }}</td>
         <td :class="[td, sep]">
             <Sparkline :valores="d.ventas" :desde="filtros.desde" :hasta="filtros.hasta" />
         </td>
@@ -64,12 +75,31 @@ const fueraDelPeriodo = (i: number) => i < props.filtros.desde || i > props.filt
         </template>
         <td v-else :class="td">{{ numero(d.ventaPeriodo) }}</td>
 
-        <td :class="td">{{ decimal(d.promMensual) }}</td>
+        <td :class="td">
+            {{ decimal(d.promMensual) }}
+            <span
+                v-if="d.estimada"
+                class="ml-0.5 cursor-help rounded bg-brand-50 px-1 text-[9px] font-bold text-brand-500 dark:bg-brand-500/20 dark:text-brand-300"
+                title="Venta mensual cargada a mano en el ERP (Stock de seguridad)"
+            >est.</span>
+        </td>
         <td :class="[td, sep]">{{ numero(d.reservado) }}</td>
         <td :class="td">{{ numero(d.ocPend) }}</td>
+        <td :class="td" :title="describirEntregas(d.entregas)">
+            <template v-if="d.entregas.length">
+                <span v-if="proxima" :class="estaAtrasada(proxima) ? 'font-bold text-error-500' : ''">{{ fechaEntrega(proxima) }}</span>
+                <span v-else class="text-gray-400">s/fecha</span>
+                <span v-if="d.entregas.length > 1" class="ml-0.5 text-[10px] text-gray-400">+{{ d.entregas.length - 1 }}</span>
+            </template>
+            <span v-else class="text-gray-400">–</span>
+        </td>
         <td :class="td">{{ numero(d.stockTotal) }}</td>
         <td :class="sep" />
         <td />
         <td />
+        <td class="truncate px-1.5 py-2 text-left text-[11px]" :class="sep" :title="item.p">
+            <template v-if="item.p">{{ item.p }}</template>
+            <span v-else class="text-gray-400">–</span>
+        </td>
     </tr>
 </template>

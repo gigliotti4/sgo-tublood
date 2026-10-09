@@ -22,6 +22,7 @@ class ComprasArticulo extends Model
 
     protected $casts = [
         'cant_stock' => 'decimal:4',
+        'venta_estimada' => 'decimal:4',
         'sin_stock' => 'boolean',
         'activo' => 'boolean',
         'unidades_por_envase' => 'integer',

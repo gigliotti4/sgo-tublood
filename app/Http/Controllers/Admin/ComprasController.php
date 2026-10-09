@@ -35,6 +35,7 @@ class ComprasController extends Controller
         return inertia('Admin/Compras/Index', [
             'meses' => $dataset['meses'],
             'groups' => $dataset['groups'],
+            'depositos' => $dataset['depositos'],
             'categorias' => config('compras.categorias'),
             'mesesObjetivo' => config('compras.meses_objetivo'),
             'mesesObjetivoDefault' => config('compras.meses_objetivo_default'),

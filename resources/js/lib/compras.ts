@@ -31,6 +31,20 @@ export interface FiltrosCompras {
     pareto: 'all' | 'A' | 'B'
     q: string
     servicios: boolean
+    /**
+     * Depósitos que cuentan en el stock. Vacío = todos, y en ese caso el stock
+     * es `CANT_STOCK` tal cual (como siempre). Ver `stockDe()`.
+     */
+    depositos: string[]
+    /** `false` = cada artículo en su propia fila, sin unificar por GTIN. */
+    agrupar: boolean
+}
+
+/** Una OC pendiente de un artículo: fecha de entrega, cantidad (en unidades) y código. */
+export interface EntregaFila {
+    fecha: string | null
+    cantidad: number
+    codigo: string
 }
 
 export interface FilaReposicion {
@@ -55,6 +69,16 @@ export interface FilaReposicion {
     importe: number
     /** El ERP trae stock negativo en algún artículo del grupo: se contó 0. */
     anomalia: boolean
+    /** Códigos de los depósitos que están en negativo en algún artículo, para explicar el ⚠. */
+    depositosNegativos: string[]
+    /** Algún artículo usa la venta mensual cargada a mano en vez del promedio. */
+    estimada: boolean
+    /** Proveedores distintos de los artículos del grupo (puede ser 0, 1 o varios). */
+    proveedores: string[]
+    /** OC pendientes de todos los artículos, de la más próxima a la más lejana; sin fecha al final. */
+    entregas: EntregaFila[]
+    /** La entrega con fecha más próxima, o null si ninguna OC tiene fecha. */
+    proximaEntrega: string | null
     pareto: ClasePareto
     pctFact: number
     cumPct: number
@@ -71,6 +95,8 @@ export const filtrosPorDefecto = (mesesObjetivo: number, ultimoMes: number): Fil
     pareto: 'all',
     q: '',
     servicios: false,
+    depositos: [],
+    agrupar: true,
 })
 
 /**
@@ -80,12 +106,36 @@ export const filtrosPorDefecto = (mesesObjetivo: number, ultimoMes: number): Fil
  */
 const envaseDe = (it: ArticuloReposicion): number => (it.u && it.u > 0 ? it.u : 1)
 
+/**
+ * Stock en envases, CRUDO (puede ser negativo), según los depósitos elegidos.
+ *
+ * ⚠️ Con "todos" (lista vacía) es `CANT_STOCK` tal cual, y no la suma de los
+ * depósitos: así el tablero abre con los mismos números de siempre. Recién al
+ * elegir depósitos pasa a ser la suma de esos. Las dos cosas difieren en ~32
+ * artículos (el ERP no siempre reparte `CANT_STOCK` en los depósitos), y elegir
+ * los diez a mano se normaliza a "todos" en la botonera para no mostrar dos
+ * números distintos para lo mismo.
+ */
+export const stockDe = (it: ArticuloReposicion, f: FiltrosCompras): number => {
+    if (!f.depositos.length) return it.s
+
+    let total = 0
+    for (const d of f.depositos) total += it.sd?.[d] ?? 0
+    return total
+}
+
+/** Depósitos elegidos (o todos) que el ERP tiene en negativo para este artículo. */
+const depositosNegativosDe = (it: ArticuloReposicion, f: FiltrosCompras): string[] =>
+    Object.entries(it.sd ?? {})
+        .filter(([d, cant]) => cant < 0 && (!f.depositos.length || f.depositos.includes(d)))
+        .map(([d]) => d)
+
 /** ¿Este artículo entra, según los filtros que se aplican por artículo? */
 const itemPasa = (it: ArticuloReposicion, f: FiltrosCompras): boolean => {
     if (f.activo === 'si' && !it.a) return false
     if (f.activo === 'no' && it.a) return false
 
-    const conStock = it.s > 0
+    const conStock = stockDe(it, f) > 0
     if (f.stock === 'si' && !conStock) return false
     if (f.stock === 'no' && conStock) return false
 
@@ -117,6 +167,12 @@ export const computeGroup = (
     let ocPend = 0
     let importe = 0
     let anomalia = false
+    let estimada = false
+    let promMensual = 0
+    const negativos = new Set<string>()
+    const proveedores = new Set<string>()
+    const entregas: EntregaFila[] = []
+    const nMeses = f.hasta - f.desde + 1
 
     for (const it of items) {
         const u = envaseDe(it)
@@ -125,25 +181,44 @@ export const computeGroup = (
         // (hoy 15 artículos, el peor en varios millones). Se cuenta 0 y se marca
         // el producto. Sin esto, ordenar por "cantidad a comprar" llena el tope
         // de basura.
-        if (it.s < 0) anomalia = true
-        const st = Math.max(0, it.s)
+        const crudo = stockDe(it, f)
+        if (crudo < 0) anomalia = true
+        for (const d of depositosNegativosDe(it, f)) negativos.add(d)
+        const st = Math.max(0, crudo)
 
         stockEnv += st // envases crudos del ERP, comparables contra su pantalla
         stockU += st * u
         reservado += it.r * u
         ocPend += it.o * u
 
-        if (it.v) for (let i = 0; i < totalMeses; i++) ventas[i] += it.v[i] * u
+        let ventaItem = 0
+        if (it.v) {
+            for (let i = 0; i < totalMeses; i++) ventas[i] += it.v[i] * u
+            for (let i = f.desde; i <= f.hasta; i++) ventaItem += it.v[i] * u
+        }
         // Las notas de crédito ya vienen en negativo desde el ERP: se suman tal
         // cual y por eso restan solas.
         if (it.m) for (let i = f.desde; i <= f.hasta; i++) importe += it.m[i]
+
+        // ⚠️ La demanda es POR ARTÍCULO: si Compras cargó una venta mensual a
+        // mano (`STOCK_SEGURIDAD` en el ERP), manda sobre el promedio — es para
+        // productos nuevos o sin historia. Un grupo puede mezclar los dos casos.
+        if (it.ve && it.ve > 0) {
+            promMensual += it.ve * u
+            estimada = true
+        } else {
+            promMensual += ventaItem / nMeses
+        }
+
+        if (it.p) proveedores.add(it.p)
+        for (const [fecha, cant] of it.e ?? []) entregas.push({ fecha, cantidad: cant * u, codigo: it.c })
     }
 
-    const nMeses = f.hasta - f.desde + 1
     let ventaPeriodo = 0
     for (let i = f.desde; i <= f.hasta; i++) ventaPeriodo += ventas[i]
 
-    const promMensual = ventaPeriodo / nMeses
+    entregas.sort(compararEntregas)
+
     const stockTotal = stockU - reservado + ocPend
 
     // Si el disponible es 0 o negativo la cobertura es 0: no existen los "meses
@@ -169,10 +244,60 @@ export const computeGroup = (
         estado: estadoDe(promMensual, cubre),
         importe,
         anomalia,
+        depositosNegativos: [...negativos].sort(),
+        estimada,
+        proveedores: [...proveedores].sort((a, b) => a.localeCompare(b, 'es')),
+        entregas,
+        proximaEntrega: entregas[0]?.fecha ?? null,
         pareto: null,
         pctFact: 0,
         cumPct: 0,
     }
+}
+
+/** De la más próxima a la más lejana; las que no tienen fecha, al final. */
+const compararEntregas = (a: EntregaFila, b: EntregaFila): number => {
+    if (a.fecha === b.fecha) return 0
+    if (a.fecha === null) return 1
+    if (b.fecha === null) return -1
+    return a.fecha < b.fecha ? -1 : 1
+}
+
+/** Hoy en `YYYY-MM-DD`, en la hora local: es contra lo que se compara una fecha de entrega. */
+export const hoyIso = (): string => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** ¿La entrega ya debería haber llegado? Una OC pendiente con fecha pasada está atrasada. */
+export const estaAtrasada = (fecha: string | null): boolean => fecha !== null && fecha < hoyIso()
+
+/**
+ * Cada artículo como su propio grupo, para ver el tablero sin unificar por GTIN.
+ *
+ * El `id` es el mismo que tendría un artículo sin GTIN (`a:<código>`), así que
+ * es estable y no choca con los de los grupos unificados. Se memoiza por array
+ * de grupos: el dataset no cambia mientras la página está abierta.
+ */
+const desagrupados = new WeakMap<GrupoReposicion[], GrupoReposicion[]>()
+
+const desagrupar = (groups: GrupoReposicion[]): GrupoReposicion[] => {
+    const hecho = desagrupados.get(groups)
+    if (hecho) return hecho
+
+    const salida: GrupoReposicion[] = []
+    for (const g of groups) {
+        if (g.i.length === 1 && g.id.startsWith('a:')) {
+            salida.push(g)
+            continue
+        }
+        for (const it of g.i) {
+            salida.push({ id: `a:${it.c}`, n: it.d || it.c, c: [it.k], u: it.u, i: [it] })
+        }
+    }
+
+    desagrupados.set(groups, salida)
+    return salida
 }
 
 /**
@@ -224,7 +349,10 @@ const matchQ = (g: GrupoReposicion, q: string, catName: (c: string) => string): 
     if (g.n.toLowerCase().includes(q)) return true
     if (g.c.map(catName).join(' / ').toLowerCase().includes(q)) return true
 
-    return g.i.some(it => it.c.toLowerCase().includes(q) || it.d.toLowerCase().includes(q))
+    return g.i.some(it =>
+        it.c.toLowerCase().includes(q)
+        || it.d.toLowerCase().includes(q)
+        || (it.p?.toLowerCase().includes(q) ?? false))
 }
 
 /**
@@ -243,7 +371,7 @@ export const filtrar = (
     const cats = new Set(f.cats)
     const filas: FilaReposicion[] = []
 
-    for (const g of groups) {
+    for (const g of f.agrupar ? groups : desagrupar(groups)) {
         // Un grupo se excluye solo si TODOS sus artículos no mueven stock.
         if (!f.servicios && g.c.every(c => c === 'SERVICIOS')) continue
 
@@ -270,8 +398,8 @@ export const filtrar = (
 
 export type ClaveOrden =
     | 'gtin' | 'cat' | 'filas' | 'envase' | 'stockU' | 'stockEnv' | 'ventas'
-    | 'prom' | 'reservado' | 'oc' | 'total' | 'cubre' | 'meses' | 'comprar'
-    | `m${number}`
+    | 'prom' | 'reservado' | 'oc' | 'entrega' | 'total' | 'cubre' | 'meses' | 'comprar'
+    | 'proveedor' | `m${number}`
 
 const valorDeOrden = (
     r: FilaReposicion,
@@ -289,6 +417,9 @@ const valorDeOrden = (
         case 'prom': return r.promMensual
         case 'reservado': return r.reservado
         case 'oc': return r.ocPend
+        // Sin fecha va al fondo al ordenar de la más próxima a la más lejana.
+        case 'entrega': return r.proximaEntrega ?? '9999-12-31'
+        case 'proveedor': return r.proveedores.length > 1 ? `~${r.proveedores.length}` : (r.proveedores[0] ?? '')
         case 'total': return r.stockTotal
         // El semáforo ordena por gravedad, no alfabéticamente.
         case 'cubre': return r.estado === 'si' ? 2 : r.estado === 'sv' ? 1 : 0
@@ -400,8 +531,9 @@ export const calcularTotales = (rows: FilaReposicion[], totalMeses: number): Tot
 /** Las columnas calculadas de UN artículo, para la fila de detalle y el export. */
 export const detalleDeItem = (it: ArticuloReposicion, f: FiltrosCompras, totalMeses: number) => {
     const u = envaseDe(it)
-    const stockEnv = Math.max(0, it.s)
+    const stockEnv = Math.max(0, stockDe(it, f))
     const ventas = (it.v ?? new Array<number>(totalMeses).fill(0)).map(x => x * u)
+    const estimada = !!(it.ve && it.ve > 0)
 
     let ventaPeriodo = 0
     for (let i = f.desde; i <= f.hasta; i++) ventaPeriodo += ventas[i] ?? 0
@@ -416,9 +548,11 @@ export const detalleDeItem = (it: ArticuloReposicion, f: FiltrosCompras, totalMe
         stockU,
         ventas,
         ventaPeriodo,
-        promMensual: ventaPeriodo / (f.hasta - f.desde + 1),
+        promMensual: estimada ? it.ve! * u : ventaPeriodo / (f.hasta - f.desde + 1),
+        estimada,
         reservado,
         ocPend,
         stockTotal: stockU - reservado + ocPend,
+        entregas: (it.e ?? []).map(([fecha, cant]) => ({ fecha, cantidad: cant * u, codigo: it.c })),
     }
 }

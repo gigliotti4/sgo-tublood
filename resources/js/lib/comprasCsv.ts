@@ -16,6 +16,7 @@
 
 import type { FilaReposicion, FiltrosCompras } from '@/lib/compras'
 import { detalleDeItem } from '@/lib/compras'
+import { fechaEntrega } from '@/lib/comprasEntregas'
 import { etiquetaMes } from '@/lib/formato'
 
 type Celda = string | number | null | undefined
@@ -61,8 +62,9 @@ export const exportarResumen = (
 
     const out: Celda[][] = [[
         'Multimarca GTIN', 'Tipo', 'Filas', 'U. x Envase', 'Stock (u.)', 'Stock (env.)',
-        `Ventas ${periodo(meses, filtros)} (u.)`, 'Prom. mensual (u.)', 'Reservado (u.)',
-        'OC pend. (u.)', 'Stock total disp. (u.)', '¿Cubre?', 'Meses cubro', 'Cant. a comprar (u.)',
+        `Ventas ${periodo(meses, filtros)} (u.)`, 'Prom. mensual (u.)', 'Prom. estimado a mano',
+        'Reservado (u.)', 'OC pend. (u.)', 'Próxima entrega', 'Stock total disp. (u.)', '¿Cubre?',
+        'Meses cubro', 'Cant. a comprar (u.)', 'Proveedor',
         'Pareto', 'Facturación período', '% facturación', '% acumulado',
         ...etiquetas,
     ]]
@@ -77,13 +79,16 @@ export const exportarResumen = (
             entero(r.stockEnv),
             entero(r.ventaPeriodo),
             decimal(r.promMensual),
+            r.estimada ? 'SI' : '',
             entero(r.reservado),
             entero(r.ocPend),
+            fechaEntrega(r.proximaEntrega),
             entero(r.stockTotal),
             r.estado === 'sv' ? 'SIN VENTA' : r.estado === 'si' ? 'SI' : 'NO',
             // Un producto sin ventas no tiene cobertura: celda vacía, no 0.
             r.estado === 'sv' || r.meses === Infinity ? '' : decimal(r.meses),
             decimal(r.cantComprar),
+            r.proveedores.join(' / '),
             r.pareto ?? '',
             decimal(r.importe, 2),
             decimal(r.pctFact, 2),
@@ -107,7 +112,8 @@ export const exportarDetalle = (
     const out: Celda[][] = [[
         'Multimarca GTIN', 'Código', 'Descripción', 'Categoría', 'Activo', 'U. x Envase',
         'Stock (u.)', 'Stock (env.)', `Ventas ${periodo(meses, filtros)} (u.)`, 'Prom. mensual (u.)',
-        'Reservado (u.)', 'OC pend. (u.)', 'Stock total disp. (u.)',
+        'Prom. estimado a mano', 'Reservado (u.)', 'OC pend. (u.)', 'Entregas', 'Stock total disp. (u.)',
+        'Proveedor',
         ...etiquetas,
     ]]
 
@@ -127,9 +133,12 @@ export const exportarDetalle = (
                 entero(d.stockEnv),
                 entero(d.ventaPeriodo),
                 decimal(d.promMensual),
+                d.estimada ? 'SI' : '',
                 entero(d.reservado),
                 entero(d.ocPend),
+                d.entregas.map(e => `${e.fecha ? fechaEntrega(e.fecha) : 's/fecha'}: ${entero(e.cantidad)}`).join(' | '),
                 entero(d.stockTotal),
+                it.p ?? '',
                 ...d.ventas.map(entero),
             ])
         }
