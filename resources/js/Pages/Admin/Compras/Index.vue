@@ -67,7 +67,7 @@ const hayFiltros = computed(() => {
     return !!(
         f.q || f.cats.length || f.activo !== 'all' || f.stock !== 'all'
         || f.cubre !== 'all' || f.pareto !== 'all' || f.servicios
-        || f.depositos.length || !f.agrupar
+        || f.depositos.length || f.agrupar
         || f.desde !== 0 || f.hasta !== props.meses.length - 1
     )
 })
@@ -197,7 +197,7 @@ const sincronizacionMasVieja = computed(() => {
                 </template>
             </div>
 
-            <KpisCompras :kpis="kpis" :meses-objetivo="filtros.mesesObjetivo" />
+            <KpisCompras :kpis="kpis" :meses-objetivo="filtros.mesesObjetivo" :agrupado="filtros.agrupar" />
 
             <FiltrosComprasPanel
                 v-model="filtros"

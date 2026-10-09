@@ -73,15 +73,17 @@ const flecha = (key: ClaveOrden) => {
     return props.orden.dir === 'asc' ? '▲' : '▼'
 }
 
-const columnas: { key: ClaveOrden | null; label: string; ancho: string; izq?: boolean; sep?: boolean; destacada?: boolean }[] = [
-    { key: 'gtin', label: 'Multimarca GTIN', ancho: 'w-[215px]', izq: true },
+// `computed` por el rótulo de la primera columna: sin agrupar, la fila es un
+// artículo y "Multimarca GTIN" no la describe.
+const columnas = computed<{ key: ClaveOrden | null; label: string; ancho: string; izq?: boolean; sep?: boolean; destacada?: boolean }[]>(() => [
+    { key: 'gtin', label: props.filtros.agrupar ? 'Multimarca GTIN' : 'Producto', ancho: 'w-[215px]', izq: true },
     { key: 'cat', label: 'Tipo', ancho: 'w-[104px]', izq: true },
     { key: 'filas', label: 'Filas', ancho: 'w-[44px]' },
     { key: 'envase', label: 'U. x Envase', ancho: 'w-[56px]' },
     { key: 'stockU', label: 'Stock (u.)', ancho: 'w-[74px]' },
     { key: 'stockEnv', label: 'Stock (env.)', ancho: 'w-[64px]' },
     { key: null, label: 'Tendencia venta', ancho: 'w-[92px]', sep: true },
-]
+])
 
 const columnasFinales: { key: ClaveOrden; label: string; ancho: string; sep?: boolean; destacada?: boolean }[] = [
     { key: 'prom', label: 'Prom. mensual', ancho: 'w-[70px]' },

@@ -61,7 +61,7 @@ export const exportarResumen = (
     const etiquetas = meses.map(etiquetaMes)
 
     const out: Celda[][] = [[
-        'Multimarca GTIN', 'Tipo', 'Filas', 'U. x Envase', 'Stock (u.)', 'Stock (env.)',
+        filtros.agrupar ? 'Multimarca GTIN' : 'Producto', 'Tipo', 'Filas', 'U. x Envase', 'Stock (u.)', 'Stock (env.)',
         `Ventas ${periodo(meses, filtros)} (u.)`, 'Prom. mensual (u.)', 'Prom. estimado a mano',
         'Reservado (u.)', 'OC pend. (u.)', 'Próxima entrega', 'Stock total disp. (u.)', '¿Cubre?',
         'Meses cubro', 'Cant. a comprar (u.)', 'Proveedor',
@@ -110,7 +110,7 @@ export const exportarDetalle = (
     const etiquetas = meses.map(etiquetaMes)
 
     const out: Celda[][] = [[
-        'Multimarca GTIN', 'Código', 'Descripción', 'Categoría', 'Activo', 'U. x Envase',
+        filtros.agrupar ? 'Multimarca GTIN' : 'Producto', 'Código', 'Descripción', 'Categoría', 'Activo', 'U. x Envase',
         'Stock (u.)', 'Stock (env.)', `Ventas ${periodo(meses, filtros)} (u.)`, 'Prom. mensual (u.)',
         'Prom. estimado a mano', 'Reservado (u.)', 'OC pend. (u.)', 'Entregas', 'Stock total disp. (u.)',
         'Proveedor',

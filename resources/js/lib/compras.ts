@@ -36,7 +36,11 @@ export interface FiltrosCompras {
      * es `CANT_STOCK` tal cual (como siempre). Ver `stockDe()`.
      */
     depositos: string[]
-    /** `false` = cada artículo en su propia fila, sin unificar por GTIN. */
+    /**
+     * `true` = unificar por GTIN (multimarca). El tablero abre en `false`, con
+     * cada artículo en su fila: así lo pidió Compras el 9/10/2026 (se compra
+     * por artículo, y cada uno tiene su proveedor). Agrupar es a pedido.
+     */
     agrupar: boolean
 }
 
@@ -96,7 +100,7 @@ export const filtrosPorDefecto = (mesesObjetivo: number, ultimoMes: number): Fil
     q: '',
     servicios: false,
     depositos: [],
-    agrupar: true,
+    agrupar: false,
 })
 
 /**

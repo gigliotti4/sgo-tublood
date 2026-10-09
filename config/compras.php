@@ -129,7 +129,9 @@ return [
         'pareto' => 'all',
         // Vacío = todos los depósitos (el total del ERP).
         'depositos' => [],
-        'agrupar' => true,
+        // Un renglón por artículo, igual que el tablero por defecto: se compra
+        // por artículo y cada uno tiene su proveedor.
+        'agrupar' => false,
         // Cuántos productos se listan en el cuerpo del mail; el resto va en el Excel.
         'top' => 10,
     ],

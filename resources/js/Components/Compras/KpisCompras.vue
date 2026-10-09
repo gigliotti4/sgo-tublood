@@ -6,6 +6,8 @@ import { decimal, moneda, numero } from '@/lib/formato'
 const props = defineProps<{
     kpis: KpisCompras
     mesesObjetivo: number
+    /** Agrupado por GTIN: la tarjeta cuenta productos multimarca y no artículos. */
+    agrupado: boolean
 }>()
 
 const objetivo = computed(() => decimal(props.mesesObjetivo).replace(',0', ''))
@@ -19,7 +21,7 @@ interface Tarjeta {
 
 const tarjetas = computed<Tarjeta[]>(() => [
     {
-        label: 'Multimarca GTIN',
+        label: props.agrupado ? 'Multimarca GTIN' : 'Productos',
         valor: numero(props.kpis.total),
         hint: `${props.kpis.categorias} categorías`,
     },

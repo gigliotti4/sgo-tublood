@@ -144,7 +144,8 @@ class CalculoReposicionTest extends TestCase
         $this->assertSame(['a:A'], array_column(array_column($filas, 'grupo'), 'id'));
     }
 
-    public function test_sin_agrupar_cada_articulo_va_en_su_propia_fila(): void
+    /** Por defecto (igual que el tablero) cada artículo va en su fila; agrupar es a pedido. */
+    public function test_por_defecto_cada_articulo_va_en_su_propia_fila_y_agrupar_es_a_pedido(): void
     {
         $groups = [$this->grupo([
             $this->item(['c' => 'RE-1', 'v' => [10, 10, 10]]),
@@ -153,11 +154,11 @@ class CalculoReposicionTest extends TestCase
 
         $calculo = new CalculoReposicion;
 
-        $this->assertCount(1, $calculo->filtrar($groups, ['hasta' => 2], self::MESES));
         $this->assertSame(
             ['a:RE-1', 'a:RE-2'],
-            array_column(array_column($calculo->filtrar($groups, ['hasta' => 2, 'agrupar' => false], self::MESES), 'grupo'), 'id'),
+            array_column(array_column($calculo->filtrar($groups, ['hasta' => 2], self::MESES), 'grupo'), 'id'),
         );
+        $this->assertCount(1, $calculo->filtrar($groups, ['hasta' => 2, 'agrupar' => true], self::MESES));
     }
 
     /** El producto que CRUZA el 80% de la facturación va en A. */

@@ -42,7 +42,8 @@ class CalculoReposicion
             'pareto' => 'all',
             'servicios' => false,
             'depositos' => [],
-            'agrupar' => true,
+            // Mismo default que `filtrosPorDefecto()` del front: sin agrupar.
+            'agrupar' => false,
         ];
     }
 
