@@ -125,11 +125,17 @@ const limpiar = () => {
     emit('limpiar')
 }
 
-const grupos: { clave: 'activo' | 'stock' | 'cubre' | 'pareto'; label: string; opciones: { v: string; t: string }[] }[] = [
+const grupos: { clave: 'activo' | 'stock' | 'cubre' | 'pareto' | 'bonificados'; label: string; ayuda?: string; opciones: { v: string; t: string }[] }[] = [
     { clave: 'activo', label: 'Producto activo', opciones: [{ v: 'all', t: 'Todos' }, { v: 'si', t: 'Sí' }, { v: 'no', t: 'No' }] },
     { clave: 'stock', label: 'Con stock', opciones: [{ v: 'all', t: 'Todos' }, { v: 'si', t: 'Sí' }, { v: 'no', t: 'No' }] },
     { clave: 'cubre', label: 'Cubre el mes', opciones: [{ v: 'all', t: 'Todos' }, { v: 'si', t: 'Sí' }, { v: 'no', t: 'No' }, { v: 'sv', t: 'Sin venta' }] },
     { clave: 'pareto', label: 'Pareto (facturación)', opciones: [{ v: 'all', t: 'Total' }, { v: 'A', t: '80%' }, { v: 'B', t: '20%' }] },
+    {
+        clave: 'bonificados',
+        label: 'Bonificados',
+        ayuda: 'Productos que el proveedor manda sin cargo junto con otro (en el ERP dicen «bonificado» en la descripción). No se compran.',
+        opciones: [{ v: 'all', t: 'Todos' }, { v: 'no', t: 'Excluir' }, { v: 'si', t: 'Solo' }],
+    },
 ]
 
 const claseTog = (activo: boolean) =>
@@ -326,7 +332,11 @@ const claseTog = (activo: boolean) =>
 
         <!-- Botoneras de estado -->
         <div v-for="g in grupos" :key="g.clave" class="flex flex-col gap-1.5">
-            <label class="text-theme-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+            <label
+                class="text-theme-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
+                :class="g.ayuda ? 'cursor-help' : ''"
+                :title="g.ayuda"
+            >
                 {{ g.label }}
             </label>
             <div class="inline-flex gap-1.5">

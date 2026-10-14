@@ -21,7 +21,7 @@ use Illuminate\Support\Facades\Log;
  * de que no le cambien una columna. Si el sync se rompe de golpe, empezar por
  * ahí; lo correcto a futuro es pedirles una vista.
  *
- * Se traen 9 de las 142 columnas. Refresh completo: no hay campos propios.
+ * Se traen 10 de las 142 columnas. Refresh completo: no hay campos propios.
  */
 class ComprasArticuloSyncService
 {
@@ -66,6 +66,7 @@ class ComprasArticuloSyncService
         return <<<SQL
             SELECT UPPER(LTRIM(RTRIM(COD_ARTICULO))) COD_ARTICULO,
                    DESCRIP_ARTI,
+                   DESC_ADICIONAL,
                    CANT_STOCK,
                    STOCK_SEGURIDAD,
                    AGRU_1,
@@ -93,6 +94,9 @@ class ComprasArticuloSyncService
         return [
             'codigo' => mb_strtoupper(trim((string) ($fila['COD_ARTICULO'] ?? ''))),
             'descripcion' => $this->texto($fila['DESCRIP_ARTI'] ?? null),
+            // Crudo: es donde el ERP anota "VIENE BONIFICADO CON …". El patrón
+            // que detecta los bonificados se aplica al armar el dataset.
+            'desc_adicional' => $this->texto($fila['DESC_ADICIONAL'] ?? null),
             'cant_stock' => (float) ($fila['CANT_STOCK'] ?? 0),
             'venta_estimada' => $this->ventaEstimada($fila['STOCK_SEGURIDAD'] ?? null),
             'agru_1' => $this->texto($fila['AGRU_1'] ?? null),

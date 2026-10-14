@@ -155,6 +155,28 @@ class AlertaCoberturaComprasTest extends TestCase
         Notification::assertSentTo($eduran, ComprasCoberturaNotification::class, fn ($n) => $n->total === 1);
     }
 
+    /**
+     * Pedido sobre el primer mail de prueba: sin los bonificados (vienen sin
+     * cargo con otro producto) y con el mismo producto de distintas marcas en
+     * un renglón.
+     */
+    public function test_el_mail_saca_los_bonificados_y_unifica_por_gtin(): void
+    {
+        $this->productoQueNoCubre('RE-4953');
+        ComprasArticulo::where('codigo', 'RE-4953')->update(['desc_adicional' => 'VIENE BONIFICADO CON RE-4952']);
+        $this->productoQueNoCubre('RE-349');
+        $this->productoQueNoCubre('RE-1255');
+        ComprasArticulo::whereIn('codigo', ['RE-349', 'RE-1255'])->update(['gtin' => 'JERINGA 10CC']);
+        $eduran = $this->eduran();
+
+        $this->artisan('compras:alerta-cobertura')->assertSuccessful();
+
+        Notification::assertSentTo($eduran, ComprasCoberturaNotification::class, fn ($n) => $n->total === 1
+            && $n->top[0]['producto'] === 'JERINGA 10CC'
+            && $n->top[0]['comprar'] === 60.0
+            && str_contains($n->criterio, 'sin bonificados'));
+    }
+
     public function test_ver_no_manda_nada_y_a_manda_solo_a_esa_direccion(): void
     {
         $this->productoQueNoCubre();

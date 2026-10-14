@@ -45,6 +45,7 @@ class AlertaCobertura
             'pareto' => $config['pareto'],
             'depositos' => $config['depositos'],
             'agrupar' => (bool) $config['agrupar'],
+            'bonificados' => $config['bonificados'] ?? 'all',
         ]);
 
         $filas = $meses === [] ? [] : $this->calculo->filtrar($dataset['groups'], $filtros, count($meses));
@@ -169,6 +170,9 @@ class AlertaCobertura
 
         if ($c['activo'] === 'si') {
             $partes[] = 'solo productos activos';
+        }
+        if (($c['bonificados'] ?? 'all') === 'no') {
+            $partes[] = 'sin bonificados';
         }
         if ($c['depositos'] !== []) {
             $partes[] = 'depósitos '.implode(', ', $c['depositos']);

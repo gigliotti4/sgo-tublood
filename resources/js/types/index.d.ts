@@ -597,6 +597,8 @@ export interface ArticuloReposicion {
     e?: [string | null, number][]
     /** Venta mensual cargada a mano en el ERP (`STOCK_SEGURIDAD`), en envases. Manda sobre el promedio. */
     ve?: number
+    /** Bonificado (viene sin cargo con otro producto): el texto del ERP que lo dice. Ausente si no lo es. */
+    b?: string
 }
 
 /** Un depósito del ERP, para la botonera de stock. */

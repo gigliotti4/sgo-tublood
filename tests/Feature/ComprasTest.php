@@ -447,6 +447,23 @@ class ComprasTest extends TestCase
         );
     }
 
+    /**
+     * El ERP no tiene un campo de "bonificado": se anota a mano, casi siempre en
+     * la descripción adicional y a veces en la descripción.
+     */
+    public function test_los_bonificados_se_detectan_por_el_texto_del_erp(): void
+    {
+        $this->articulo('RE-4953', ['descripcion' => 'KIT MEDIDOR GLUCOSA', 'desc_adicional' => 'VIENE BONIFICADO CON RE-4952']);
+        $this->articulo('RE-3175', ['descripcion' => 'BOLSA DE TRANSFERENCIA (bonificación)']);
+        $this->articulo('RE-1', ['desc_adicional' => 'ENVASE DE 100']);
+
+        $dataset = $this->dataset();
+
+        $this->assertSame('VIENE BONIFICADO CON RE-4952', $this->item($dataset, 'RE-4953')['b']);
+        $this->assertSame('BOLSA DE TRANSFERENCIA (bonificación)', $this->item($dataset, 'RE-3175')['b']);
+        $this->assertArrayNotHasKey('b', $this->item($dataset, 'RE-1'));
+    }
+
     public function test_la_venta_estimada_viaja_solo_si_esta_cargada(): void
     {
         $this->articulo('RE-NUEVO', ['venta_estimada' => 100]);

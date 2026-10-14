@@ -113,7 +113,7 @@ export const exportarDetalle = (
         filtros.agrupar ? 'Multimarca GTIN' : 'Producto', 'Código', 'Descripción', 'Categoría', 'Activo', 'U. x Envase',
         'Stock (u.)', 'Stock (env.)', `Ventas ${periodo(meses, filtros)} (u.)`, 'Prom. mensual (u.)',
         'Prom. estimado a mano', 'Reservado (u.)', 'OC pend. (u.)', 'Entregas', 'Stock total disp. (u.)',
-        'Proveedor',
+        'Proveedor', 'Bonificado',
         ...etiquetas,
     ]]
 
@@ -139,6 +139,7 @@ export const exportarDetalle = (
                 d.entregas.map(e => `${e.fecha ? fechaEntrega(e.fecha) : 's/fecha'}: ${entero(e.cantidad)}`).join(' | '),
                 entero(d.stockTotal),
                 it.p ?? '',
+                it.b ?? '',
                 ...d.ventas.map(entero),
             ])
         }

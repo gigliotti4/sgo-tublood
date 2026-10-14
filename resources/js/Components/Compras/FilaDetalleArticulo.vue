@@ -48,6 +48,11 @@ const fueraDelPeriodo = (i: number) => i < props.filtros.desde || i > props.filt
         <td class="px-1.5 py-2 pl-6 text-left text-[11.5px]">
             <strong>{{ item.c }}</strong> · {{ item.d }}
             <span v-if="!item.a" class="text-gray-400">(inactivo)</span>
+            <span
+                v-if="item.b"
+                class="ml-1 cursor-help rounded bg-gray-100 px-1 text-[9px] font-bold text-gray-500 dark:bg-white/[0.06] dark:text-gray-400"
+                :title="`Bonificado (sin cargo con otro producto): ${item.b}`"
+            >bonif.</span>
         </td>
         <td class="px-1.5 py-2 text-left">
             <span class="rounded-full bg-gray-100 px-1.5 py-px text-[10px] font-semibold text-gray-600 dark:bg-white/[0.06] dark:text-gray-400">

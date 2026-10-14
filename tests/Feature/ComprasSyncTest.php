@@ -49,6 +49,15 @@ class ComprasSyncTest extends TestCase
      * significa "sin estimación" y se guarda null, para que el tablero siga con
      * el promedio.
      */
+    /** Es donde el ERP anota que un artículo viene bonificado: se guarda crudo. */
+    public function test_la_descripcion_adicional_se_guarda_cruda(): void
+    {
+        $servicio = new ComprasArticuloSyncService;
+
+        $this->assertSame('VIENE BONIFICADO CON RE-4952', $servicio->mapear($this->filaArticulo(['DESC_ADICIONAL' => ' VIENE BONIFICADO CON RE-4952 ']), $this->syncedAt)['desc_adicional']);
+        $this->assertNull($servicio->mapear($this->filaArticulo(['DESC_ADICIONAL' => '  ']), $this->syncedAt)['desc_adicional']);
+    }
+
     public function test_la_venta_estimada_sale_de_stock_seguridad(): void
     {
         $servicio = new ComprasArticuloSyncService;

@@ -65,6 +65,25 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Productos bonificados
+    |--------------------------------------------------------------------------
+    |
+    | Los que el proveedor manda SIN CARGO junto con otro producto: no se
+    | compran, así que no tienen que salir en el mail de "a comprar". El ERP no
+    | tiene un campo para marcarlos; se anota a mano en el texto del artículo
+    | (medido el 10/10/2026): "VIENE BONIFICADO CON RE-4952" o "SIN COSTO
+    | (BONIFICADO PROVEEDOR)" en DESC_ADICIONAL, o "(bonificación)" en la
+    | descripción. Se busca este patrón en las dos.
+    |
+    | Igual que `gtin_comodin`, se aplica al ARMAR el dataset: si alguien
+    | empieza a anotarlo de otra forma, alcanza con ajustar esto.
+    |
+    */
+
+    'bonificado' => '/bonific/i',
+
+    /*
+    |--------------------------------------------------------------------------
     | Reservado
     |--------------------------------------------------------------------------
     |
@@ -135,9 +154,12 @@ return [
         'pareto' => 'all',
         // Vacío = todos los depósitos (el total del ERP).
         'depositos' => [],
-        // Un renglón por artículo, igual que el tablero por defecto: se compra
-        // por artículo y cada uno tiene su proveedor.
-        'agrupar' => false,
+        // Unificado por GTIN: el mismo producto de distintas marcas va en un
+        // renglón (pedido del 10/10/2026, sobre el primer mail de prueba). El
+        // tablero, en cambio, abre sin agrupar.
+        'agrupar' => true,
+        // Los bonificados vienen sin cargo con otro producto: no se compran.
+        'bonificados' => 'no',
         // Cuántos productos se listan en el cuerpo del mail; el resto va en el Excel.
         'top' => 10,
         // A quién le llega. Pedido de Compras del 9/10/2026.

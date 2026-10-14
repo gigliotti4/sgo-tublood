@@ -161,6 +161,29 @@ class CalculoReposicionTest extends TestCase
         $this->assertCount(1, $calculo->filtrar($groups, ['hasta' => 2, 'agrupar' => true], self::MESES));
     }
 
+    public function test_el_filtro_de_bonificados_excluye_o_deja_solo_esos_por_articulo(): void
+    {
+        $groups = [
+            $this->grupo([$this->item(['c' => 'A', 'v' => [10, 10, 10]])], 'a:A'),
+            $this->grupo([$this->item(['c' => 'B', 'b' => 'VIENE BONIFICADO CON A', 'v' => [10, 10, 10]])], 'a:B'),
+            // Grupo mixto: queda con el artículo que no es bonificado.
+            $this->grupo([
+                $this->item(['c' => 'C1', 'v' => [10, 10, 10]]),
+                $this->item(['c' => 'C2', 'b' => 'SIN COSTO', 'v' => [50, 50, 50]]),
+            ], 'g:MIXTO'),
+        ];
+
+        $calculo = new CalculoReposicion;
+        $ids = fn ($filas) => array_column(array_column($filas, 'grupo'), 'id');
+
+        $sin = $calculo->filtrar($groups, ['hasta' => 2, 'agrupar' => true, 'bonificados' => 'no'], self::MESES);
+        $this->assertSame(['a:A', 'g:MIXTO'], $ids($sin));
+        $this->assertSame(10.0, $sin[1]['promMensual'], 'El grupo mixto deja de sumar la venta del bonificado');
+
+        $this->assertSame(['a:B', 'g:MIXTO'], $ids($calculo->filtrar($groups, ['hasta' => 2, 'agrupar' => true, 'bonificados' => 'si'], self::MESES)));
+        $this->assertCount(3, $calculo->filtrar($groups, ['hasta' => 2, 'agrupar' => true], self::MESES), 'Por defecto entran todos');
+    }
+
     /** El producto que CRUZA el 80% de la facturación va en A. */
     public function test_pareto_el_que_cruza_el_ochenta_por_ciento_va_en_a(): void
     {

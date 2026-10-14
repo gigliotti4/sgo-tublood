@@ -44,6 +44,7 @@ class CalculoReposicion
             'depositos' => [],
             // Mismo default que `filtrosPorDefecto()` del front: sin agrupar.
             'agrupar' => false,
+            'bonificados' => 'all',
         ];
     }
 
@@ -252,6 +253,15 @@ class CalculoReposicion
             return false;
         }
         if ($f['activo'] === 'no' && $it['a']) {
+            return false;
+        }
+
+        // Bonificado = viene sin cargo con otro producto (ver config).
+        $bonificado = isset($it['b']);
+        if ($f['bonificados'] === 'no' && $bonificado) {
+            return false;
+        }
+        if ($f['bonificados'] === 'si' && ! $bonificado) {
             return false;
         }
 

@@ -67,7 +67,7 @@ const hayFiltros = computed(() => {
     return !!(
         f.q || f.cats.length || f.activo !== 'all' || f.stock !== 'all'
         || f.cubre !== 'all' || f.pareto !== 'all' || f.servicios
-        || f.depositos.length || f.agrupar
+        || f.depositos.length || f.agrupar || f.bonificados !== 'all'
         || f.desde !== 0 || f.hasta !== props.meses.length - 1
     )
 })

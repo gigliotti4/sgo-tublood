@@ -46,7 +46,7 @@ class ReposicionService
      * como `undefined` sin que nada falle a la vista. Ya pasó una vez, al
      * agregar `id`.
      */
-    private const VERSION_DATASET = 3;
+    private const VERSION_DATASET = 4;
 
     /**
      * Dataset listo para el tablero, cacheado.
@@ -139,6 +139,12 @@ class ReposicionService
 
             if (isset($entregas[$codigo])) {
                 $item['e'] = $entregas[$codigo];
+            }
+
+            // Bonificado: viene sin cargo con otro producto. Viaja el texto del
+            // ERP que lo dice, para mostrarlo en el tooltip.
+            if (($bonificado = $this->bonificado($articulo)) !== null) {
+                $item['b'] = $bonificado;
             }
 
             // Venta mensual cargada a mano en el ERP (en envases). Si está, el
@@ -412,6 +418,26 @@ class ReposicionService
         }
 
         return preg_match(config('compras.gtin_comodin'), $gtin) === 1 ? null : $gtin;
+    }
+
+    /**
+     * El texto que marca al artículo como bonificado, o null si no lo es.
+     *
+     * Se busca en la descripción adicional primero (es donde lo anotan casi
+     * siempre, con el detalle de "con qué viene") y en la descripción después.
+     * Ver `compras.bonificado` en la config.
+     */
+    private function bonificado(ComprasArticulo $articulo): ?string
+    {
+        $patron = config('compras.bonificado');
+
+        foreach ([$articulo->desc_adicional, $articulo->descripcion] as $texto) {
+            if ($texto !== null && preg_match($patron, $texto) === 1) {
+                return $texto;
+            }
+        }
+
+        return null;
     }
 
     /**

@@ -37,6 +37,11 @@ export interface FiltrosCompras {
      */
     depositos: string[]
     /**
+     * Bonificados: los que el proveedor manda sin cargo con otro producto
+     * (`b` en el dataset). `no` los saca, `si` deja solo esos.
+     */
+    bonificados: 'all' | 'no' | 'si'
+    /**
      * `true` = unificar por GTIN (multimarca). El tablero abre en `false`, con
      * cada artículo en su fila: así lo pidió Compras el 9/10/2026 (se compra
      * por artículo, y cada uno tiene su proveedor). Agrupar es a pedido.
@@ -101,6 +106,7 @@ export const filtrosPorDefecto = (mesesObjetivo: number, ultimoMes: number): Fil
     servicios: false,
     depositos: [],
     agrupar: false,
+    bonificados: 'all',
 })
 
 /**
@@ -138,6 +144,9 @@ const depositosNegativosDe = (it: ArticuloReposicion, f: FiltrosCompras): string
 const itemPasa = (it: ArticuloReposicion, f: FiltrosCompras): boolean => {
     if (f.activo === 'si' && !it.a) return false
     if (f.activo === 'no' && it.a) return false
+
+    if (f.bonificados === 'no' && it.b) return false
+    if (f.bonificados === 'si' && !it.b) return false
 
     const conStock = stockDe(it, f) > 0
     if (f.stock === 'si' && !conStock) return false

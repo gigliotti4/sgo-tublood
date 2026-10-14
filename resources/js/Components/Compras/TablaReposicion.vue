@@ -66,6 +66,10 @@ const tituloAnomalia = (fila: FilaReposicion) => {
 const textoProveedor = (fila: FilaReposicion) =>
     fila.proveedores.length > 1 ? `Varios (${fila.proveedores.length})` : (fila.proveedores[0] ?? '')
 
+/** El texto del ERP de cada artículo bonificado del grupo, para el tooltip. */
+const textoBonificado = (fila: FilaReposicion) =>
+    fila.items.filter(it => it.b).map(it => `${it.c}: ${it.b}`).join('\n')
+
 const TITULO_ESTIMADA = 'Usa la venta mensual cargada a mano en el ERP (campo Stock de seguridad) en lugar del promedio de venta'
 
 const flecha = (key: ClaveOrden) => {
@@ -209,6 +213,11 @@ const sep = 'border-l border-gray-200 dark:border-gray-700'
                                         class="cursor-help text-warning-500"
                                         :title="tituloAnomalia(fila)"
                                     >⚠</span>
+                                    <span
+                                        v-if="fila.items.some(it => it.b)"
+                                        class="ml-0.5 cursor-help rounded bg-gray-100 px-1 text-[9px] font-bold text-gray-500 dark:bg-white/[0.06] dark:text-gray-400"
+                                        :title="`Bonificado (sin cargo con otro producto):\n${textoBonificado(fila)}`"
+                                    >bonif.</span>
                                 </span>
                             </div>
                         </td>
