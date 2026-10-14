@@ -6,9 +6,12 @@ use App\Models\Articulo;
 use App\Models\Observacion;
 use App\Models\Partida;
 use App\Models\Proveedor;
+use App\Models\ProveedorArticulo;
 use App\Models\User;
+use App\Services\RpSistemas\ProveedorArticuloSyncService;
 use App\Services\VinculacionProveedores as VP;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
@@ -67,15 +70,24 @@ class VinculacionProveedoresTest extends TestCase
     /** Si alguien lo corrigió a mano es porque lo automático estaba mal. */
     public function test_nada_automatico_pisa_una_correccion_manual(): void
     {
-        foreach ([VP::ORIGEN_ERP, VP::ORIGEN_EXCEL, VP::ORIGEN_KARDEX] as $origen) {
+        foreach ([VP::ORIGEN_PRINCIPAL, VP::ORIGEN_ERP, VP::ORIGEN_EXCEL, VP::ORIGEN_KARDEX] as $origen) {
             $this->assertFalse(VP::puedePisar(VP::ORIGEN_MANUAL, $origen), "{$origen} no debería pisar manual");
         }
     }
 
     public function test_el_kardex_solo_llena_vacios(): void
     {
-        foreach ([VP::ORIGEN_ERP, VP::ORIGEN_EXCEL, VP::ORIGEN_KARDEX] as $actual) {
+        foreach ([VP::ORIGEN_PRINCIPAL, VP::ORIGEN_ERP, VP::ORIGEN_EXCEL, VP::ORIGEN_KARDEX] as $actual) {
             $this->assertFalse(VP::puedePisar($actual, VP::ORIGEN_KARDEX));
+        }
+    }
+
+    /** La pestaña Proveedores del ERP manda sobre `codigo_proveedor`, el Excel y el kardex. */
+    public function test_el_principal_del_erp_pisa_a_todo_lo_automatico(): void
+    {
+        foreach ([VP::ORIGEN_ERP, VP::ORIGEN_EXCEL, VP::ORIGEN_KARDEX] as $actual) {
+            $this->assertTrue(VP::puedePisar($actual, VP::ORIGEN_PRINCIPAL), "principal debería pisar {$actual}");
+            $this->assertFalse(VP::puedePisar(VP::ORIGEN_PRINCIPAL, $actual), "{$actual} no debería pisar principal");
         }
     }
 
@@ -173,6 +185,134 @@ class VinculacionProveedoresTest extends TestCase
 
     // ---------- vinculación por kardex ----------
 
+    // ---------- el principal de la pestaña Proveedores del ERP (PROVE_ARTI) ----------
+
+    private function renglon(string $articulo, string $numero, bool $principal = false): void
+    {
+        ProveedorArticulo::create([
+            'codigo_articulo' => $articulo, 'proveedor_numero' => $numero, 'principal' => $principal,
+        ]);
+    }
+
+    /** El caso que lo motivó: RE-1521 con C M INSUMOS principal e ICNA alternativo. */
+    public function test_vincula_el_proveedor_marcado_principal(): void
+    {
+        $cm = $this->proveedor('22', 'C M INSUMOS Y SISTEMAS S.R.L.');
+        $this->proveedor('6', 'ICNA S.A.');
+        $this->articulo(['codigo' => 'RE-1521']);
+        $this->renglon('RE-1521', '22', true);
+        $this->renglon('RE-1521', '6');
+
+        $this->assertSame(1, VP::desdeProveedorPrincipal());
+
+        $articulo = Articulo::first();
+        $this->assertSame($cm->id, $articulo->proveedor_id);
+        $this->assertSame(VP::ORIGEN_PRINCIPAL, $articulo->proveedor_origen);
+    }
+
+    public function test_con_un_solo_proveedor_lo_toma_aunque_no_este_marcado(): void
+    {
+        $unico = $this->proveedor('22', 'UNICO SA');
+        $this->articulo(['codigo' => 'RE-1']);
+        $this->renglon('RE-1', '22');
+
+        VP::desdeProveedorPrincipal();
+
+        $this->assertSame($unico->id, Articulo::first()->proveedor_id);
+    }
+
+    /** 54 artículos tenían dos o más marcados el 14/10/2026, y 4 varios sin ninguno: no se elige. */
+    public function test_con_dos_principales_o_ninguno_entre_varios_no_vincula(): void
+    {
+        $this->proveedor('5', 'A SA');
+        $this->proveedor('6', 'B SA');
+        $this->articulo(['codigo' => 'RE-012']);
+        $this->articulo(['codigo' => 'TONER']);
+        $this->renglon('RE-012', '5', true);
+        $this->renglon('RE-012', '6', true);
+        $this->renglon('TONER', '5');
+        $this->renglon('TONER', '6');
+
+        $this->assertSame(0, VP::desdeProveedorPrincipal());
+        $this->assertSame(0, Articulo::whereNotNull('proveedor_id')->count());
+    }
+
+    public function test_el_principal_corrige_lo_que_adivinaron_el_kardex_y_el_excel(): void
+    {
+        $adivinado = $this->proveedor('183', 'EL DEL KARDEX');
+        $correcto = $this->proveedor('1606', 'EL PRINCIPAL');
+        $this->articulo(['codigo' => 'RE-3877', 'proveedor_id' => $adivinado->id, 'proveedor_origen' => VP::ORIGEN_KARDEX]);
+        $this->articulo(['codigo' => 'RE-3007', 'proveedor_id' => $adivinado->id, 'proveedor_origen' => VP::ORIGEN_EXCEL]);
+        $this->renglon('RE-3877', '1606', true);
+        $this->renglon('RE-3007', '1606', true);
+
+        $this->assertSame(2, VP::desdeProveedorPrincipal());
+        $this->assertSame(2, Articulo::where('proveedor_id', $correcto->id)->where('proveedor_origen', VP::ORIGEN_PRINCIPAL)->count());
+    }
+
+    public function test_el_principal_respeta_una_correccion_manual(): void
+    {
+        $aMano = $this->proveedor('500', 'EL QUE CARGÓ CALIDAD');
+        $this->proveedor('22', 'EL DEL ERP');
+        $this->articulo(['codigo' => 'RE-1', 'proveedor_id' => $aMano->id, 'proveedor_origen' => VP::ORIGEN_MANUAL]);
+        $this->renglon('RE-1', '22', true);
+
+        $this->assertSame(0, VP::desdeProveedorPrincipal());
+        $this->assertSame($aMano->id, Articulo::first()->proveedor_id);
+    }
+
+    /**
+     * ⚠️ El único origen que se reescribe a sí mismo: si Compras cambia el principal en el ERP, el
+     * padrón lo sigue. Y la corrida siguiente sin cambios no cuenta nada como "vinculado".
+     */
+    public function test_si_cambia_el_principal_en_el_erp_el_padron_lo_sigue(): void
+    {
+        $viejo = $this->proveedor('22', 'EL DE ANTES');
+        $nuevo = $this->proveedor('6', 'EL DE AHORA');
+        $this->articulo(['codigo' => 'RE-1', 'proveedor_id' => $viejo->id, 'proveedor_origen' => VP::ORIGEN_PRINCIPAL]);
+        $this->renglon('RE-1', '22');
+        $this->renglon('RE-1', '6', true);
+
+        $this->assertSame(1, VP::desdeProveedorPrincipal());
+        $this->assertSame($nuevo->id, Articulo::first()->proveedor_id);
+        $this->assertSame(0, VP::desdeProveedorPrincipal(), 'Reescribir el mismo valor no es vincular');
+    }
+
+    /** El ERP completa y nunca borra, como `pm`. */
+    public function test_si_el_articulo_desaparece_de_prove_arti_no_se_le_borra_el_proveedor(): void
+    {
+        $proveedor = $this->proveedor('22', 'EL DE ANTES');
+        $this->articulo(['codigo' => 'RE-1', 'proveedor_id' => $proveedor->id, 'proveedor_origen' => VP::ORIGEN_PRINCIPAL]);
+
+        $this->assertSame(0, VP::desdeProveedorPrincipal());
+        $this->assertSame($proveedor->id, Articulo::first()->proveedor_id);
+    }
+
+    public function test_un_principal_que_no_esta_en_el_padron_no_vincula(): void
+    {
+        $this->articulo(['codigo' => 'RE-1']);
+        $this->renglon('RE-1', '9999', true);
+
+        $this->assertSame(0, VP::desdeProveedorPrincipal());
+        $this->assertNull(Articulo::first()->proveedor_id);
+    }
+
+    public function test_el_sync_normaliza_el_codigo_y_la_marca_de_principal(): void
+    {
+        $servicio = new ProveedorArticuloSyncService;
+        $ahora = Carbon::parse('2026-10-14 10:00:00');
+
+        $fila = $servicio->mapear(['ARTICULO' => ' re-1521 ', 'PROVE' => 22, 'PRINCIPAL' => 1, 'CODI_PROVE' => '  '], $ahora);
+        $this->assertSame('RE-1521', $fila['codigo_articulo']);
+        $this->assertSame('22', $fila['proveedor_numero']);
+        $this->assertTrue($fila['principal']);
+        $this->assertNull($fila['codigo_proveedor']);
+
+        $crudo = $servicio->mapear(['ARTICULO' => 'RE-1521', 'PROVE' => '6', 'PRINCIPAL' => 'N', 'CODI_PROVE' => 'ML-VIT-DEXTR'], $ahora);
+        $this->assertFalse($crudo['principal']);
+        $this->assertSame('ML-VIT-DEXTR', $crudo['codigo_proveedor']);
+    }
+
     public function test_el_kardex_completa_un_articulo_sin_proveedor(): void
     {
         $proveedor = $this->proveedor('229', 'LABORATORIOS GAUDIUM S.R.L');
@@ -268,6 +408,25 @@ class VinculacionProveedoresTest extends TestCase
             ->put("/articulos/{$articulo->id}", ['proveedor_id' => $proveedor->id])
             ->assertRedirect();
 
+        $this->assertSame(VP::ORIGEN_MANUAL, $articulo->fresh()->proveedor_origen);
+    }
+
+    /**
+     * Vaciar el proveedor desde la ficha también es una corrección manual (decisión del 14/10/2026): si
+     * no, el principal del ERP lo volvía a poner esa misma noche.
+     */
+    public function test_vaciar_el_proveedor_a_mano_queda_fijo_aunque_el_erp_tenga_principal(): void
+    {
+        $proveedor = $this->proveedor('22', 'EL DEL ERP');
+        $articulo = $this->articulo(['proveedor_id' => $proveedor->id, 'proveedor_origen' => VP::ORIGEN_PRINCIPAL]);
+        $this->renglon('RE-1', '22', true);
+
+        $this->actingAs($this->userWith('articulos.edit'))
+            ->put("/articulos/{$articulo->id}", ['proveedor_id' => null])
+            ->assertRedirect();
+
+        $this->assertSame(0, VP::desdeProveedorPrincipal());
+        $this->assertNull($articulo->fresh()->proveedor_id);
         $this->assertSame(VP::ORIGEN_MANUAL, $articulo->fresh()->proveedor_origen);
     }
 

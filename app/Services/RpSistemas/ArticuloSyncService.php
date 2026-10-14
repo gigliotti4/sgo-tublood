@@ -7,6 +7,7 @@ use App\Services\VinculacionProveedores;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * Espeja el catálogo "vendible" del ERP en la tabla local `articulos`.
@@ -61,7 +62,9 @@ class ArticuloSyncService
      * estaba en la época del feed HTTP: es el que hace que un artículo que sale
      * de la lista de precios desaparezca del portal sin borrarse.
      *
-     * Al final intenta vincular el proveedor por `codigo_proveedor`. Ese campo
+     * Al final espeja `PROVE_ARTI` (la pestaña "Proveedores" del artículo en el
+     * ERP) y vincula el proveedor principal, que es la fuente buena desde el
+     * 14/10/2026; después intenta por `codigo_proveedor`. Ese campo
      * viene casi vacío (147 de 5.236 artículos en el ERP) y de lo cargado la
      * mayoría no son códigos de proveedor sino costos tipeados en el lugar
      * equivocado — pero cuando trae un entero limpio, matchea el padrón el 100%
@@ -130,11 +133,39 @@ class ArticuloSyncService
         // VinculacionProveedores, no acá: la comparten esta sync, el import de
         // Excel y la edición manual del panel, y si se duplicara las tres
         // podrían discrepar. Ver la tabla de precedencia ahí.
-        $vinculados = VinculacionProveedores::desdeCodigoProveedor();
+        //
+        // Primero el proveedor principal de la pestaña "Proveedores" del ERP
+        // (`PROVE_ARTI`), que es la fuente buena; después `codigo_proveedor`,
+        // que solo llena lo que la anterior no pudo.
+        $vinculados = $this->vincularProveedorPrincipal()
+            + VinculacionProveedores::desdeCodigoProveedor();
 
         Log::info("RpSistemas: sincronización completada — {$total} artículos procesados, {$desactivados} desactivados, {$vinculados} proveedores vinculados");
 
         return ['procesados' => $total, 'activos' => $total, 'desactivados' => $desactivados, 'proveedores_vinculados' => $vinculados];
+    }
+
+    /**
+     * Espeja `PROVE_ARTI` y vincula el principal.
+     *
+     * ⚠️ **Un fallo acá no tumba la sync del catálogo**, que para cuando se llega
+     * ya escribió los artículos: `PROVE_ARTI` es una tabla base sin contrato y el
+     * día que RP le cambie una columna, perder el proveedor por un día es mucho
+     * menos grave que dejar el buscador del portal sin actualizar. Queda en el log
+     * y el tablero sigue con la copia anterior del espejo.
+     */
+    private function vincularProveedorPrincipal(): int
+    {
+        try {
+            app(ProveedorArticuloSyncService::class)->sync();
+
+            return VinculacionProveedores::desdeProveedorPrincipal();
+        } catch (Throwable $e) {
+            Log::error('RpSistemas: no se pudieron sincronizar los proveedores por artículo (PROVE_ARTI): '.$e->getMessage());
+            report($e);
+
+            return 0;
+        }
     }
 
     /**
@@ -339,7 +370,7 @@ class ArticuloSyncService
 
         try {
             return Carbon::parse($valor)->toDateTimeString();
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return null;
         }
     }

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Articulo;
+use App\Models\ProveedorArticulo;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -10,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * Quién le pone el proveedor a cada artículo, y quién puede pisar a quién.
  *
- * Hay tres fuentes automáticas escribiendo `articulos.proveedor_id` y hasta que
+ * Hay cuatro fuentes automáticas (tres hasta el 14/10/2026) escribiendo `articulos.proveedor_id` y hasta que
  * existió `proveedor_origen` ninguna sabía de la otra: la única regla era "no
  * pisar nada ya cargado". Eso protegía las correcciones a mano pero también
  * congelaba una adivinanza del Excel aunque después llegara el dato bueno del
@@ -25,6 +26,9 @@ class VinculacionProveedores
 
     public const ORIGEN_ERP = 'erp';
 
+    /** ⚠️ `proveedor_origen` es `varchar(10)`: por eso `principal` y no `erp_principal`. */
+    public const ORIGEN_PRINCIPAL = 'principal';
+
     public const ORIGEN_MANUAL = 'manual';
 
     /**
@@ -37,6 +41,11 @@ class VinculacionProveedores
      *   social normalizada. Es una declaración nuestra, pero aproximada.
      * - `erp`: `codigo_proveedor` del feed de RP. Es el número de proveedor del
      *   sistema que factura, así que manda por sobre los dos anteriores.
+     * - `principal`: el proveedor marcado principal en la pestaña "Proveedores"
+     *   de la ficha del artículo en RP (`PROVE_ARTI`, desde el 14/10/2026). Es
+     *   la asociación que carga Compras a propósito, por eso manda sobre
+     *   `codigo_proveedor`, que es un campo suelto con 77% de basura. Donde los
+     *   dos están limpios coinciden (24 de 24).
      * - `manual`: alguien lo corrigió mirando el caso. **Nada automático lo
      *   pisa**, ni siquiera el ERP: si una persona se tomó el trabajo de
      *   corregirlo es porque las fuentes automáticas estaban equivocadas.
@@ -45,6 +54,7 @@ class VinculacionProveedores
         self::ORIGEN_KARDEX,
         self::ORIGEN_EXCEL,
         self::ORIGEN_ERP,
+        self::ORIGEN_PRINCIPAL,
         self::ORIGEN_MANUAL,
     ];
 
@@ -135,6 +145,64 @@ class VinculacionProveedores
                 ),
                 'proveedor_origen' => self::ORIGEN_ERP,
             ]);
+    }
+
+    /**
+     * Vincula con el proveedor principal del ERP (fuente `principal`), desde el
+     * espejo de `PROVE_ARTI`. Qué cuenta como principal lo decide
+     * `ProveedorArticulo::principalPorArticulo()`, que es la misma regla que usa
+     * el tablero de Compras.
+     *
+     * ⚠️ **Es el único origen que se reescribe a sí mismo.** Los demás no pueden
+     * pisar lo que ellos mismos pusieron (`puedePisar()` exige estrictamente más
+     * autoridad), y acá eso dejaría clavado el principal viejo el día que Compras
+     * lo cambie en el ERP. Por eso el filtro suma `proveedor_origen = principal`.
+     *
+     * Si un artículo deja de tener principal en el ERP, **no se le borra** el
+     * proveedor: el ERP completa y nunca borra, mismo criterio que `pm`.
+     */
+    public static function desdeProveedorPrincipal(): int
+    {
+        $principales = ProveedorArticulo::principalPorArticulo();
+
+        if ($principales === []) {
+            return 0;
+        }
+
+        $proveedores = DB::table('proveedores')->whereNotNull('numero')->pluck('id', 'numero');
+
+        $porProveedor = [];
+
+        foreach ($principales as $codigoArticulo => $numero) {
+            if (! isset($proveedores[$numero])) {
+                continue;
+            }
+
+            // Casteo a string por el mismo motivo que en `desdeKardex()`.
+            $porProveedor[$proveedores[$numero]][] = (string) $codigoArticulo;
+        }
+
+        $vinculados = 0;
+
+        foreach ($porProveedor as $proveedorId => $codigos) {
+            foreach (array_chunk($codigos, 500) as $bloque) {
+                $vinculados += DB::table('articulos')
+                    ->where(function ($q) {
+                        self::filtroDePrecedencia($q, self::ORIGEN_PRINCIPAL);
+                        $q->orWhere('proveedor_origen', self::ORIGEN_PRINCIPAL);
+                    })
+                    ->whereIn('codigo', $bloque)
+                    // Sin esto, reescribir el mismo valor cuenta como "vinculado"
+                    // en cada corrida y el log de la sync miente.
+                    ->where(fn ($q) => $q->whereNull('proveedor_id')->orWhere('proveedor_id', '<>', $proveedorId))
+                    ->update([
+                        'proveedor_id' => $proveedorId,
+                        'proveedor_origen' => self::ORIGEN_PRINCIPAL,
+                    ]);
+            }
+        }
+
+        return $vinculados;
     }
 
     /**

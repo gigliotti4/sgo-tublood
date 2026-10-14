@@ -66,6 +66,29 @@ const tituloAnomalia = (fila: FilaReposicion) => {
 const textoProveedor = (fila: FilaReposicion) =>
     fila.proveedores.length > 1 ? `Varios (${fila.proveedores.length})` : (fila.proveedores[0] ?? '')
 
+/**
+ * Los otros proveedores que el ERP tiene cargados para los artículos de la fila, sin los que ya se
+ * muestran. Sirven para comprarle a otro cuando el principal no tiene. Es solo presentación: no entra
+ * en el cálculo, así que vive acá y no en lib/compras.ts (que tiene su copia en PHP).
+ */
+const alternativos = (fila: FilaReposicion) => {
+    const otros = new Set<string>()
+    for (const it of fila.items) for (const p of it.pa ?? []) if (!fila.proveedores.includes(p)) otros.add(p)
+    return [...otros]
+}
+
+const tituloProveedor = (fila: FilaReposicion) => {
+    const otros = alternativos(fila)
+    if (!fila.proveedores.length) {
+        // Varios marcados como principal en el ERP, o varios sin ninguno: no se elige por ellos.
+        return otros.length ? `Sin un proveedor principal definido en el ERP. Cargados: ${otros.join(' · ')}` : 'Sin proveedor cargado en el ERP'
+    }
+    // "Proveedor" y no "Principal": `p` puede venir del padrón (una corrección a mano, por ejemplo) y no
+    // coincidir con el principal del ERP, que en ese caso aparece entre los "también".
+    const base = fila.proveedores.length > 1 ? fila.proveedores.join(' · ') : `Proveedor: ${fila.proveedores[0]}`
+    return otros.length ? `${base}\nTambién en el ERP: ${otros.join(' · ')}` : base
+}
+
 /** El texto del ERP de cada artículo bonificado del grupo, para el tooltip. */
 const textoBonificado = (fila: FilaReposicion) =>
     fila.items.filter(it => it.b).map(it => `${it.c}: ${it.b}`).join('\n')
@@ -308,11 +331,12 @@ const sep = 'border-l border-gray-200 dark:border-gray-700'
                         <td
                             class="truncate px-1.5 py-2 text-left text-[11px] font-normal text-gray-600 dark:text-gray-300"
                             :class="sep"
-                            :title="fila.proveedores.join(' · ') || 'Sin proveedor cargado en el padrón de artículos'"
+                            :title="tituloProveedor(fila)"
                         >
                             <span v-if="fila.proveedores.length > 1" class="font-semibold text-warning-600 dark:text-warning-400">{{ textoProveedor(fila) }}</span>
                             <template v-else-if="fila.proveedores.length">{{ textoProveedor(fila) }}</template>
                             <span v-else class="text-gray-400">–</span>
+                            <span v-if="alternativos(fila).length" class="ml-0.5 text-[10px] text-gray-400">+{{ alternativos(fila).length }}</span>
                         </td>
                     </tr>
 

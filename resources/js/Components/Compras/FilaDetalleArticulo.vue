@@ -37,6 +37,15 @@ const tituloStock = computed(() => {
 
 const proxima = computed(() => d.value.entregas.find(e => e.fecha !== null)?.fecha ?? null)
 
+/** El principal y los otros proveedores que el ERP tiene cargados (pestaña Proveedores del artículo). */
+const tituloProveedor = computed(() => {
+    const otros = props.item.pa ?? []
+    if (!props.item.p) {
+        return otros.length ? `Sin un proveedor principal definido en el ERP. Cargados: ${otros.join(' · ')}` : 'Sin proveedor cargado en el ERP'
+    }
+    return otros.length ? `Proveedor: ${props.item.p}\nTambién en el ERP: ${otros.join(' · ')}` : props.item.p
+})
+
 const td = 'whitespace-nowrap px-1.5 py-2 text-right text-[11.5px] tabular-nums'
 const sep = 'border-l border-gray-200 dark:border-gray-700'
 
@@ -102,9 +111,10 @@ const fueraDelPeriodo = (i: number) => i < props.filtros.desde || i > props.filt
         <td :class="sep" />
         <td />
         <td />
-        <td class="truncate px-1.5 py-2 text-left text-[11px]" :class="sep" :title="item.p">
+        <td class="truncate px-1.5 py-2 text-left text-[11px]" :class="sep" :title="tituloProveedor">
             <template v-if="item.p">{{ item.p }}</template>
             <span v-else class="text-gray-400">–</span>
+            <span v-if="item.pa?.length" class="ml-0.5 text-[10px] text-gray-400">+{{ item.pa.length }}</span>
         </td>
     </tr>
 </template>

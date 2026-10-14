@@ -199,10 +199,15 @@ class ArticuloController extends Controller
 
         // Marcar el origen solo si el proveedor cambió de verdad: guardar la
         // ficha sin tocarlo no debería blindarlo contra el dato del ERP.
+        //
+        // ⚠️ **Vaciarlo también es una corrección manual** (decisión del
+        // 14/10/2026). Hasta entonces el vacío quedaba sin origen, y desde que
+        // el principal del ERP cubre ~99% del catálogo eso significaba que el
+        // proveedor que alguien sacó por equivocado volvía solo esa noche.
+        // Ahora queda fijo; para volver a dejarlo en manos del ERP, se asigna
+        // el proveedor correcto o se corrige en RP.
         if (array_key_exists('proveedor_id', $data) && $data['proveedor_id'] !== $articulo->proveedor_id) {
-            $data['proveedor_origen'] = $data['proveedor_id'] === null
-                ? null
-                : VinculacionProveedores::ORIGEN_MANUAL;
+            $data['proveedor_origen'] = VinculacionProveedores::ORIGEN_MANUAL;
         }
 
         $articulo->update($data);

@@ -589,8 +589,10 @@ export interface ArticuloReposicion {
     v?: number[]
     /** Importe neto vendido por mes. Ausente si el artículo nunca vendió. */
     m?: number[]
-    /** Razón social del proveedor (padrón de artículos, o el único del kardex). Ausente si no se sabe. */
+    /** Razón social del proveedor (padrón de artículos, principal del ERP, o el único del kardex). Ausente si no se sabe. */
     p?: string
+    /** Los otros proveedores que el ERP tiene cargados para el artículo (pestaña Proveedores), sin el de `p`. */
+    pa?: string[]
     /** Stock en envases por código de depósito, crudo (puede ser negativo). Solo los distintos de 0. */
     sd?: Record<string, number>
     /** OC pendientes: [fecha de entrega `YYYY-MM-DD` o null, cantidad en envases]. */

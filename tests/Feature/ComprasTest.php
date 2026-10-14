@@ -10,6 +10,7 @@ use App\Models\ComprasArticulo;
 use App\Models\CompraStockDeposito;
 use App\Models\Partida;
 use App\Models\Proveedor;
+use App\Models\ProveedorArticulo;
 use App\Models\User;
 use App\Models\Venta;
 use App\Services\Compras\ReposicionService;
@@ -412,6 +413,59 @@ class ComprasTest extends TestCase
 
         $this->assertSame('UNICO SA', $this->item($dataset, 'RE-1')['p']);
         $this->assertArrayNotHasKey('p', $this->item($dataset, 'RE-2'));
+    }
+
+    /**
+     * El caso que lo motivó (14/10/2026): RE-1521 no está en el padrón de artículos y salía sin
+     * proveedor, teniendo a C M INSUMOS marcado principal en la pestaña Proveedores del ERP.
+     */
+    public function test_fuera_del_padron_el_proveedor_sale_del_principal_del_erp_con_los_alternativos(): void
+    {
+        Proveedor::create(['numero' => '22', 'razon_social' => 'C M INSUMOS Y SISTEMAS S.R.L.']);
+        Proveedor::create(['numero' => '6', 'razon_social' => 'ICNA S.A.']);
+        ProveedorArticulo::create(['codigo_articulo' => 'RE-1521', 'proveedor_numero' => '6', 'principal' => false]);
+        ProveedorArticulo::create(['codigo_articulo' => 'RE-1521', 'proveedor_numero' => '22', 'principal' => true]);
+        $this->articulo('RE-1521');
+
+        $item = $this->item($this->dataset(), 'RE-1521');
+
+        $this->assertSame('C M INSUMOS Y SISTEMAS S.R.L.', $item['p']);
+        $this->assertSame(['ICNA S.A.'], $item['pa'], 'Los alternativos, sin repetir el principal');
+    }
+
+    /** El padrón manda (puede tener una corrección a mano), y el principal del ERP manda sobre el kardex. */
+    public function test_el_padron_manda_sobre_el_principal_del_erp_y_este_sobre_el_kardex(): void
+    {
+        $aMano = Proveedor::create(['numero' => '500', 'razon_social' => 'EL DEL PADRON']);
+        Proveedor::create(['numero' => '22', 'razon_social' => 'EL PRINCIPAL']);
+        Proveedor::create(['numero' => '10', 'razon_social' => 'EL DEL KARDEX']);
+        Articulo::create(['codigo' => 'RE-1', 'descripcion' => 'X', 'proveedor_id' => $aMano->id]);
+        ProveedorArticulo::create(['codigo_articulo' => 'RE-1', 'proveedor_numero' => '22', 'principal' => true]);
+        ProveedorArticulo::create(['codigo_articulo' => 'RE-2', 'proveedor_numero' => '22', 'principal' => true]);
+        Partida::create(['codigo_articulo' => 'RE-2', 'codigo_partida' => 'L1', 'proveedor_numero' => '10']);
+        $this->articulo('RE-1');
+        $this->articulo('RE-2');
+
+        $dataset = $this->dataset();
+
+        $this->assertSame('EL DEL PADRON', $this->item($dataset, 'RE-1')['p']);
+        $this->assertSame(['EL PRINCIPAL'], $this->item($dataset, 'RE-1')['pa'], 'El del ERP queda como alternativo');
+        $this->assertSame('EL PRINCIPAL', $this->item($dataset, 'RE-2')['p']);
+    }
+
+    /** Con dos marcados principal no se elige: queda sin `p`, y los dos en `pa` para el tooltip. */
+    public function test_con_dos_principales_no_elige_pero_los_muestra(): void
+    {
+        Proveedor::create(['numero' => '5', 'razon_social' => 'A SA']);
+        Proveedor::create(['numero' => '6', 'razon_social' => 'B SA']);
+        ProveedorArticulo::create(['codigo_articulo' => 'RE-012', 'proveedor_numero' => '5', 'principal' => true]);
+        ProveedorArticulo::create(['codigo_articulo' => 'RE-012', 'proveedor_numero' => '6', 'principal' => true]);
+        $this->articulo('RE-012');
+
+        $item = $this->item($this->dataset(), 'RE-012');
+
+        $this->assertArrayNotHasKey('p', $item);
+        $this->assertEqualsCanonicalizing(['A SA', 'B SA'], $item['pa']);
     }
 
     public function test_el_stock_por_deposito_viaja_crudo_y_sin_los_ceros(): void

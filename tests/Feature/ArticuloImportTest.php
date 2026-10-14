@@ -224,6 +224,34 @@ class ArticuloImportTest extends TestCase
         $this->assertNull(Articulo::where('codigo', 'AG-20')->firstOrFail()->proveedor_id);
     }
 
+    /**
+     * Desde el 14/10/2026 el principal del ERP cubre casi todo el catálogo y manda sobre el Excel: sin
+     * este aviso, quien sube la planilla para corregir un proveedor no ve ningún cambio y no sabe por qué.
+     * Traer el MISMO proveedor que ya tiene no cuenta como fila perdida.
+     */
+    public function test_avisa_las_filas_cuyo_proveedor_no_se_aplico_y_por_que(): void
+    {
+        $delErp = $this->proveedor('22', 'C M INSUMOS Y SISTEMAS S.R.L.');
+        $this->proveedor('6', 'ICNA S.A.');
+        $aMano = $this->proveedor('500', 'EL DE CALIDAD SA');
+        Articulo::create(['codigo' => 'RE-1521', 'descripcion' => 'DEXTROSA', 'proveedor_id' => $delErp->id, 'proveedor_origen' => 'principal']);
+        Articulo::create(['codigo' => 'RE-2', 'descripcion' => 'DOS', 'proveedor_id' => $aMano->id, 'proveedor_origen' => 'manual']);
+        Articulo::create(['codigo' => 'RE-3', 'descripcion' => 'TRES', 'proveedor_id' => $delErp->id, 'proveedor_origen' => 'principal']);
+        $admin = $this->userWith('articulos.import');
+
+        $response = $this->importar($admin, ['cod_articulo', 'proveedor_principal'], [
+            ['RE-1521', 'ICNA S.A.'],
+            ['RE-2', 'ICNA S.A.'],
+            ['RE-3', 'C M INSUMOS Y SISTEMAS S.R.L.'],
+        ]);
+
+        $error = $response->getSession()->get('error');
+        $this->assertStringContainsString('El proveedor de 2 filas no se aplicó', $error);
+        $this->assertStringContainsString('1 porque el ERP ya define el proveedor principal', $error);
+        $this->assertStringContainsString('1 porque alguien lo corrigió a mano', $error);
+        $this->assertSame($delErp->id, Articulo::where('codigo', 'RE-1521')->firstOrFail()->proveedor_id);
+    }
+
     /** Con miles de filas, una advertencia por fila sería ilegible. */
     public function test_el_mismo_proveedor_inexistente_avisa_una_sola_vez_con_el_contador(): void
     {

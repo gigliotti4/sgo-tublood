@@ -4,11 +4,13 @@ namespace Tests\Feature;
 
 use App\Models\Articulo;
 use App\Models\Proveedor;
+use App\Models\ProveedorArticulo;
 use App\Services\RpSistemas\ArticuloSyncService;
 use App\Services\VinculacionProveedores;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 
 /**
@@ -486,5 +488,24 @@ class ArticuloSyncTest extends TestCase
 
         $this->assertSame($correcto->id, Articulo::first()->proveedor_id);
         $this->assertSame(1, $vinculados);
+    }
+
+    /**
+     * ⚠️ `PROVE_ARTI` es una tabla base sin contrato: si RP le cambia una columna, la sync del catálogo
+     * (que para entonces ya escribió los artículos y alimenta el buscador del portal) no puede caerse.
+     * Se simula con una conexión `erp` vacía, donde la tabla no existe.
+     */
+    public function test_un_fallo_al_leer_prove_arti_no_tumba_la_sync_ni_borra_el_espejo(): void
+    {
+        config(['database.connections.erp' => ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '']]);
+        DB::purge('erp');
+        ProveedorArticulo::create(['codigo_articulo' => 'RE-1', 'proveedor_numero' => '22', 'principal' => true]);
+        Log::spy();
+
+        $vincular = new \ReflectionMethod(ArticuloSyncService::class, 'vincularProveedorPrincipal');
+
+        $this->assertSame(0, $vincular->invoke($this->service()));
+        $this->assertSame(1, ProveedorArticulo::count(), 'El espejo anterior queda: el tablero sigue con la copia de ayer');
+        Log::shouldHaveReceived('error')->withArgs(fn ($mensaje) => str_contains((string) $mensaje, 'PROVE_ARTI'));
     }
 }

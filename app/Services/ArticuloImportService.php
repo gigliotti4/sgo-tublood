@@ -47,11 +47,25 @@ class ArticuloImportService
 
     private int $proveedoresCreados = 0;
 
+    /**
+     * Filas cuyo proveedor no se aplicó porque el artículo ya tiene uno de una
+     * fuente con más autoridad, por origen (`principal`, `erp`, `manual`).
+     *
+     * Desde el 14/10/2026 el principal de la pestaña Proveedores del ERP cubre
+     * ~99% del catálogo, así que esto pasa casi siempre: sin avisarlo, quien
+     * sube la planilla para corregir un proveedor no ve ningún cambio y no sabe
+     * por qué.
+     *
+     * @var array<string, int>
+     */
+    private array $proveedoresNoAplicados = [];
+
     /** @return array{creados: int, actualizados: int, proveedoresCreados: int, advertencias: array<int, string>} */
     public function import(UploadedFile $file, bool $crearFaltantes = false): array
     {
         $this->advertencias = [];
         $this->proveedoresSinMatch = [];
+        $this->proveedoresNoAplicados = [];
         $this->proveedoresCreados = 0;
         $creados = 0;
         $actualizados = 0;
@@ -147,6 +161,11 @@ class ArticuloImportService
                         'proveedor_id' => $proveedorId,
                         'proveedor_origen' => VinculacionProveedores::ORIGEN_EXCEL,
                     ]);
+                } elseif ($proveedorId !== null && $proveedorId !== $articulo->proveedor_id) {
+                    // Solo cuenta si la planilla quería CAMBIARLO: traer el mismo
+                    // proveedor que ya tiene no es una fila perdida.
+                    $origen = (string) $articulo->proveedor_origen;
+                    $this->proveedoresNoAplicados[$origen] = ($this->proveedoresNoAplicados[$origen] ?? 0) + 1;
                 }
             }
         }
@@ -243,7 +262,27 @@ class ArticuloImportService
      */
     private function advertenciasFinales(): array
     {
-        $advertencias = $this->advertencias;
+        // Va primero: es una sola línea que explica por qué "no cambió nada", y
+        // al final quedaría cortada por el tope de advertencias.
+        $advertencias = [];
+
+        if ($this->proveedoresNoAplicados !== []) {
+            $total = array_sum($this->proveedoresNoAplicados);
+            $motivos = [
+                VinculacionProveedores::ORIGEN_PRINCIPAL => 'el ERP ya define el proveedor principal (pestaña Proveedores del artículo en RP: se corrige ahí)',
+                VinculacionProveedores::ORIGEN_ERP => 'el ERP lo trae en el código de proveedor del artículo',
+                VinculacionProveedores::ORIGEN_MANUAL => 'alguien lo corrigió a mano desde la ficha',
+            ];
+            $detalle = [];
+
+            foreach ($this->proveedoresNoAplicados as $origen => $cantidad) {
+                $detalle[] = "{$cantidad} porque ".($motivos[$origen] ?? 'otra fuente tiene más autoridad');
+            }
+
+            $advertencias[] = "El proveedor de {$total} ".($total === 1 ? 'fila' : 'filas').' no se aplicó: '.implode('; ', $detalle).'.';
+        }
+
+        $advertencias = [...$advertencias, ...$this->advertencias];
 
         foreach ($this->proveedoresSinMatch as $razonSocial => $cantidad) {
             $articulos = $cantidad === 1 ? '1 artículo quedó' : "{$cantidad} artículos quedaron";

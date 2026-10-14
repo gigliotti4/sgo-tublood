@@ -8,6 +8,7 @@ use App\Models\ComprasArticulo;
 use App\Models\CompraStockDeposito;
 use App\Models\Partida;
 use App\Models\Proveedor;
+use App\Models\ProveedorArticulo;
 use App\Models\Venta;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
@@ -46,7 +47,10 @@ class ReposicionService
      * como `undefined` sin que nada falle a la vista. Ya pasó una vez, al
      * agregar `id`.
      */
-    private const VERSION_DATASET = 4;
+    private const VERSION_DATASET = 5;
+
+    /** @var array<string, string>|null número de proveedor => razón social, ver `razonesSociales()` */
+    private ?array $razones = null;
 
     /**
      * Dataset listo para el tablero, cacheado.
@@ -78,6 +82,7 @@ class ReposicionService
         $reservado = $this->totalPorArticulo(CompraPedidoPendiente::query()->reservadas());
         $entregas = $this->entregasPorArticulo();
         $proveedores = $this->proveedorPorArticulo();
+        $alternativos = $this->alternativosPorArticulo($proveedores);
         [$stockPorDeposito, $depositos] = $this->stockPorDeposito();
 
         $grupos = [];
@@ -131,6 +136,10 @@ class ReposicionService
 
             if (isset($proveedores[$codigo])) {
                 $item['p'] = $proveedores[$codigo];
+            }
+
+            if (isset($alternativos[$codigo])) {
+                $item['pa'] = $alternativos[$codigo];
             }
 
             if (isset($stockPorDeposito[$codigo])) {
@@ -210,14 +219,23 @@ class ReposicionService
     }
 
     /**
-     * La razón social del proveedor de cada artículo.
+     * La razón social del proveedor de cada artículo, en este orden:
      *
-     * Primero el padrón de artículos (`articulos.proveedor_id`), que es donde
-     * `VinculacionProveedores` ya resolvió las cuatro fuentes con su
-     * precedencia. Para los que no están en ese catálogo o no tienen proveedor,
-     * el kardex, pero SOLO si el artículo le compró siempre al mismo: con más de
-     * un proveedor histórico elegir sería adivinar (mismo criterio que
-     * `VinculacionProveedores::desdeKardex()`).
+     * 1. El padrón de artículos (`articulos.proveedor_id`), donde
+     *    `VinculacionProveedores` ya resolvió las fuentes con su precedencia —
+     *    incluida una corrección a mano, que manda sobre todo lo demás.
+     * 2. El principal de la pestaña "Proveedores" del ERP (`PROVE_ARTI`), para
+     *    los ~4.400 artículos que no están en el catálogo de 746 del padrón. Con
+     *    la misma regla que usa la vinculación
+     *    (`ProveedorArticulo::principalPorArticulo()`), así un artículo no puede
+     *    tener un proveedor en su ficha y otro acá.
+     * 3. El kardex, pero SOLO si el artículo le compró siempre al mismo: con más
+     *    de un proveedor histórico elegir sería adivinar (mismo criterio que
+     *    `VinculacionProveedores::desdeKardex()`).
+     *
+     * Hasta el 14/10/2026 faltaba el paso 2, y 63 productos de Distribución
+     * activos salían sin proveedor teniéndolo cargado en el ERP (RE-1521, por
+     * ejemplo). Con él quedan 3, que tampoco tienen nada en el ERP.
      *
      * @return array<string, string>
      */
@@ -234,6 +252,14 @@ class ReposicionService
             $proveedores[mb_strtoupper(trim((string) $fila->codigo))] = $fila->razon_social;
         }
 
+        $razones = $this->razonesSociales();
+
+        foreach (ProveedorArticulo::principalPorArticulo() as $codigo => $numero) {
+            if (! isset($proveedores[$codigo]) && isset($razones[$numero])) {
+                $proveedores[$codigo] = $razones[$numero];
+            }
+        }
+
         $unicos = Partida::query()
             ->whereNotNull('proveedor_numero')
             ->groupBy('codigo_articulo')
@@ -241,10 +267,6 @@ class ReposicionService
             ->select('codigo_articulo', DB::raw('MAX(proveedor_numero) as proveedor_numero'))
             ->toBase()
             ->get();
-
-        $razones = Proveedor::query()
-            ->whereNotNull('numero')
-            ->pluck('razon_social', 'numero');
 
         foreach ($unicos as $fila) {
             $codigo = mb_strtoupper(trim((string) $fila->codigo_articulo));
@@ -256,6 +278,54 @@ class ReposicionService
         }
 
         return $proveedores;
+    }
+
+    /**
+     * Los OTROS proveedores que el ERP tiene cargados para cada artículo (todos
+     * los de `PROVE_ARTI` menos el que quedó como proveedor del artículo). Es lo
+     * que la pantalla muestra en el tooltip, para poder comprarle a otro cuando
+     * el principal no tiene.
+     *
+     * @param  array<string, string>  $principal  lo que devolvió `proveedorPorArticulo()`
+     * @return array<string, list<string>>
+     */
+    private function alternativosPorArticulo(array $principal): array
+    {
+        $razones = $this->razonesSociales();
+        $alternativos = [];
+
+        foreach (ProveedorArticulo::proveedoresPorArticulo() as $codigo => $numeros) {
+            $otros = [];
+
+            foreach ($numeros as $numero) {
+                $razon = $razones[$numero] ?? null;
+
+                if ($razon !== null && $razon !== ($principal[$codigo] ?? null) && ! in_array($razon, $otros, true)) {
+                    $otros[] = $razon;
+                }
+            }
+
+            if ($otros !== []) {
+                $alternativos[$codigo] = $otros;
+            }
+        }
+
+        return $alternativos;
+    }
+
+    /**
+     * Número de proveedor => razón social, memorizado: lo usan las dos funciones
+     * de arriba y son ~1.900 proveedores.
+     *
+     * @return array<string, string>
+     */
+    private function razonesSociales(): array
+    {
+        return $this->razones ??= Proveedor::query()
+            ->whereNotNull('numero')
+            ->pluck('razon_social', 'numero')
+            ->mapWithKeys(fn ($razon, $numero) => [(string) $numero => $razon])
+            ->all();
     }
 
     /**
@@ -476,6 +546,7 @@ class ReposicionService
             CompraOrdenPendiente::max('synced_at'),
             CompraPedidoPendiente::max('synced_at'),
             CompraStockDeposito::max('synced_at'),
+            ProveedorArticulo::max('synced_at'),
             Venta::max('synced_at'),
             md5(serialize(config('compras'))),
         ];

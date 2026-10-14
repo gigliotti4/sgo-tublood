@@ -17,9 +17,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * `ArticuloSyncService`.
  *
  * `proveedor_id` es un caso mixto: sigue siendo propio del panel (el
- * `upsert()` tampoco lo toca), pero lo escriben tres fuentes automáticas —
- * el feed de RP, el import de Excel y el kardex de compras — más la edición
- * manual. `proveedor_origen` guarda cuál de las cuatro lo puso, y
+ * `upsert()` tampoco lo toca), pero lo escriben cuatro fuentes automáticas —
+ * el principal de la pestaña Proveedores del ERP (`PROVE_ARTI`, desde el
+ * 14/10/2026), el `codigo_proveedor` del feed de RP, el import de Excel y el
+ * kardex de compras — más la edición manual. `proveedor_origen` guarda cuál
+ * de las cinco lo puso, y
  * `App\Services\VinculacionProveedores` decide cuál puede pisar a cuál: nada
  * automático pisa una corrección hecha a mano.
  *
