@@ -54,7 +54,6 @@ class RolesAndPermissionsSeeder extends Seeder
             'proveedores.view', 'proveedores.edit', 'proveedores.import', 'proveedores.sync',
             'ventas.view', 'ventas.sync',
             'partidas.view', 'partidas.sync',
-            'compras.view', 'compras.sync',
             'nc.view', 'nc.create', 'nc.gestionar',
             'configuracion.view', 'configuracion.edit',
         ]);
@@ -63,7 +62,7 @@ class RolesAndPermissionsSeeder extends Seeder
         $viewer->syncPermissions([
             'users.view', 'roles.view', 'clientes.view', 'observaciones.view',
             'articulos.view', 'proveedores.view', 'ventas.view', 'partidas.view',
-            'compras.view', 'nc.view',
+            'nc.view',
         ]);
 
         $usuarioInterno = Role::firstOrCreate(['name' => 'usuario_interno']);
@@ -74,7 +73,6 @@ class RolesAndPermissionsSeeder extends Seeder
             'proveedores.view', 'proveedores.edit', 'proveedores.import', 'proveedores.sync',
             'ventas.view', 'ventas.sync',
             'partidas.view', 'partidas.sync',
-            'compras.view', 'compras.sync',
             // §6: "Todos los usuarios" pueden crear una NC y guardarla como
             // borrador. Gestionarla ya es de Calidad.
             'nc.view', 'nc.create',
@@ -109,6 +107,19 @@ class RolesAndPermissionsSeeder extends Seeder
             'clientes.view', 'clientes.vencimientos',
             'nc.view', 'nc.create',
         ]);
+
+        // Compras es un rol APARTE (pedido del 14/10/2026): el tablero de
+        // reposición lo ven solo las personas a las que se lo asignen desde
+        // Usuarios, y no todo el que tenga un rol general. Hasta esa fecha
+        // `compras.*` venía dentro de `usuario_interno`, `admin` y `viewer`, y
+        // así lo veían los 17 usuarios internos.
+        //
+        // ⚠️ No volver a meter `compras.*` en esos roles ni sacárselo a éste
+        // desde la pantalla de Roles: este seeder hace `syncPermissions()` en
+        // cada deploy y revierte lo que se haya tocado a mano en los roles de
+        // acá. Quién ve Compras se decide asignando ESTE rol a cada usuario.
+        $compras = Role::firstOrCreate(['name' => 'compras']);
+        $compras->syncPermissions(['compras.view', 'compras.sync']);
 
         Role::firstOrCreate(['name' => 'cliente_externo']);
 
