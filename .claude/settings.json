@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "cleanupPeriodDays": 365,
+  "permissions": {
+    "allow": [
+      "Bash(/c/laragon/bin/php/php-8.3.30-Win32-vs16-x64/php.exe artisan test:*)",
+      "Bash(/c/laragon/bin/php/php-8.3.30-Win32-vs16-x64/php.exe artisan config:clear:*)",
+      "Bash(/c/laragon/bin/php/php-8.3.30-Win32-vs16-x64/php.exe vendor/bin/pint:*)",
+      "Bash(composer test:*)",
+      "Bash(npx vue-tsc:*)",
+      "Bash(npm run build:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(python -I .claude/skills/probar-pantalla/probar.py:*)",
+      "Bash(bash .claude/scripts/paridad-compras/paridad.sh:*)"
+    ],
+    "ask": [
+      "Bash(git push:*)",
+      "Bash(ssh:*)",
+      "Bash(timeout * ssh:*)"
+    ]
+  }
+}

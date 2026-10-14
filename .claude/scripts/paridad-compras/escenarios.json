@@ -1,0 +1,119 @@
+[
+  {
+    "nombre": "alerta",
+    "f": {
+      "mesesObjetivo": 1,
+      "cats": [
+        "DIS"
+      ],
+      "activo": "si",
+      "stock": "all",
+      "cubre": "no",
+      "pareto": "all",
+      "depositos": [],
+      "agrupar": true
+    },
+    "periodo": "ultimos3"
+  },
+  {
+    "nombre": "todo",
+    "f": {
+      "mesesObjetivo": 2
+    },
+    "periodo": "todo"
+  },
+  {
+    "nombre": "deposito_DEP",
+    "f": {
+      "mesesObjetivo": 1.5,
+      "depositos": [
+        "DEP"
+      ],
+      "stock": "si"
+    },
+    "periodo": "ultimos6"
+  },
+  {
+    "nombre": "depositos_varios",
+    "f": {
+      "mesesObjetivo": 3,
+      "depositos": [
+        "DEP",
+        "DPR",
+        "MAP"
+      ]
+    },
+    "periodo": "ultimos12"
+  },
+  {
+    "nombre": "sin_agrupar",
+    "f": {
+      "mesesObjetivo": 1,
+      "agrupar": false,
+      "cubre": "no"
+    },
+    "periodo": "ultimos3"
+  },
+  {
+    "nombre": "pareto_A",
+    "f": {
+      "mesesObjetivo": 2,
+      "pareto": "A",
+      "cats": [
+        "DIS",
+        "IMP"
+      ]
+    },
+    "periodo": "ultimos6"
+  },
+  {
+    "nombre": "sin_venta",
+    "f": {
+      "mesesObjetivo": 1,
+      "cubre": "sv",
+      "servicios": true
+    },
+    "periodo": "ultimos3"
+  },
+  {
+    "nombre": "inactivos_sin_stock",
+    "f": {
+      "mesesObjetivo": 1,
+      "activo": "no",
+      "stock": "no"
+    },
+    "periodo": "todo"
+  },
+  {
+    "nombre": "bonif_alerta_agrupada",
+    "f": {
+      "mesesObjetivo": 1,
+      "cats": [
+        "DIS"
+      ],
+      "activo": "si",
+      "cubre": "no",
+      "agrupar": true,
+      "bonificados": "no"
+    },
+    "periodo": "ultimos3"
+  },
+  {
+    "nombre": "bonif_solo",
+    "f": {
+      "mesesObjetivo": 2,
+      "bonificados": "si",
+      "servicios": true
+    },
+    "periodo": "todo"
+  },
+  {
+    "nombre": "bonif_excluir_sin_agrupar",
+    "f": {
+      "mesesObjetivo": 1.5,
+      "bonificados": "no",
+      "agrupar": false
+    },
+    "periodo": "ultimos6"
+  }
+]

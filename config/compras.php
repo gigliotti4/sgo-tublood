@@ -132,7 +132,8 @@ return [
     | `FiltrosCompras` en lib/compras.ts.
     |
     | ⚠️ `destinatarios` es una lista fija y no "quien tenga compras.view": ese
-    | permiso lo tenían 22 usuarios (viene con roles generales) y el mail le
+    | permiso lo tenían 22 usuarios (venía con roles generales hasta el
+    | 14/10/2026; hoy es el rol `compras`) y el mail le
     | habría llegado a media empresa. Sumar o sacar a alguien es editar esta
     | lista y desplegar.
     |

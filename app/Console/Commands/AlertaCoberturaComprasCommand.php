@@ -18,7 +18,8 @@ use Illuminate\Support\Facades\Notification;
  *
  * ⚠️ Los destinatarios son una LISTA FIJA de direcciones y no "quien tenga
  * `compras.view`": medido el 9/10/2026, ese permiso lo tenían 22 usuarios
- * (ventas, cobranzas, depósito…) porque viene con roles generales, y el mail le
+ * (ventas, cobranzas, depósito…) porque venía con roles generales —hasta el
+ * 14/10/2026, cuando Compras pasó a ser un rol propio—, y el mail le
  * habría llegado a media empresa. Compras pidió que vaya a compras@ y a
  * Emanuel Durán.
  */

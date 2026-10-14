@@ -102,8 +102,9 @@ class AlertaCoberturaComprasTest extends TestCase
     }
 
     /**
-     * El permiso `compras.view` lo tenían 22 usuarios en producción (viene con
-     * roles generales): no es la lista de a quién le llega el mail.
+     * El permiso `compras.view` lo tenían 22 usuarios en producción (venía con
+     * roles generales hasta el 14/10/2026): no es la lista de a quién le llega
+     * el mail, y aunque hoy sea un rol propio, sigue sin serlo.
      */
     public function test_quien_ve_compras_pero_no_esta_en_la_lista_no_lo_recibe(): void
     {

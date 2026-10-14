@@ -28,7 +28,7 @@ php artisan test --filter=NombreDelTest  # correr un solo test/clase
 # Alertas
 php artisan observaciones:alertas   # avisa por observaciones vencidas y escala al gerente (agendado cada hora)
 php artisan nc:recordatorios        # marca vencidas las acciones pasadas de plazo y avisa cuando toca verificar la eficacia (agendado 07:00)
-php artisan compras:alerta-cobertura # mail a quien ve Compras con lo que no cubre stock + Excel (agendado el 1 de cada mes, 08:00); --ver muestra sin mandar, --a=mail manda solo a esa dirección
+php artisan compras:alerta-cobertura # mail a la lista fija `compras.alerta.destinatarios` con lo que no cubre stock + Excel (agendado el 1 de cada mes, 08:00); --ver muestra sin mandar, --a=mail manda solo a esa dirección
 
 # Base de datos
 php artisan migrate         # ejecutar migraciones pendientes
@@ -209,7 +209,7 @@ Qué lote salió en cada renglón de venta. Sale del **mismo kardex** que `parti
 
 ⚠️ **Hubo una SEGUNDA conexión al ERP (`erp_compras`) hasta el 29/9/2026.** Existía porque los dos usuarios que dio RP tenían permisos complementarios: `api_lucas` leía el kardex y `powerbi_tublood` el catálogo y las vistas de compras. Se unificó cuando se midió que **`powerbi_tublood` ya puede leer todo**, kardex incluido: hoy hay una sola conexión `erp` con esas credenciales. Contrastado corriendo el SQL real de cada sync por las dos: mismos conteos y mismos tiempos.
 
-**Estado medido el 30/9/2026** con `powerbi_tublood`: **406 objetos** con SELECT, de los cuales **20 son vistas `powerbi_*`** y usamos 5. El usuario es **estrictamente de solo lectura** (0 permisos de INSERT/UPDATE/DELETE).
+**Estado medido el 30/9/2026** con `powerbi_tublood`: **406 objetos** con SELECT, de los cuales **20 son vistas `powerbi_*`** y usamos 6 (las de la lista de abajo). El usuario es **estrictamente de solo lectura** (0 permisos de INSERT/UPDATE/DELETE).
 
 Las que leemos: `powerbi_ventas_vista`, `powerbi_proveedores_vista`, `powerbi_ordenescompra_pend_vista`, `powerbi_pedidos_vista`, `powerbi_lista_precios_A_vista` y `powerbi_stock_vista` (esta última, además de para el stock de `articulos`, desde el 8/10/2026 para el stock por depósito de Compras). Más cuatro **tablas base sin contrato**: `ARTICULOS`, `COMPRO_PARTIDAS`, `AGRUPACIONES` y `OC_ITEMS` (la fecha de entrega por renglón de las OC, ver abajo).
 
@@ -261,7 +261,7 @@ Salieron del documento *"Para agregar al sistema del módulo de compras"*. Todo 
 - **Depósitos** (`compras_stock_depositos`, desde `powerbi_stock_vista`, dentro de `compras:sync`). ⚠️ **Con "todos" el stock sigue siendo `CANT_STOCK`**, y recién al elegir depósitos pasa a ser la suma de esos: la suma de los depósitos difiere de `CANT_STOCK` en ~32 de 671 artículos, y así el tablero abre con los números de siempre. Por lo mismo, tildar los diez a mano se normaliza a "todos" (lista vacía). Los depósitos negativos (PRODUCCION sumaba −5,47 M) explican la mayoría de los ⚠: el tooltip del ⚠ dice cuál es.
 - **Agrupar por GTIN Sí/No**: ⚠️ **el tablero abre en "No"** (pedido del 9/10/2026: se compra por artículo, y cada uno tiene su proveedor). Cada artículo va en su propia fila (`desagrupar()` en `lib/compras.ts`) y el Pareto se calcula sobre esas filas; "Sí" unifica por GTIN como antes. Los rótulos "Multimarca GTIN" (primera columna, primera tarjeta y CSV) dicen "Producto" sin agrupar. El default de `CalculoReposicion::filtros()` calca el del front. (El mail va agrupado: ver más abajo.)
 - **Venta mensual cargada a mano**: si `ARTICULOS.STOCK_SEGURIDAD` > 0, manda sobre el promedio de venta **por artículo** (en envases, se multiplica por el envase como todo lo demás) y la fila se marca "est.". Saca al producto de "Sin venta". ⚠️ **No es `STOCK_MIN`**, que era lo que pedía el documento: estaba cargado en 7 artículos (seis tubos de fabricación de 15.000 a 169.000) con otro sentido. `STOCK_SEGURIDAD` estaba vacío en los 5.238. Compras tiene que cargarla en ese campo del ERP.
-- **Alerta mensual** (`compras:alerta-cobertura`, el 1 de cada mes a las 08:00 hora argentina —el scheduler usa `app.timezone`—): mail con el total, los 10 que más faltan y el detalle en `.xlsx` (que queda guardado en `storage/app/private/compras/alertas/`), a la **lista fija `config('compras.alerta.destinatarios')`** (hoy compras@tublood.com y eduran@tublood.com), un mail por dirección. ⚠️ **No es "quien tenga `compras.view`"**: así nació, y al medirlo en producción el 9/10/2026 ese permiso lo tenían 22 usuarios (viene con roles generales). Una dirección que es de un usuario recibe el saludo con su nombre; una casilla compartida va como `Notification::route('mail', ...)`. Los filtros viven en `config('compras.alerta')` y el pie del mail se arma desde ahí. Si no hay nada para comprar, no manda nada. ⚠️ **Usa los últimos meses CERRADOS**: el día 1 el mes recién empezado traería ventas casi en 0 y escondería productos. El tablero sí incluye el mes en curso.
+- **Alerta mensual** (`compras:alerta-cobertura`, el 1 de cada mes a las 08:00 hora argentina —el scheduler usa `app.timezone`—): mail con el total, los 10 que más faltan y el detalle en `.xlsx` (que queda guardado en `storage/app/private/compras/alertas/`), a la **lista fija `config('compras.alerta.destinatarios')`** (hoy compras@tublood.com y eduran@tublood.com), un mail por dirección. ⚠️ **No es "quien tenga `compras.view`"**: así nació, y al medirlo en producción el 9/10/2026 ese permiso lo tenían 22 usuarios (venía con roles generales hasta el 14/10/2026, cuando pasó a ser el rol `compras`). Una dirección que es de un usuario recibe el saludo con su nombre; una casilla compartida va como `Notification::route('mail', ...)`. Los filtros viven en `config('compras.alerta')` y el pie del mail se arma desde ahí. Si no hay nada para comprar, no manda nada. ⚠️ **Usa los últimos meses CERRADOS**: el día 1 el mes recién empezado traería ventas casi en 0 y escondería productos. El tablero sí incluye el mes en curso.
 - **Bonificados** (los que el proveedor manda sin cargo junto con otro producto: no se compran). El ERP **no tiene un campo** para marcarlos: se anota a mano en el texto del artículo, casi siempre en `DESC_ADICIONAL` ("VIENE BONIFICADO CON RE-4952", "SIN COSTO (BONIFICADO PROVEEDOR)") y a veces en la descripción ("(bonificación)"). Se guarda `compras_articulos.desc_adicional` crudo y el patrón `config('compras.bonificado')` se aplica **al armar el dataset** (mismo criterio que `gtin_comodin`), que manda `b` con el texto. En el tablero es la botonera **"Bonificados: Todos / Excluir / Solo"** (filtro por artículo; default Todos) y la etiqueta "bonif." con el texto en el tooltip. Al 10/10/2026 eran 4 artículos.
 - ⚠️ **El mail y el tablero NO usan el mismo default a propósito**: el tablero abre sin agrupar y con todos; el mail va **unificado por GTIN y sin bonificados** (`alerta.agrupar = true`, `alerta.bonificados = 'no'`), que es lo que pidieron sobre el primer mail de prueba.
 - ⚠️ **La alerta necesita el cálculo en el servidor, así que hay una COPIA en PHP**: `app/Services/Compras/CalculoReposicion.php`, escrita calcando `lib/compras.ts` (mismos nombres) y acotada a lo que la alerta usa (sin buscador ni orden). `tests/Unit/CalculoReposicionTest.php` fija cada regla. Además, al escribirla se corrieron **las dos implementaciones sobre el dataset real** con 8 juegos de filtros (de 48 a 4.779 filas, 17 campos por fila, y una segunda corrida con venta estimada inyectada en 141 artículos): cero diferencias y mismo orden. **Cualquier cambio en una fórmula de `compras.ts` va también ahí**, y conviene repetir esa comparación: se arma el dataset con `ReposicionService::construir()`, se empaqueta `lib/compras.ts` con el `esbuild` que trae Vite (`node_modules/.bin/esbuild resources/js/lib/compras.ts --bundle --format=esm --platform=node`) y se comparan las salidas de `filtrar()` de los dos lados.
@@ -588,6 +588,32 @@ Los **sectores** no tienen permisos propios: reusan `users.view`/`users.edit`.
 - **Mail**: **Resend** (`resend/resend-php`; el mailer y `services.resend.key` ya venían en el scaffold de Laravel). En **dev queda en `MAIL_MAILER=log`** a propósito — los mails se leen en `storage/logs/laravel.log` y no hay riesgo de mandarle una prueba a un cliente real. Para activarlo: `MAIL_MAILER=resend` + `RESEND_API_KEY`, y `MAIL_FROM_ADDRESS` **tiene que ser de un dominio verificado en Resend** o rechaza el envío. Los tests nunca mandan nada: `phpunit.xml` fuerza `MAIL_MAILER=array`.
 - **Alias Vite**: `@/` → `resources/js/`
 - **Laravel Boost**: `laravel/boost` está instalado y expone un servidor MCP (`.mcp.json` → `php artisan boost:mcp`) con acceso a schema de DB, logs de error, `last-error` y búsqueda semántica de docs de Laravel. Útil para inspeccionar el estado real de la app sin escribir scripts de tinker.
+
+## Skills y agentes de Claude Code (`.claude/`)
+
+Salieron de un relevamiento de las sesiones del 8/9 al 14/10/2026: son las rutinas que más se repetían a
+mano (131 conexiones ssh al droplet, 127 corridas de tests, 65 `curl` armados a mano contra el vhost) y
+cada una arrastraba sus trampas.
+
+| | Cuándo | Qué hace |
+|---|---|---|
+| `/deploy-prod` | Solo lo dispara Lucas | Chequeo previo, resumen de lo que entra (migraciones, permisos), backup, `deploy.sh`, post-deploy por servicio tocado, verificación. Para y pregunta antes de cada paso que toca el servidor. |
+| `/prod-consulta` | Medir algo en producción | Corre un PHP con Laravel en el droplet con `Mail`/`Notification`/`Queue`/`Bus` falseados y **rollback siempre**; aborta antes de conectarse si el archivo escribe. |
+| `/verificar` | Antes de dar algo por terminado | Pint sobre lo tocado, tests relacionados y suite, vue-tsc + build si hubo frontend. |
+| `/probar-pantalla` | Validar una pantalla sin navegador | Login local (admin, o un usuario descartable con `--rol`) y las props de Inertia como JSON; 403 y redirects explícitos. |
+| `paridad-compras` (agente) | Tocar una fórmula o filtro de Compras | `lib/compras.ts` contra `CalculoReposicion.php` sobre el dataset real, 11 escenarios (`.claude/scripts/paridad-compras/`). |
+| `revisor-convenciones` (agente) | Antes de commitear algo no trivial | El diff contra las trampas de este archivo. Solo lee. |
+| `actualizar-claude-md` (agente) | Al cerrar una tarea | Actualiza este archivo con el estilo de siempre. Solo edita `CLAUDE.md`. |
+| `explorador-erp` (agente) | Antes de escribir código que lea del ERP | Mide por la conexión `erp` local con `.claude/scripts/erp-sql.php` (rechaza todo lo que no sea `SELECT`/`WITH`). |
+
+- ⚠️ **El repo es público**: el usuario e IP del droplet (`SGO_SSH`) y la ruta de la clave (`SGO_SSH_KEY`)
+  van en `.claude/settings.local.json` → `env`, que está en `.gitignore`. Sin eso, `/prod-consulta` y
+  `/deploy-prod` se niegan a correr en vez de adivinar.
+- `.claude/scripts/run.php` es el arranque de Laravel para scripts sueltos: `artisan tinker` con un archivo
+  se cuelga en este entorno y `tinker --execute` rompe las comillas.
+- `.claude/settings.json` sube `cleanupPeriodDays` a 365 (Claude Code borraba los transcripts a los 30
+  días, y el relevamiento solo encontró 3 sesiones), deja correr sin preguntar los comandos de
+  verificación y pregunta siempre antes de `git push` y `ssh`.
 
 ## Testing
 

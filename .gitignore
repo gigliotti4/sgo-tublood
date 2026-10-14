@@ -5,6 +5,9 @@
 .env.production
 .phpactor.json
 .phpunit.result.cache
+# Lo personal de Claude Code: el acceso SSH al droplet (SGO_SSH) vive acá y no en el repo, que es
+# público. .claude/settings.json, los skills y los agentes sí se versionan.
+/.claude/settings.local.json
 /.codex
 /.cursor/
 /.idea
