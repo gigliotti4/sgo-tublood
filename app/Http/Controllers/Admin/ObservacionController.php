@@ -253,9 +253,12 @@ class ObservacionController extends Controller
             // Cualquiera que vea el listado puede necesitar reasignar responsable/sector
             // en las filas que sí puede editar (ver ObservacionPolicy::update).
             'usuarios' => $this->usuariosAsignables(),
-            'sectores' => Sector::where('activo', true)->orderBy('nombre')->get(['id', 'nombre']),
+            'sectores' => Sector::where('activo', true)->orderBy('nombre')->get(['id', 'nombre', 'slug']),
             'presentaciones' => ObservationProduct::PRESENTACIONES,
             'tipoLabels' => TaxonomiaIncidencias::etiquetasTipos(),
+            // Para cambiar el tipo desde el modal: solo viaja a quien puede
+            // hacerlo (super-admin), así el resto no carga la taxonomía entera.
+            'taxonomia' => $request->user()?->can('editarContenido', new Observacion) ? TaxonomiaIncidencias::taxonomia() : null,
             'prioridades' => config('incidencias.prioridades'),
             'tiposCaso' => config('incidencias.tipos_caso'),
             // Corregir el texto del reclamo, dentro del modal de edición. No va
@@ -712,9 +715,20 @@ class ObservacionController extends Controller
             $atributos['contacto_numero_cliente'] = 'n° de cliente';
         }
 
-        $especificos = $request->validate($reglas, [], $atributos);
+        // Productos opcionales (6.2 "Falla de proveedor"): se descartan los
+        // renglones en blanco antes de validar, y se valida en la misma ronda
+        // que los datos específicos para que todos los errores salgan juntos.
+        $productos = [];
+        if (TaxonomiaIncidencias::llevaProductos($base['tipo'])) {
+            $request->merge(['productos' => ReglasObservacion::sinRenglonesVacios($request->input('productos'))]);
+            $reglas += ReglasObservacion::productosOpcionales();
+            $atributos += ReglasObservacion::atributos();
+        }
 
-        $this->guardar(fn () => Observacion::altaConNumero((int) now()->format('Y'), function (string $numero) use ($base, $sector, $especificos, $request) {
+        $especificos = $request->validate($reglas, [], $atributos);
+        $productos = $especificos['productos'] ?? [];
+
+        $this->guardar(fn () => Observacion::altaConNumero((int) now()->format('Y'), function (string $numero) use ($base, $sector, $especificos, $productos, $request) {
             $anio = (int) now()->format('Y');
 
             $observacion = Observacion::create([
@@ -736,6 +750,10 @@ class ObservacionController extends Controller
                 'cliente_id' => $this->clienteIdDesdeNumero($base['contacto_numero_cliente'] ?? null),
                 'datos_especificos' => $especificos['datos_especificos'] ?? [],
             ]);
+
+            foreach ($productos as $producto) {
+                $observacion->productos()->create($producto);
+            }
 
             $this->guardarAdjuntos($observacion, $request);
             $this->sincronizarNotificados($observacion, $base['notificados'] ?? []);
@@ -932,9 +950,9 @@ class ObservacionController extends Controller
      * `sincronizarNotificados()`, que sí la escribe a mano porque `sync()`
      * sobre una relación no dispara el evento `updated`.
      *
-     * ⚠️ El `tipo` queda afuera a propósito: decide el sector, el destinatario
-     * de los avisos y si la observación puede tener productos cargados.
-     * Cambiarlo es reencuadrar el caso, no corregir un texto.
+     * ⚠️ El `tipo` no va acá: decide el sector, los datos específicos y si la
+     * observación puede tener productos. Cambiarlo es reencuadrar el caso, no
+     * corregir un texto, y tiene su propia ruta: `cambiarTipo()`.
      */
     public function actualizarContenido(Request $request, Observacion $observacion)
     {
@@ -951,6 +969,82 @@ class ObservacionController extends Controller
         // no tiene por qué sacarte de la pantalla que estabas mirando.
         return back(fallback: route('observaciones.show', $observacion))
             ->with('success', 'Texto de la observación corregido.');
+    }
+
+    /**
+     * Reencuadra el caso en otro tipo de incidencia. **Solo super-admin**
+     * (pedido del 21/10/2026), con la misma llave que corregir el texto:
+     * `ObservacionPolicy::editarContenido()`.
+     *
+     * Se elige sector + tipo como en el alta, y se piden los "Datos
+     * específicos" del tipo nuevo con las mismas reglas: un cambio no puede
+     * dejar el caso en un estado que el formulario original no habría
+     * aceptado. Los datos del tipo viejo los guarda el observer en la bitácora
+     * (acción `tipo`), porque acá se reemplazan.
+     *
+     * ⚠️ **No se cruza la frontera de los reclamos de cliente.** Falla de
+     * producto y Disconformidad de servicio (los "especiales") tienen otro
+     * formulario —productos, institución, provincia— y otro circuito de avisos
+     * por rol. Pasar un reclamo de cliente a una incidencia interna (o al revés)
+     * dejaría datos sin lugar donde mostrarse, así que solo se permite moverse
+     * dentro del mismo grupo.
+     *
+     * Los productos ya cargados no se tocan: este modal no los edita, y la ficha
+     * los sigue mostrando aunque el tipo nuevo no los pida.
+     */
+    public function cambiarTipo(Request $request, Observacion $observacion)
+    {
+        $this->authorize('editarContenido', $observacion);
+
+        $base = $request->validate([
+            'sector_id' => ['required', 'exists:sectors,id'],
+            'tipo' => ['required', 'string'],
+        ]);
+
+        $sector = Sector::findOrFail($base['sector_id']);
+
+        if (! TaxonomiaIncidencias::tipo($sector->slug, $base['tipo'])) {
+            throw ValidationException::withMessages([
+                'tipo' => 'El tipo de incidencia no corresponde al sector seleccionado.',
+            ]);
+        }
+
+        $sectorActual = TaxonomiaIncidencias::sectorDeTipo((string) $observacion->tipo);
+        $eraEspecial = $sectorActual !== null && TaxonomiaIncidencias::esTipoEspecial($sectorActual, (string) $observacion->tipo);
+        $esEspecial = TaxonomiaIncidencias::esTipoEspecial($sector->slug, $base['tipo']);
+
+        if ($eraEspecial !== $esEspecial) {
+            throw ValidationException::withMessages([
+                'tipo' => $eraEspecial
+                    ? 'Un reclamo de cliente solo puede pasar a otro reclamo de cliente (Falla de producto o Disconformidad de servicio).'
+                    : 'Una incidencia interna no puede pasar a un reclamo de cliente: esos tienen otro formulario.',
+            ]);
+        }
+
+        if (TaxonomiaIncidencias::requiereCliente($sector->slug, $base['tipo']) && blank($observacion->contacto_numero_cliente)) {
+            throw ValidationException::withMessages([
+                'tipo' => 'Ese tipo exige el N° de cliente, y esta observación no lo tiene cargado.',
+            ]);
+        }
+
+        $datos = $esEspecial
+            ? $observacion->datos_especificos
+            : $request->validate(
+                TaxonomiaIncidencias::reglasValidacion($sector->slug, $base['tipo']),
+                [],
+                TaxonomiaIncidencias::atributosValidacion($sector->slug, $base['tipo']),
+            )['datos_especificos'] ?? [];
+
+        $observacion->update([
+            'tipo' => $base['tipo'],
+            'sector_id' => $sector->id,
+            'datos_especificos' => $datos,
+        ]);
+
+        // `back()`: se dispara desde el modal de edición, que vive sobre el
+        // listado filtrado. Mismo criterio que `update()`.
+        return back(fallback: route('observaciones.index'))
+            ->with('success', 'Tipo de la observación cambiado.');
     }
 
     /**

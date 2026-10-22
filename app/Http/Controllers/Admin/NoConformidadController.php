@@ -7,15 +7,18 @@ use App\Http\Controllers\Controller;
 use App\Models\Cliente;
 use App\Models\NoConformidad;
 use App\Models\NonConformityAction;
+use App\Models\NonConformityAttachment;
 use App\Models\NonConformityContainment;
 use App\Models\NonConformityHistory;
 use App\Models\Observacion;
+use App\Models\ObservationProduct;
 use App\Models\Proveedor;
 use App\Models\Sector;
 use App\Models\User;
 use App\Notifications\AccionAsignadaNotification;
 use App\Notifications\NoConformidadAsignadaNotification;
 use App\Support\Configuracion;
+use App\Support\ReglasObservacion;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
@@ -23,11 +26,13 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Gestión de No Conformidades — `docs/IT- PARA LA GESTIÓN DE NO CONFORMIDADES
@@ -160,6 +165,7 @@ class NoConformidadController extends Controller
             'observaciones:id,numero,titulo,estado',
             'acciones.responsable:id,name,apellido',
             'contenciones.responsable:id,name,apellido',
+            'productos',
             // Las dos puntas de la cadena de reemplazo: de cual vino esta NC
             // y cual la reemplaza. La segunda es el "Nuevo desvio N°" de la
             // seccion 7.
@@ -167,9 +173,11 @@ class NoConformidadController extends Controller
             'reemplazadaPor:id,numero,reemplaza_a_id,estado',
             'historial' => fn ($q) => $q->latest()
                 ->with(['user:id,name,apellido', 'adjuntos:id,non_conformity_history_id,original_name,size']),
-            // Los sueltos, no los que cuelgan de un comentario de bitácora.
+            // Los sueltos, no los que cuelgan de un comentario de bitácora. La
+            // pantalla los separa por `seccion`: la ilustración del riesgo va
+            // en la sección 2 y el resto en "Evidencias".
             'attachments' => fn ($q) => $q->whereNull('non_conformity_history_id')
-                ->select(['id', 'non_conformity_id', 'original_name', 'size']),
+                ->select(['id', 'non_conformity_id', 'seccion', 'original_name', 'size']),
         ]);
 
         return inertia('Admin/NoConformidades/Show', [
@@ -185,6 +193,9 @@ class NoConformidadController extends Controller
                 // La sección 3 tiene su propia llave: se escribe desde antes de
                 // la aprobación, así que no coincide con `gestionar`.
                 'contencion' => $request->user()->can('cargarContencion', $noConformidad),
+                // Lo mismo la sección 2 desde el 21/10/2026: se carga antes de
+                // aprobar, para que quien aprueba lea la investigación.
+                'investigacion' => $request->user()->can('cargarInvestigacion', $noConformidad),
                 'reabrir' => $request->user()->can('reabrir', $noConformidad),
                 'cancelar' => $request->user()->can('cancelar', $noConformidad),
                 'asignarResponsable' => $request->user()->can('asignarResponsable', $noConformidad),
@@ -228,7 +239,8 @@ class NoConformidadController extends Controller
             'acciones.responsable:id,name,apellido',
             'reemplazaA:id,numero',
             'reemplazadaPor:id,numero,reemplaza_a_id',
-            'attachments:id,non_conformity_id,original_name,size,path,mime_type,non_conformity_history_id',
+            'productos',
+            'attachments:id,non_conformity_id,seccion,original_name,size,path,mime_type,non_conformity_history_id',
             // Orden cronológico ascendente, al revés que la pantalla: un
             // expediente impreso se lee de arriba hacia abajo.
             'historial' => fn ($q) => $q->oldest()->with('user:id,name,apellido'),
@@ -295,6 +307,8 @@ class NoConformidadController extends Controller
 
             $incrustadas[] = [
                 'nombre' => $adjunto->original_name,
+                // La ilustración del riesgo va en la sección 2; el resto, al anexo.
+                'seccion' => $adjunto->seccion,
                 'src' => 'data:'.$adjunto->mime_type.';base64,'
                     .base64_encode(Storage::disk('local')->get($adjunto->path)),
             ];
@@ -562,35 +576,85 @@ class NoConformidadController extends Controller
     // ── Investigación y plan de acción (§4.4 y §4.5) ────────────────────────
 
     /**
-     * Guarda la investigación. Se puede guardar incompleta: la etapa lleva días
-     * y nadie carga todo de una sentada. Lo que exige completitud es avanzar.
+     * Guarda la investigación (sección 2). Se puede guardar incompleta: la etapa
+     * lleva días y nadie carga todo de una sentada. Lo que exige completitud es
+     * avanzar.
+     *
+     * ⚠️ Desde el 21/10/2026 se carga **antes de la aprobación** (llave
+     * `cargarInvestigacion`, la misma regla que la contención) y por eso dejó de
+     * compartir endpoint con la causa raíz (sección 4), que sigue siendo de quien
+     * gestiona: ver `guardarCausaRaiz()`.
+     *
+     * Los productos afectados se guardan de una sola vez (se borran y se
+     * rehacen): es el formulario de una sola persona, no renglones con dueño
+     * propio como la contención. La ilustración del riesgo se **suma** —un
+     * adjunto es evidencia y no se reemplaza—.
      */
     public function guardarInvestigacion(Request $request, NoConformidad $noConformidad): RedirectResponse
     {
-        $this->authorize('gestionar', $noConformidad);
+        $this->authorize('cargarInvestigacion', $noConformidad);
+
+        $request->merge(['productos' => ReglasObservacion::sinRenglonesVacios($request->input('productos'))]);
 
         $data = $request->validate([
             'investigacion' => ['nullable', 'string', 'max:10000'],
-            'alcance' => ['nullable', 'string', 'max:5000'],
+            // Desde el 21/10/2026: solo pedidos o procesos; los productos van aparte.
             'afectados' => ['nullable', 'string', 'max:5000'],
             'evaluacion_riesgo' => ['nullable', 'string', 'max:5000'],
             'es_grave' => ['boolean'],
             'es_repetitivo' => ['boolean'],
             'requiere_capa' => ['boolean'],
+            ...ReglasObservacion::productosOpcionales(),
+            ...ReglasObservacion::adjuntosDelPanel('archivos_riesgo'),
+        ], [], ReglasObservacion::atributos('archivos_riesgo'));
+
+        DB::transaction(function () use ($noConformidad, $data, $request) {
+            $noConformidad->update(collect($data)->except(['productos', 'archivos_riesgo'])->all());
+
+            $noConformidad->productos()->delete();
+            foreach ($data['productos'] ?? [] as $producto) {
+                $noConformidad->productos()->create(collect($producto)->only([
+                    'codigo', 'producto', 'cantidad_afectada', 'tipo_presentacion', 'lote', 'fecha_vencimiento',
+                ])->all());
+            }
+
+            foreach ($request->file('archivos_riesgo', []) as $archivo) {
+                $noConformidad->guardarAdjunto($archivo, [
+                    'user_id' => $request->user()->id,
+                    'seccion' => NonConformityAttachment::SECCION_RIESGO,
+                ], NonConformityAttachment::SECCION_RIESGO);
+            }
+
+            $noConformidad->historial()->create([
+                'user_id' => $request->user()->id,
+                'accion' => NonConformityHistory::ACCION_INVESTIGACION,
+                'cambios' => ['completa' => $noConformidad->investigacionCompleta()],
+            ]);
+        });
+
+        return back()->with('success', 'Investigación guardada.');
+    }
+
+    /**
+     * Guarda el análisis de causa raíz (sección 4): las 6M y el resumen.
+     *
+     * Hasta el 21/10/2026 iba por el mismo endpoint que la investigación. Se
+     * separó cuando la investigación pasó a cargarse antes de aprobar: compartir
+     * la ruta le habría abierto también la causa raíz a quien cargó el desvío.
+     * "Conclusión de la investigación" se borró ese día: repetía el resumen.
+     */
+    public function guardarCausaRaiz(Request $request, NoConformidad $noConformidad): RedirectResponse
+    {
+        $this->authorize('gestionar', $noConformidad);
+
+        $data = $request->validate([
             'causa_raiz' => ['nullable', 'string', 'max:10000'],
             'causa_raiz_factores' => ['nullable', 'array'],
             // Solo los seis factores del catálogo; el resto se descarta.
             'causa_raiz_factores.*' => ['nullable', 'string', 'max:2000'],
-            'conclusion' => ['nullable', 'string', 'max:5000'],
         ]);
 
-        // ⚠️ Solo se toca si vino en el request. Las secciones 2 y 4 del
-        // formulario son dos bloques distintos que guardan contra este mismo
-        // endpoint: si se normalizara siempre, guardar la investigación
-        // borraría las 6M que cargó el otro bloque, en silencio.
-        if ($request->has('causa_raiz_factores')) {
-            $data['causa_raiz_factores'] = $this->soloFactoresConocidos($data['causa_raiz_factores'] ?? []);
-        }
+        $data['causa_raiz_factores'] = $this->soloFactoresConocidos($data['causa_raiz_factores'] ?? []);
 
         $noConformidad->update($data);
 
@@ -600,7 +664,20 @@ class NoConformidadController extends Controller
             'cambios' => ['completa' => $noConformidad->investigacionCompleta()],
         ]);
 
-        return back()->with('success', 'Investigación guardada.');
+        return back()->with('success', 'Análisis de causa raíz guardado.');
+    }
+
+    /**
+     * Descarga un adjunto de la NC. Hasta el 21/10/2026 no había: los adjuntos
+     * solo se listaban y las imágenes iban al PDF. Con la ilustración del riesgo
+     * hace falta poder abrirla. Leer el caso alcanza (`nc.view`).
+     */
+    public function descargarArchivo(NoConformidad $noConformidad, NonConformityAttachment $archivo): StreamedResponse
+    {
+        $this->authorize('nc.view');
+        $this->exigirQueSeaDeLaNc($noConformidad, $archivo);
+
+        return Storage::disk('local')->download($archivo->path, $archivo->original_name);
     }
 
     /**
@@ -1325,6 +1402,9 @@ class NoConformidadController extends Controller
             'factoresCausa' => NoConformidad::FACTORES_CAUSA,
             'estadosAccion' => NonConformityAction::ESTADOS,
             'resultadosEficacia' => NoConformidad::RESULTADOS_EFICACIA,
+            // Para los productos afectados de la sección 2: el mismo catálogo
+            // que la Falla de producto de las observaciones.
+            'presentaciones' => ObservationProduct::PRESENTACIONES,
             'usuarios' => User::orderBy('name')->get(['id', 'name', 'apellido']),
             'clientes' => Cliente::orderBy('razon_social')->limit(500)->get(['id', 'numero', 'razon_social']),
             'proveedores' => Proveedor::orderBy('razon_social')->limit(500)->get(['id', 'numero', 'razon_social']),

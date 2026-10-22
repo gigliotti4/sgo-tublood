@@ -231,6 +231,10 @@ Route::middleware(['auth'])->group(function () {
         // reportó el cliente. Ver ObservacionPolicy::editarContenido().
         Route::put('/observaciones/{observacion}/contenido', [AdminObservacionController::class, 'actualizarContenido'])
             ->middleware('can:editarContenido,observacion')->name('observaciones.contenido');
+        // Cambiar el tipo de incidencia: misma llave (solo super-admin), ruta
+        // propia porque reencuadra el caso. Ver ObservacionController::cambiarTipo().
+        Route::put('/observaciones/{observacion}/tipo', [AdminObservacionController::class, 'cambiarTipo'])
+            ->middleware('can:editarContenido,observacion')->name('observaciones.tipo');
     });
     Route::middleware('can:observaciones.edit')->group(function () {
         // Selector "Crear nuevo registro" (interna / No Conformidad). La externa es solo portal público.
@@ -280,6 +284,10 @@ Route::middleware(['auth'])->group(function () {
         // `nc.view` y no con un permiso propio: bajarlo es leer el caso.
         Route::get('/no-conformidades/{noConformidad}/pdf', [NoConformidadController::class, 'pdf'])
             ->name('no-conformidades.pdf');
+        // Sin scopeBindings(): la pertenencia la verifica el controller (mismo
+        // motivo que las acciones, ver CLAUDE.md).
+        Route::get('/no-conformidades/{noConformidad}/archivos/{archivo}', [NoConformidadController::class, 'descargarArchivo'])
+            ->name('no-conformidades.archivos.download');
     });
     // Transiciones: cada una gateada por su habilidad de NoConformidadPolicy.
     Route::put('/no-conformidades/{noConformidad}', [NoConformidadController::class, 'update'])
@@ -316,17 +324,22 @@ Route::middleware(['auth'])->group(function () {
     // ni tiene `nc.gestionar`. El controller autoriza con `cargarContencion`.
     Route::post('/no-conformidades/{noConformidad}/contencion', [NoConformidadController::class, 'guardarContencion'])
         ->name('no-conformidades.contencion.store');
+    // La investigación (sección 2), por el mismo motivo desde el 21/10/2026: se
+    // carga antes de aprobar. El controller autoriza con `cargarInvestigacion`.
+    // POST y no PUT porque sube archivos (la ilustración del riesgo).
+    Route::post('/no-conformidades/{noConformidad}/investigacion', [NoConformidadController::class, 'guardarInvestigacion'])
+        ->name('no-conformidades.investigacion');
 
     // Pasar la posta: la Policy deja al responsable actual derivar el caso sin
     // pasar por Calidad, así que tampoco puede ir bajo `gestionar`.
     Route::post('/no-conformidades/{noConformidad}/responsable', [NoConformidadController::class, 'asignarResponsable'])
         ->middleware('can:asignarResponsable,noConformidad')->name('no-conformidades.responsable');
 
-    // Investigación y plan de acción (§4.4 y §4.5): todo bajo `gestionar`, que
+    // Causa raíz y plan de acción (§4.4 y §4.5): todo bajo `gestionar`, que
     // ahora es Gestión de Calidad **o el responsable del caso**.
     Route::middleware('can:gestionar,noConformidad')->group(function () {
-        Route::put('/no-conformidades/{noConformidad}/investigacion', [NoConformidadController::class, 'guardarInvestigacion'])
-            ->name('no-conformidades.investigacion');
+        Route::put('/no-conformidades/{noConformidad}/causa-raiz', [NoConformidadController::class, 'guardarCausaRaiz'])
+            ->name('no-conformidades.causa-raiz');
         Route::post('/no-conformidades/{noConformidad}/plan-accion', [NoConformidadController::class, 'avanzarAPlanAccion'])
             ->name('no-conformidades.plan-accion');
         // Vincular y desvincular observaciones (§5). Va bajo `gestionar` y NO

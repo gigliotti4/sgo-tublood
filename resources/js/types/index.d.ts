@@ -381,12 +381,17 @@ export interface Cliente {
 
 export interface ObservationProduct {
     id: number
-    producto: string
+    /**
+     * `producto`, `lote` y `fecha_vencimiento` son null desde el 21/10/2026 en
+     * los productos opcionales de 6.2 "Falla de proveedor"; en la Falla de
+     * producto siguen siendo obligatorios (los exige la validación).
+     */
+    producto: string | null
     codigo: string | null
     cantidad_afectada: number
     tipo_presentacion: string | null
-    lote: string
-    fecha_vencimiento: string
+    lote: string | null
+    fecha_vencimiento: string | null
     numero_remito: string
     tipo_comprobante: string
     /** Solo si `codigo` matchea un artículo del catálogo sincronizado. */
@@ -540,7 +545,7 @@ export interface ObservationAttachment {
  */
 export interface ObservationHistoryEntry {
     id: number
-    accion: 'comentario' | 'estado' | 'responsable' | 'sector' | 'clasificacion' | 'contenido' | 'adjunto' | 'notificados' | 'sistema' | 'baja' | 'restauracion'
+    accion: 'comentario' | 'estado' | 'responsable' | 'sector' | 'clasificacion' | 'contenido' | 'tipo' | 'adjunto' | 'notificados' | 'sistema' | 'baja' | 'restauracion'
     nota: string | null
     /** Forma según `accion`: `{de, a}` para estado/responsable/sector, `{prioridad: {de,a}, tipo_caso: {de,a}}` para clasificacion. */
     cambios: Record<string, unknown> | null
@@ -672,8 +677,10 @@ export interface NoConformidad {
     responsable_id: number | null
     // Investigación (§4.4). Todos nullable: la etapa se completa de a poco.
     investigacion: string | null
-    alcance: string | null
+    /** Desde el 21/10/2026, solo pedidos o procesos afectados: los productos van en `productos`. */
     afectados: string | null
+    /** Productos afectados (sección 2). Solo viaja en el detalle. */
+    productos?: NonConformityProduct[]
     evaluacion_riesgo: string | null
     es_grave: boolean
     es_repetitivo: boolean
@@ -691,7 +698,6 @@ export interface NoConformidad {
      * factores, que se lee distinto de "se analizó y ninguno aplicó".
      */
     causa_raiz_factores: Record<string, string> | null
-    conclusion: string | null
     // Verificación de eficacia (§4.7).
     metodo_seguimiento: string | null
     fecha_seguimiento: string | null
@@ -722,13 +728,25 @@ export interface NoConformidad {
      */
     reemplazada_por?: { id: number; numero: string | null; estado: string } | null
     historial?: NonConformityHistoryEntry[]
-    attachments?: { id: number; original_name: string; size: number | null }[]
+    /** `seccion` = 'riesgo' para la ilustración de la sección 2; null = evidencia suelta. */
+    attachments?: { id: number; seccion: string | null; original_name: string; size: number | null }[]
 }
 
 /**
  * Una acción inmediata de contención — sección 3 del Informe de Desvío.
  * No confundir con `NonConformityAction`, que es el plan de acción (sección 5).
  */
+/** Un producto afectado por una No Conformidad (sección 2). Molde de `ObservationProduct`, sin comprobante. */
+export interface NonConformityProduct {
+    id: number
+    codigo: string | null
+    producto: string | null
+    cantidad_afectada: number
+    tipo_presentacion: string | null
+    lote: string | null
+    fecha_vencimiento: string | null
+}
+
 export interface NonConformityContainment {
     id: number
     fecha: string | null
@@ -771,6 +789,11 @@ export interface PermisosNoConformidad {
      * caso ni tiene `nc.gestionar`.
      */
     contencion: boolean
+    /**
+     * Cargar la investigación (sección 2). Misma regla que `contencion` desde
+     * el 21/10/2026: se carga antes de aprobar, para que quien aprueba la lea.
+     */
+    investigacion: boolean
     reabrir: boolean
     cancelar: boolean
 }

@@ -182,6 +182,24 @@
 <h2>1) Descripción del problema</h2>
 <div class="texto">{{ $nc->descripcion }}</div>
 
+{{-- Arriba de la investigación desde el 21/10/2026, igual que en la pantalla:
+     quien aprueba ve primero de qué reclamos salió el desvío. --}}
+<h2>Observaciones vinculadas</h2>
+@if ($nc->observaciones->isEmpty())
+    <p class="vacio">Ninguna. Esta No Conformidad no se originó en una observación del sistema.</p>
+@else
+    <table class="grilla">
+        <tr><th style="width: 18%;">Número</th><th>Título</th><th style="width: 22%;">Estado</th></tr>
+        @foreach ($nc->observaciones as $o)
+            <tr>
+                <td class="mono">{{ $o->numero }}</td>
+                <td>{{ $o->titulo }}</td>
+                <td>{{ $o->etiquetaEstado() }}</td>
+            </tr>
+        @endforeach
+    </table>
+@endif
+
 <h2>2) Investigación</h2>
 @if (filled($nc->investigacion))
     <div class="texto">{{ $nc->investigacion }}</div>
@@ -189,18 +207,31 @@
     <p class="vacio">Sin completar.</p>
 @endif
 
-@if (filled($nc->alcance) || filled($nc->afectados))
-    <table class="cabecera" style="margin-top: 2mm;">
-        @if (filled($nc->alcance))
-            <tr><td class="k">Alcance</td><td class="v texto" colspan="3">{{ $nc->alcance }}</td></tr>
-        @endif
-        @if (filled($nc->afectados))
-            <tr><td class="k">Afectados</td><td class="v texto" colspan="3">{{ $nc->afectados }}</td></tr>
-        @endif
+@if ($nc->productos->isNotEmpty())
+    <table class="grilla" style="margin-top: 2mm;">
+        <tr>
+            <th style="width: 16%;">Código</th>
+            <th>Producto</th>
+            <th style="width: 10%;">Cant.</th>
+            <th style="width: 16%;">Lote</th>
+            <th style="width: 14%;">Vencimiento</th>
+        </tr>
+        @foreach ($nc->productos as $p)
+            <tr>
+                <td class="mono">{{ $p->codigo ?: '—' }}</td>
+                <td>{{ $p->producto ?: '—' }}</td>
+                <td>{{ $p->cantidad_afectada }}</td>
+                <td>{{ $p->lote ?: '—' }}</td>
+                <td>{{ $p->fecha_vencimiento?->format('d/m/Y') ?? '—' }}</td>
+            </tr>
+        @endforeach
     </table>
 @endif
 
 <table class="cabecera" style="margin-top: 2mm;">
+    @if (filled($nc->afectados))
+        <tr><td class="k">Pedidos o procesos afectados</td><td class="v texto" colspan="3">{{ $nc->afectados }}</td></tr>
+    @endif
     <tr>
         <td class="k">Riesgo involucrado</td>
         <td class="v texto" colspan="3">{{ $nc->evaluacion_riesgo ?: '—' }}</td>
@@ -216,6 +247,14 @@
         <td class="v" colspan="3">{{ $nc->requiere_capa ? 'SÍ' : 'NO' }}</td>
     </tr>
 </table>
+
+{{-- La ilustración del riesgo va en su sección; el resto de las imágenes, al anexo. --}}
+@foreach (array_filter($imagenes, fn ($img) => $img['seccion'] === 'riesgo') as $img)
+    <div class="imagen">
+        <img src="{{ $img['src'] }}">
+        <div class="nota">{{ $img['nombre'] }}</div>
+    </div>
+@endforeach
 
 <h2>3) Acción inmediata de contención / corrección</h2>
 @if ($nc->contenciones->isEmpty())
@@ -249,12 +288,6 @@
         <td class="k">Resumen del análisis</td>
         <td class="texto">{{ $nc->causa_raiz ?: '—' }}</td>
     </tr>
-    @if (filled($nc->conclusion))
-        <tr>
-            <td class="k">Conclusión</td>
-            <td class="texto">{{ $nc->conclusion }}</td>
-        </tr>
-    @endif
 </table>
 
 <h2>5) Plan de acción correctiva / preventiva</h2>
@@ -357,23 +390,10 @@
 {{-- De acá para abajo no es parte del formulario en papel: son cosas que el
      sistema sabe y el papel no puede dar. --}}
 
-@if ($nc->observaciones->isNotEmpty())
-    <h2>Anexo · Observaciones vinculadas</h2>
-    <table class="grilla">
-        <tr><th style="width: 18%;">Número</th><th>Título</th><th style="width: 22%;">Estado</th></tr>
-        @foreach ($nc->observaciones as $o)
-            <tr>
-                <td class="mono">{{ $o->numero }}</td>
-                <td>{{ $o->titulo }}</td>
-                <td>{{ $o->etiquetaEstado() }}</td>
-            </tr>
-        @endforeach
-    </table>
-@endif
-
-@if (count($imagenes))
+@php($imagenesAnexo = array_filter($imagenes, fn ($img) => $img['seccion'] !== 'riesgo'))
+@if (count($imagenesAnexo))
     <h2>Anexo · Imágenes</h2>
-    @foreach ($imagenes as $img)
+    @foreach ($imagenesAnexo as $img)
         <div class="imagen">
             <img src="{{ $img['src'] }}">
             <div class="nota">{{ $img['nombre'] }}</div>

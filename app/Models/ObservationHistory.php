@@ -40,6 +40,14 @@ class ObservationHistory extends Model
      */
     public const ACCION_CONTENIDO = 'contenido';
 
+    /**
+     * El super-admin le cambió el tipo de incidencia (desde el 21/10/2026).
+     * `cambios` = `['de' => etiqueta, 'a' => etiqueta, 'datos_anteriores' => [...]]`:
+     * los "Datos específicos" del tipo viejo dejan de corresponder y se
+     * reemplazan por los del nuevo, así que acá queda lo que se había cargado.
+     */
+    public const ACCION_TIPO = 'tipo';
+
     public const ACCION_ADJUNTO = 'adjunto';
 
     public const ACCION_NOTIFICADOS = 'notificados';
@@ -58,6 +66,7 @@ class ObservationHistory extends Model
         self::ACCION_SECTOR,
         self::ACCION_CLASIFICACION,
         self::ACCION_CONTENIDO,
+        self::ACCION_TIPO,
         self::ACCION_ADJUNTO,
         self::ACCION_NOTIFICADOS,
         self::ACCION_SISTEMA,
@@ -77,6 +86,7 @@ class ObservationHistory extends Model
         self::ACCION_SECTOR => 'Derivación de sector',
         self::ACCION_CLASIFICACION => 'Clasificación',
         self::ACCION_CONTENIDO => 'Corrección del texto',
+        self::ACCION_TIPO => 'Cambio de tipo',
         self::ACCION_ADJUNTO => 'Archivo adjunto',
         self::ACCION_NOTIFICADOS => 'Usuarios a notificar',
         self::ACCION_SISTEMA => 'Sistema',

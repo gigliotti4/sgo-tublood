@@ -20,7 +20,32 @@
 | campo propio en "Datos específicos": ese bloque ya resuelve el vínculo con
 | la tabla `clientes`, duplicarlo ahí no lo hace).
 |
+| Un tipo puede llevar `productos` ('requeridos' | 'opcionales') cuando se
+| cargan los productos afectados con la misma lista repetible que la Falla de
+| producto. Lo lee `TaxonomiaIncidencias::llevaProductos()`.
+|
 */
+
+/*
+| "Falla de proceso": UN solo formulario para todos los sectores.
+|
+| Se unificó en la reunión con Tublood del 21/10/2026 "para estandarizar los
+| puntos de incumplimiento en todos los sectores". Por eso los campos se
+| declaran una vez acá y cada sector los referencia: con una copia por sector,
+| cambiar el formulario obligaba a acordarse de los once lugares.
+|
+| ⚠️ Comercial ya tenía este tipo con otro nombre (5.3 "Incumplimiento / falla
+| proceso", campo `descripcion_libre`): se alineó acá sin migrar nada porque no
+| había ninguna observación cargada con ese tipo.
+*/
+$fallaDeProceso = fn (string $codigo, ?string $grupo = null) => array_filter([
+    'codigo' => $codigo,
+    'grupo' => $grupo,
+    'label' => 'Falla de proceso',
+    'campos' => [
+        ['id' => 'detalle_proceso', 'label' => 'Detalle', 'tipo' => 'textarea'],
+    ],
+]);
 
 return [
 
@@ -115,6 +140,7 @@ return [
                     ['id' => 'numero_remito', 'label' => 'Número de remito', 'tipo' => 'text'],
                 ],
             ],
+            'falla_proceso_facturacion' => $fallaDeProceso('2.3'),
         ],
 
         'logistica' => [
@@ -163,6 +189,7 @@ return [
                     ['id' => 'detalle_administrativo', 'label' => 'Detalle', 'tipo' => 'textarea'],
                 ],
             ],
+            'falla_proceso_logistica' => $fallaDeProceso('3.7'),
         ],
 
         'deposito' => [
@@ -193,13 +220,7 @@ return [
                     ['id' => 'descripcion_wms', 'label' => 'Descripción del problema', 'tipo' => 'textarea', 'required' => true],
                 ],
             ],
-            'falla_proceso_dep' => [
-                'codigo' => '4.4',
-                'label' => 'Falla de proceso',
-                'campos' => [
-                    ['id' => 'detalle_proceso', 'label' => 'Detalle', 'tipo' => 'textarea'],
-                ],
-            ],
+            'falla_proceso_dep' => $fallaDeProceso('4.4'),
         ],
 
         'comercial' => [
@@ -220,13 +241,9 @@ return [
                     ['id' => 'observacion_libre', 'label' => 'Observación', 'tipo' => 'textarea'],
                 ],
             ],
-            'incumplimiento_proceso' => [
-                'codigo' => '5.3',
-                'label' => 'Incumplimiento / falla proceso',
-                'campos' => [
-                    ['id' => 'descripcion_libre', 'label' => 'Descripción', 'tipo' => 'textarea'],
-                ],
-            ],
+            // La clave vieja se conserva: es la que quedaría guardada en
+            // `observations.tipo` si alguien hubiera cargado una.
+            'incumplimiento_proceso' => $fallaDeProceso('5.3'),
             'error_pedido_cliente' => [
                 'codigo' => '5.4',
                 'label' => 'Error en pedido',
@@ -252,6 +269,9 @@ return [
             'falla_proveedor' => [
                 'codigo' => '6.2',
                 'label' => 'Falla de proveedor',
+                // Pedido del 21/10/2026: los productos del proveedor que falló,
+                // sin obligar (a veces la falla es de plazo o de documentación).
+                'productos' => 'opcionales',
                 'campos' => [
                     ['id' => 'numero_proveedor', 'label' => 'Número de proveedor', 'tipo' => 'text', 'required' => true],
                     ['id' => 'descripcion_proveedor', 'label' => 'Descripción', 'tipo' => 'textarea', 'required' => true],
@@ -264,6 +284,7 @@ return [
                     ['id' => 'descripcion_admin', 'label' => 'Descripción', 'tipo' => 'textarea'],
                 ],
             ],
+            'falla_proceso_compras' => $fallaDeProceso('6.4'),
         ],
 
         'asuntos_regulatorios' => [
@@ -283,6 +304,7 @@ return [
                     ['id' => 'detalle', 'label' => 'Detalle', 'tipo' => 'textarea'],
                 ],
             ],
+            'falla_proceso_regulatorios' => $fallaDeProceso('7.3'),
         ],
 
         'garantia_calidad' => [
@@ -295,6 +317,7 @@ return [
                 'codigo' => '1.1',
                 'label' => 'Falla de producto',
                 'especial' => true,
+                'productos' => 'requeridos',
             ],
             'disconformidad_servicio' => [
                 'codigo' => '1.2',
@@ -317,6 +340,7 @@ return [
                     ['id' => 'estado_capa', 'label' => 'Estado actual', 'tipo' => 'select', 'opciones' => ['Abierto', 'En proceso', 'Implementado', 'Verificado', 'Cerrado']],
                 ],
             ],
+            'falla_proceso_calidad' => $fallaDeProceso('8.3'),
         ],
 
         'direccion_tecnica' => [
@@ -329,6 +353,13 @@ return [
                     ['id' => 'detalle_riesgo', 'label' => 'Detalle del riesgo', 'tipo' => 'textarea', 'required' => true],
                 ],
             ],
+            'falla_proceso_direccion' => $fallaDeProceso('9.2'),
+        ],
+
+        // Finanzas no tenía ningún tipo de incidencia: estrena con el formulario
+        // unificado. 11 porque los números del 1 al 10 ya son de otros sectores.
+        'finanzas' => [
+            'falla_proceso_finanzas' => $fallaDeProceso('11.1'),
         ],
 
         /*
@@ -415,6 +446,10 @@ return [
                     ['id' => 'motivo', 'label' => 'Motivo / descripción', 'tipo' => 'textarea', 'required' => true],
                 ],
             ],
+            // Una por línea (decisión del 21/10/2026), para poder filtrar por
+            // línea. Los códigos siguen la numeración del sector sin renumerar
+            // lo que ya existía: 10.8 es de Tubos aunque quede después de 10.7.
+            'falla_proceso_tubos' => $fallaDeProceso('10.8', 'Producción de Tubos'),
 
             // ── Producción de Apósitos ───────────────────────────────────
             'falla_maquina_apositos' => [
@@ -436,6 +471,7 @@ return [
                     ['id' => 'motivo', 'label' => 'Motivo / descripción', 'tipo' => 'textarea', 'required' => true],
                 ],
             ],
+            'falla_proceso_apositos' => $fallaDeProceso('10.9', 'Producción de Apósitos'),
         ],
     ],
 ];

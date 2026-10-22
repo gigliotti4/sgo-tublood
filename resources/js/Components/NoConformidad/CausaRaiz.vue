@@ -17,8 +17,10 @@ import type { NoConformidad } from '@/types'
  * ⚠️ El orden de los factores es el del formulario en papel y lo manda el
  * backend (`NoConformidad::FACTORES_CAUSA`): acá se itera tal cual viene.
  *
- * ⚠️ Comparte endpoint con `Investigacion.vue` (sección 2). Este form sí manda
- * `causa_raiz_factores`, y el otro no — ver el comentario del controller.
+ * Guarda en su propia ruta (`no-conformidades.causa-raiz`). Hasta el 21/10/2026
+ * compartía endpoint con `Investigacion.vue`; se separaron cuando la sección 2
+ * pasó a cargarse antes de aprobar y ésta no. Ese día también se sacó
+ * "Conclusión de la investigación", que repetía el resumen de abajo.
  */
 const props = defineProps<{
     noConformidad: NoConformidad
@@ -31,11 +33,10 @@ const nc = props.noConformidad
 const form = useForm({
     causa_raiz_factores: { ...(nc.causa_raiz_factores ?? {}) } as Record<string, string>,
     causa_raiz: nc.causa_raiz ?? '',
-    conclusion: nc.conclusion ?? '',
 })
 
 const guardar = () => {
-    form.put(route('no-conformidades.investigacion', nc.id), { preserveScroll: true })
+    form.put(route('no-conformidades.causa-raiz', nc.id), { preserveScroll: true })
 }
 
 /**
@@ -77,8 +78,6 @@ const avanzarAPlan = () => {
                 hint="Obligatoria para avanzar al plan de acción. Si no se llegó a una causa única, decilo acá."
                 :error="form.errors.causa_raiz"
             />
-
-            <Textarea v-model="form.conclusion" label="Conclusión de la investigación" :rows="3" />
         </fieldset>
 
         <div

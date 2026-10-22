@@ -82,8 +82,9 @@ class NoConformidadPolicy
     }
 
     /**
-     * Cargar la acción inmediata (sección 3) — la única sección que se escribe
-     * **antes** de que el desvío esté aprobado.
+     * Cargar la acción inmediata (sección 3) — se escribe **antes** de que el
+     * desvío esté aprobado. Desde el 21/10/2026 no es la única: la investigación
+     * (sección 2) usa esta misma regla, ver `cargarInvestigacion()`.
      *
      * Invierte el orden que tenía el módulo, y es a propósito: cuando se
      * detecta un desvío lo primero que pasa en la planta es contenerlo
@@ -109,6 +110,29 @@ class NoConformidadPolicy
         return ! $nc->trashed()
             && in_array($nc->estado, ['borrador', 'pendiente_aprobacion'], true)
             && $user->id === $nc->creado_por;
+    }
+
+    /**
+     * Cargar la investigación (sección 2) — desde el 21/10/2026, también
+     * **antes** de la aprobación, con la misma regla que la contención.
+     *
+     * Pedido del cliente ("tiene que dejar cargar toda la información hasta
+     * ahí"): la aprobación se da en la sección 3, y quien aprueba tiene que poder
+     * leer la investigación, los afectados y el riesgo para decidir. Antes la
+     * sección 2 recién se habilitaba con la NC aprobada, o sea que se aprobaba a
+     * ciegas.
+     *
+     * ⚠️ Es la misma regla que `cargarContencion()` y por eso la llama, en vez
+     * de copiarla: si una se ensanchara y la otra no, las dos secciones previas a
+     * la aprobación dejarían de comportarse igual sin que nadie lo decidiera.
+     *
+     * ⚠️ **No abre la causa raíz (sección 4)**, que sigue siendo posterior a la
+     * aprobación y de quien gestiona: por eso las dos secciones dejaron de
+     * guardar contra el mismo endpoint.
+     */
+    public function cargarInvestigacion(User $user, NoConformidad $nc): bool
+    {
+        return $this->cargarContencion($user, $nc);
     }
 
     /**

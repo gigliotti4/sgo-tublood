@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\NoConformidad;
 use App\Models\NonConformityAction;
+use App\Models\NonConformityAttachment;
 use App\Models\NonConformityHistory;
 use App\Models\Observacion;
 use App\Models\Sector;
@@ -11,7 +12,10 @@ use App\Models\User;
 use App\Notifications\AccionAsignadaNotification;
 use App\Notifications\NoConformidadAsignadaNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -399,7 +403,7 @@ class NoConformidadTest extends TestCase
         $nc = $this->nc(['estado' => 'abierta']);
 
         $this->actingAs($this->userWith('nc.view', 'nc.gestionar'))
-            ->put("/no-conformidades/{$nc->id}/investigacion", ['investigacion' => 'Arranqué a revisar el lote.'])
+            ->post("/no-conformidades/{$nc->id}/investigacion", ['investigacion' => 'Arranqué a revisar el lote.'])
             ->assertRedirect();
 
         $this->assertSame('Arranqué a revisar el lote.', $nc->fresh()->investigacion);
@@ -428,7 +432,7 @@ class NoConformidadTest extends TestCase
 
     /**
      * Los campos que la etapa pide pero que el instructivo NO pone como
-     * condición para avanzar (alcance, afectados, riesgo) no deben trabar.
+     * condición para avanzar (afectados, riesgo) no deben trabar.
      */
     public function test_los_campos_no_bloqueantes_no_traban_el_avance(): void
     {
@@ -450,7 +454,7 @@ class NoConformidadTest extends TestCase
         $nc = $this->nc(['estado' => 'abierta']);
 
         $this->actingAs($this->userWith('nc.view', 'nc.gestionar'))
-            ->put("/no-conformidades/{$nc->id}/investigacion", [
+            ->put("/no-conformidades/{$nc->id}/causa-raiz", [
                 'causa_raiz_factores' => [
                     'hombre' => 'Falta de capacitación.',
                     'maquina' => '',
@@ -468,10 +472,115 @@ class NoConformidadTest extends TestCase
         $nc = $this->nc(['estado' => 'abierta']);
 
         $this->actingAs($this->userWith('nc.view', 'nc.gestionar'))
-            ->put("/no-conformidades/{$nc->id}/investigacion", ['causa_raiz_factores' => ['hombre' => '']])
+            ->put("/no-conformidades/{$nc->id}/causa-raiz", ['causa_raiz_factores' => ['hombre' => '']])
             ->assertRedirect();
 
         $this->assertNull($nc->fresh()->causa_raiz_factores);
+    }
+
+    // ── Sección 2 antes de aprobar, productos y riesgo (21/10/2026) ─────────
+
+    /**
+     * "Tiene que dejar cargar toda la información hasta ahí": quien cargó el
+     * desvío completa la investigación mientras espera la aprobación, para que
+     * quien aprueba la lea. Misma regla que la contención.
+     */
+    public function test_el_creador_carga_la_investigacion_antes_de_la_aprobacion(): void
+    {
+        $creador = $this->userWith('nc.view', 'nc.create');
+
+        foreach (['borrador', 'pendiente_aprobacion'] as $estado) {
+            $nc = $this->nc(['estado' => $estado, 'creado_por' => $creador->id]);
+
+            $this->actingAs($creador)
+                ->post("/no-conformidades/{$nc->id}/investigacion", ['investigacion' => "Cargada en {$estado}."])
+                ->assertRedirect();
+
+            $this->assertSame("Cargada en {$estado}.", $nc->fresh()->investigacion);
+        }
+    }
+
+    /** La excepción es la sección 2 y no la 4: la causa raíz sigue siendo de quien gestiona. */
+    public function test_el_creador_no_toca_la_causa_raiz_antes_de_la_aprobacion(): void
+    {
+        $creador = $this->userWith('nc.view', 'nc.create');
+        $nc = $this->nc(['estado' => 'pendiente_aprobacion', 'creado_por' => $creador->id]);
+
+        $this->actingAs($creador)
+            ->put("/no-conformidades/{$nc->id}/causa-raiz", ['causa_raiz' => 'Intento.'])
+            ->assertStatus(403);
+    }
+
+    public function test_los_productos_afectados_se_guardan_y_se_rehacen(): void
+    {
+        $nc = $this->nc(['estado' => 'abierta']);
+        $calidad = $this->userWith('nc.view', 'nc.gestionar');
+
+        $this->actingAs($calidad)->post("/no-conformidades/{$nc->id}/investigacion", [
+            'afectados' => 'El pedido 1234.',
+            'productos' => [
+                ['codigo' => 'RE-1521', 'producto' => 'DEXTROSA', 'cantidad_afectada' => 3, 'lote' => 'L1'],
+                // Un renglón en blanco del formulario no es un error: se ignora.
+                ['codigo' => '', 'producto' => '', 'cantidad_afectada' => null, 'lote' => ''],
+            ],
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertSame(1, $nc->productos()->count());
+        $this->assertSame('El pedido 1234.', $nc->fresh()->afectados);
+
+        // Guardar de nuevo reemplaza la lista entera: es el formulario de una persona.
+        $this->actingAs($calidad)->post("/no-conformidades/{$nc->id}/investigacion", [
+            'productos' => [['producto' => 'Solo por nombre', 'cantidad_afectada' => 1]],
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertSame(['Solo por nombre'], $nc->productos()->pluck('producto')->all());
+    }
+
+    public function test_un_producto_sin_codigo_ni_nombre_o_sin_cantidad_no_se_guarda(): void
+    {
+        $nc = $this->nc(['estado' => 'abierta']);
+
+        $this->actingAs($this->userWith('nc.view', 'nc.gestionar'))
+            ->post("/no-conformidades/{$nc->id}/investigacion", [
+                'productos' => [['lote' => 'L1', 'cantidad_afectada' => null]],
+            ])
+            ->assertSessionHasErrors(['productos.0.codigo', 'productos.0.producto', 'productos.0.cantidad_afectada']);
+
+        $this->assertSame(0, $nc->productos()->count());
+    }
+
+    /** La ilustración del riesgo queda marcada con su sección y se puede descargar. */
+    public function test_la_ilustracion_del_riesgo_se_adjunta_a_su_seccion_y_se_descarga(): void
+    {
+        Storage::fake('local');
+        $nc = $this->nc(['estado' => 'abierta']);
+        $calidad = $this->userWith('nc.view', 'nc.gestionar');
+
+        $this->actingAs($calidad)->post("/no-conformidades/{$nc->id}/investigacion", [
+            'evaluacion_riesgo' => 'Riesgo de contaminación.',
+            'archivos_riesgo' => [UploadedFile::fake()->image('riesgo.png')],
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $adjunto = $nc->attachments()->firstOrFail();
+        $this->assertSame(NonConformityAttachment::SECCION_RIESGO, $adjunto->seccion);
+        $this->assertStringContainsString('/riesgo/', $adjunto->path);
+
+        $this->actingAs($this->userWith('nc.view'))
+            ->get("/no-conformidades/{$nc->id}/archivos/{$adjunto->id}")
+            ->assertOk();
+
+        // El adjunto de otra NC no se baja por la URL de ésta.
+        $otra = $this->nc();
+        $this->actingAs($this->userWith('nc.view'))
+            ->get("/no-conformidades/{$otra->id}/archivos/{$adjunto->id}")
+            ->assertNotFound();
+    }
+
+    /** "Alcance del problema" y "Conclusión de la investigación" se borraron. */
+    public function test_alcance_y_conclusion_ya_no_existen(): void
+    {
+        $this->assertFalse(Schema::hasColumn('non_conformities', 'alcance'));
+        $this->assertFalse(Schema::hasColumn('non_conformities', 'conclusion'));
     }
 
     // ── Plan de acción (§4.5) ───────────────────────────────────────────────
@@ -546,13 +655,19 @@ class NoConformidadTest extends TestCase
         $this->assertDatabaseHas('non_conformity_actions', ['id' => $accionAjena->id]);
     }
 
+    /**
+     * ⚠️ El límite de la excepción del 21/10/2026: el creador carga la
+     * investigación mientras el desvío espera aprobación, pero **ya aprobada**
+     * vuelve a ser de quien gestiona. Sin este test la excepción se ensancha sin
+     * que nadie se entere.
+     */
     public function test_la_investigacion_y_el_plan_son_de_calidad_no_del_creador(): void
     {
         $creador = $this->userWith('nc.view', 'nc.create');
         $nc = $this->nc(['estado' => 'abierta', 'creado_por' => $creador->id]);
 
         $this->actingAs($creador)
-            ->put("/no-conformidades/{$nc->id}/investigacion", ['investigacion' => 'Intento.'])
+            ->post("/no-conformidades/{$nc->id}/investigacion", ['investigacion' => 'Intento.'])
             ->assertStatus(403);
     }
 
@@ -751,10 +866,11 @@ class NoConformidadTest extends TestCase
         $nc = $this->nc(['estado' => 'abierta', 'responsable_id' => $responsable->id]);
 
         $this->actingAs($responsable)
-            ->put("/no-conformidades/{$nc->id}/investigacion", [
-                'investigacion' => 'Se revisó el equipo.',
-                'causa_raiz' => 'Calibración vencida.',
-            ])
+            ->post("/no-conformidades/{$nc->id}/investigacion", ['investigacion' => 'Se revisó el equipo.'])
+            ->assertRedirect();
+
+        $this->actingAs($responsable)
+            ->put("/no-conformidades/{$nc->id}/causa-raiz", ['causa_raiz' => 'Calibración vencida.'])
             ->assertRedirect();
 
         $this->actingAs($responsable)
@@ -782,7 +898,7 @@ class NoConformidadTest extends TestCase
         $nc = $this->nc(['estado' => 'abierta']);
 
         $this->actingAs($this->userWith('nc.view'))
-            ->put("/no-conformidades/{$nc->id}/investigacion", ['investigacion' => 'Intento.'])
+            ->post("/no-conformidades/{$nc->id}/investigacion", ['investigacion' => 'Intento.'])
             ->assertStatus(403);
     }
 

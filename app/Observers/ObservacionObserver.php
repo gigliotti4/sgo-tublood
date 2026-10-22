@@ -266,6 +266,21 @@ class ObservacionObserver
             $this->registrar($observacion, ObservationHistory::ACCION_CONTENIDO, $cambios);
         }
 
+        // El tipo de incidencia: solo lo cambia un super-admin (ver
+        // ObservacionController::cambiarTipo). Con la etiqueta legible, como
+        // estado y sector, y con los datos específicos que se cargaron para el
+        // tipo viejo, que el cambio reemplaza.
+        if ($observacion->wasChanged('tipo')) {
+            $etiquetas = TaxonomiaIncidencias::etiquetasTipos();
+            $original = $observacion->getOriginal('datos_especificos');
+
+            $this->registrar($observacion, ObservationHistory::ACCION_TIPO, [
+                'de' => $etiquetas[$observacion->getOriginal('tipo')] ?? $observacion->getOriginal('tipo'),
+                'a' => $etiquetas[$observacion->tipo] ?? $observacion->tipo,
+                'datos_anteriores' => is_array($original) ? $original : (json_decode((string) $original, true) ?: []),
+            ]);
+        }
+
         // Prioridad y tipo de caso van juntos: así se cargan en el formulario de
         // clasificación, y separarlos en dos entradas no aporta nada al relato.
         if ($observacion->wasChanged('prioridad') || $observacion->wasChanged('tipo_caso')) {

@@ -37,6 +37,8 @@ const props = defineProps<{
     factoresCausa: Record<string, string>
     estadosAccion: Record<string, string>
     resultadosEficacia: Record<string, string>
+    /** Para los productos afectados de la sección 2. */
+    presentaciones: Record<string, string>
     /** Las cinco que traban, calculadas por el backend. La pantalla solo las lista. */
     condicionesCierre: Record<string, boolean>
     /** Lo que conviene mirar antes de cerrar, ya redactado. No traba. */
@@ -59,21 +61,26 @@ const ETAPAS_CON_INVESTIGACION = ['abierta', 'plan_accion', 'en_implementacion',
 const enEtapa = (etapas: string[]) => etapas.includes(props.noConformidad.estado)
 
 const seccionesHabilitadas = computed(() => ({
-    investigacion: enEtapa(ETAPAS_CON_INVESTIGACION),
     /**
-     * ⚠️ La contención es la ÚNICA sección que se escribe antes de aprobar, y
-     * por eso tiene flag propio en vez de compartir el de investigación como
-     * hasta el 29/9/2026. Cuando se detecta un desvío lo primero que se hace es
-     * contenerlo; el papelerío viene después. Queda viva en todos los estados
-     * menos los dos que terminan el caso sin tratarlo.
+     * ⚠️ Las secciones 2 y 3 son las que se escriben ANTES de aprobar. La 3
+     * desde el 29/9/2026 (cuando se detecta un desvío lo primero es contenerlo),
+     * y la 2 desde el 21/10/2026: la aprobación se da en la sección 3 y "tiene
+     * que dejar cargar toda la información hasta ahí", así quien aprueba lee la
+     * investigación. Quedan vivas en todos los estados menos los dos que
+     * terminan el caso sin tratarlo.
      */
+    investigacion: !enEtapa(['rechazada', 'cancelada']),
     contencion: !enEtapa(['rechazada', 'cancelada']),
+    // La causa raíz (sección 4) sigue siendo posterior a la aprobación: por
+    // eso tiene flag propio y ya no comparte el de la investigación.
+    causaRaiz: enEtapa(ETAPAS_CON_INVESTIGACION),
     plan: enEtapa(['plan_accion', 'en_implementacion', 'verificacion_eficacia', 'cerrada']),
     verificacion: enEtapa(['verificacion_eficacia', 'cerrada']),
 }))
 
 const MOTIVO_BLOQUEO = {
-    investigacion: 'Se habilita cuando se apruebe la apertura',
+    investigacion: 'El desvío ya no está en curso',
+    causaRaiz: 'Se habilita cuando se apruebe la apertura',
     contencion: 'El desvío ya no está en curso',
     plan: 'Se habilita al completar la investigación y la causa raíz',
     verificacion: 'Se habilita al resolver todas las acciones del plan',
@@ -102,6 +109,8 @@ const nombre = (u: { name: string; apellido: string | null } | null | undefined)
     u ? [u.name, u.apellido].filter(Boolean).join(' ') : '—'
 
 const numero = computed(() => numeroDe(props.noConformidad))
+
+const evidenciasSueltas = computed(() => (props.noConformidad.attachments ?? []).filter(a => a.seccion === null))
 
 /**
  * Errores que el backend manda con una clave que **no es un campo del
@@ -278,11 +287,11 @@ const confirmarCierre = () => {
                         Enviar a aprobación
                     </Button>
 
-                    <template v-if="permisos.aprobar">
-                        <Button variant="brand" :disabled="accion.processing" @click="aprobar">Aprobar</Button>
-                        <Button variant="outline" @click="abrirDecision('devolver')">Devolver</Button>
-                        <Button variant="danger" @click="abrirDecision('rechazar')">Rechazar</Button>
-                    </template>
+                    <!--
+                        Aprobar / Devolver / Rechazar ya NO están acá (pedido del
+                        21/10/2026): la aprobación se da únicamente en la sección
+                        3, después de leer todo lo cargado hasta ahí.
+                    -->
 
                     <Button
                         v-if="permisos.gestionar && noConformidad.estado === 'verificacion_eficacia'"
@@ -327,91 +336,12 @@ const confirmarCierre = () => {
                         </p>
                     </SeccionNc>
 
-                    <SeccionNc
-                        :numero="2"
-                        titulo="Investigación"
-                        :habilitada="seccionesHabilitadas.investigacion"
-                        :motivo-bloqueo="MOTIVO_BLOQUEO.investigacion"
-                    >
-                        <Investigacion
-                            :no-conformidad="noConformidad"
-                            :puede-gestionar="permisos.gestionar && seccionesHabilitadas.investigacion"
-                        />
-                    </SeccionNc>
-
-                    <SeccionNc
-                        :numero="3"
-                        titulo="Acción inmediata de contención / corrección"
-                        :habilitada="seccionesHabilitadas.contencion"
-                        :motivo-bloqueo="MOTIVO_BLOQUEO.contencion"
-                    >
-                        <Contencion
-                            :no-conformidad="noConformidad"
-                            :usuarios="usuarios"
-                            :puede-gestionar="permisos.contencion && seccionesHabilitadas.contencion"
-                        />
-
-                        <!--
-                            Aprobar desde acá: quien decide la apertura lee la
-                            acción inmediata que ya se tomó y resuelve en el
-                            mismo lugar, sin volver al encabezado. Son los
-                            mismos botones de arriba, con el mismo permiso.
-                        -->
-                        <div
-                            v-if="permisos.aprobar"
-                            class="mt-5 flex flex-wrap items-center gap-3 border-t border-gray-100 pt-4 dark:border-gray-800"
-                        >
-                            <p class="mr-auto text-theme-sm text-gray-500 dark:text-gray-400">
-                                ¿La acción inmediata alcanza? Podés resolver la apertura desde acá.
-                            </p>
-                            <Button variant="brand" :disabled="accion.processing" @click="aprobar">Aprobar</Button>
-                            <Button variant="outline" @click="abrirDecision('devolver')">Devolver</Button>
-                            <Button variant="danger" @click="abrirDecision('rechazar')">Rechazar</Button>
-                        </div>
-                    </SeccionNc>
-
-                    <SeccionNc
-                        :numero="4"
-                        titulo="Análisis de causa raíz — CAPA"
-                        :habilitada="seccionesHabilitadas.investigacion"
-                        :motivo-bloqueo="MOTIVO_BLOQUEO.investigacion"
-                    >
-                        <CausaRaiz
-                            :no-conformidad="noConformidad"
-                            :factores-causa="factoresCausa"
-                            :puede-gestionar="permisos.gestionar && seccionesHabilitadas.investigacion"
-                        />
-                    </SeccionNc>
-
-                    <SeccionNc
-                        :numero="5"
-                        titulo="Plan de acción correctiva / preventiva"
-                        :habilitada="seccionesHabilitadas.plan"
-                        :motivo-bloqueo="MOTIVO_BLOQUEO.plan"
-                    >
-                        <PlanDeAccion
-                            :no-conformidad="noConformidad"
-                            :estados-accion="estadosAccion"
-                            :usuarios="usuarios"
-                            :puede-gestionar="permisos.gestionar && seccionesHabilitadas.plan"
-                        />
-                    </SeccionNc>
-
-                    <SeccionNc
-                        numero="6 y 7"
-                        titulo="Seguimiento del plan y verificación de la eficacia"
-                        :habilitada="seccionesHabilitadas.verificacion"
-                        :motivo-bloqueo="MOTIVO_BLOQUEO.verificacion"
-                    >
-                        <Verificacion
-                            :no-conformidad="noConformidad"
-                            :resultados-eficacia="resultadosEficacia"
-                            :puede-gestionar="permisos.gestionar"
-                            :habilitada="seccionesHabilitadas.verificacion"
-                        />
-                    </SeccionNc>
-
-                    <!-- Observaciones vinculadas (§5) -->
+                    <!--
+                        Observaciones vinculadas (§5), ARRIBA de la investigación
+                        desde el 21/10/2026: así lo acordaron en la reunión, para
+                        que quien aprueba vea de qué reclamos salió el desvío antes
+                        de leer el resto. Hasta entonces estaban al final.
+                    -->
                     <div class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
                         <p class="text-theme-xs font-medium uppercase tracking-wide text-gray-400">
                             Observaciones vinculadas
@@ -463,19 +393,105 @@ const confirmarCierre = () => {
                         </div>
                     </div>
 
-                    <!-- Evidencias sueltas -->
+                    <SeccionNc
+                        :numero="2"
+                        titulo="Investigación"
+                        :habilitada="seccionesHabilitadas.investigacion"
+                        :motivo-bloqueo="MOTIVO_BLOQUEO.investigacion"
+                    >
+                        <Investigacion
+                            :no-conformidad="noConformidad"
+                            :presentaciones="presentaciones"
+                            :puede-gestionar="permisos.investigacion && seccionesHabilitadas.investigacion"
+                        />
+                    </SeccionNc>
+
+                    <SeccionNc
+                        :numero="3"
+                        titulo="Acción inmediata de contención / corrección"
+                        :habilitada="seccionesHabilitadas.contencion"
+                        :motivo-bloqueo="MOTIVO_BLOQUEO.contencion"
+                    >
+                        <Contencion
+                            :no-conformidad="noConformidad"
+                            :usuarios="usuarios"
+                            :puede-gestionar="permisos.contencion && seccionesHabilitadas.contencion"
+                        />
+
+                        <!--
+                            El ÚNICO lugar donde se aprueba (21/10/2026): quien
+                            decide la apertura ya leyó las observaciones
+                            vinculadas, la investigación y la acción inmediata,
+                            que están arriba.
+                        -->
+                        <div
+                            v-if="permisos.aprobar"
+                            class="mt-5 flex flex-wrap items-center gap-3 border-t border-gray-100 pt-4 dark:border-gray-800"
+                        >
+                            <p class="mr-auto text-theme-sm text-gray-500 dark:text-gray-400">
+                                Revisado lo cargado hasta acá, resolvé la apertura del desvío.
+                            </p>
+                            <Button variant="brand" :disabled="accion.processing" @click="aprobar">Aprobar</Button>
+                            <Button variant="outline" @click="abrirDecision('devolver')">Devolver</Button>
+                            <Button variant="danger" @click="abrirDecision('rechazar')">Rechazar</Button>
+                        </div>
+                    </SeccionNc>
+
+                    <SeccionNc
+                        :numero="4"
+                        titulo="Análisis de causa raíz — CAPA"
+                        :habilitada="seccionesHabilitadas.causaRaiz"
+                        :motivo-bloqueo="MOTIVO_BLOQUEO.causaRaiz"
+                    >
+                        <CausaRaiz
+                            :no-conformidad="noConformidad"
+                            :factores-causa="factoresCausa"
+                            :puede-gestionar="permisos.gestionar && seccionesHabilitadas.causaRaiz"
+                        />
+                    </SeccionNc>
+
+                    <SeccionNc
+                        :numero="5"
+                        titulo="Plan de acción correctiva / preventiva"
+                        :habilitada="seccionesHabilitadas.plan"
+                        :motivo-bloqueo="MOTIVO_BLOQUEO.plan"
+                    >
+                        <PlanDeAccion
+                            :no-conformidad="noConformidad"
+                            :estados-accion="estadosAccion"
+                            :usuarios="usuarios"
+                            :puede-gestionar="permisos.gestionar && seccionesHabilitadas.plan"
+                        />
+                    </SeccionNc>
+
+                    <SeccionNc
+                        numero="6 y 7"
+                        titulo="Seguimiento del plan y verificación de la eficacia"
+                        :habilitada="seccionesHabilitadas.verificacion"
+                        :motivo-bloqueo="MOTIVO_BLOQUEO.verificacion"
+                    >
+                        <Verificacion
+                            :no-conformidad="noConformidad"
+                            :resultados-eficacia="resultadosEficacia"
+                            :puede-gestionar="permisos.gestionar"
+                            :habilitada="seccionesHabilitadas.verificacion"
+                        />
+                    </SeccionNc>
+
+                    <!-- Evidencias sueltas (la ilustración del riesgo se ve en la sección 2) -->
                     <div
-                        v-if="noConformidad.attachments?.length"
+                        v-if="evidenciasSueltas.length"
                         class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]"
                     >
                         <p class="text-theme-xs font-medium uppercase tracking-wide text-gray-400">Evidencias</p>
                         <ul class="mt-3 space-y-2">
-                            <li
-                                v-for="a in noConformidad.attachments"
-                                :key="a.id"
-                                class="truncate text-theme-sm text-gray-600 dark:text-gray-300"
-                            >
-                                {{ a.original_name }}
+                            <li v-for="a in evidenciasSueltas" :key="a.id" class="truncate text-theme-sm">
+                                <a
+                                    :href="route('no-conformidades.archivos.download', [noConformidad.id, a.id])"
+                                    class="text-brand-500 hover:underline dark:text-brand-300"
+                                >
+                                    {{ a.original_name }}
+                                </a>
                             </li>
                         </ul>
                     </div>

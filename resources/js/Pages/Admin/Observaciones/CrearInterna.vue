@@ -6,11 +6,9 @@ import Button from '@/Components/Button.vue'
 import CampoDinamico, { type CampoDef } from '@/Components/CampoDinamico.vue'
 import FormSection from '@/Components/FormSection.vue'
 import Input from '@/Components/Input.vue'
-import InputFecha from '@/Components/InputFecha.vue'
-import RadioGroup from '@/Components/RadioGroup.vue'
+import ProductosAfectados, { nuevoProducto, type ProductoForm } from '@/Components/ProductosAfectados.vue'
 import ResumenErrores from '@/Components/ResumenErrores.vue'
 import Select from '@/Components/Select.vue'
-import SelectorArticulo from '@/Components/SelectorArticulo.vue'
 import SelectorUsuarios from '@/Components/SelectorUsuarios.vue'
 import Textarea from '@/Components/Textarea.vue'
 import { erroresDeArchivos } from '@/lib/errores'
@@ -31,19 +29,10 @@ interface TipoDef {
     requiere_cliente?: boolean
     /** Subgrupo dentro del sector, para el <optgroup> del select de tipo. */
     grupo?: string
+    /** Lleva productos afectados: obligatorios (Falla de producto) u opcionales (6.2). */
+    productos?: 'requeridos' | 'opcionales'
 }
 type Taxonomia = Record<string, Record<string, TipoDef>>
-
-interface ProductoForm {
-    producto: string
-    codigo: string
-    cantidad_afectada: number | null
-    tipo_presentacion: string
-    lote: string
-    fecha_vencimiento: string
-    numero_remito: string
-    tipo_comprobante: string
-}
 
 const props = defineProps<{
     sectores: SectorOption[]
@@ -55,17 +44,6 @@ const props = defineProps<{
     prioridadSugerida: Record<string, string>
     usuarios: UsuarioOption[]
 }>()
-
-const nuevoProducto = (): ProductoForm => ({
-    producto: '',
-    codigo: '',
-    cantidad_afectada: null,
-    tipo_presentacion: '',
-    lote: '',
-    fecha_vencimiento: '',
-    numero_remito: '',
-    tipo_comprobante: '',
-})
 
 const form = useForm({
     origen: 'interna',
@@ -218,11 +196,10 @@ const plazoDelResponsable = computed(() => {
     return `Vence a los ${elegido.sector.dias_gestion} días hábiles (plazo de ${elegido.sector.nombre}).`
 })
 
-const agregarProducto = () => form.productos.push(nuevoProducto())
-const quitarProducto = (index: number) => form.productos.splice(index, 1)
-
-const errorProducto = (index: number, campo: keyof ProductoForm) =>
-    (form.errors as Record<string, string>)[`productos.${index}.${campo}`]
+/** Si el tipo elegido lleva productos, y si son obligatorios u opcionales. */
+const productosDelTipo = computed(() =>
+    props.taxonomia[sectorSlug.value ?? '']?.[form.tipo]?.productos ?? null
+)
 
 // Los errores de archivo vuelven en `attachments.0`, `attachments.1`… y no en
 // `attachments`: sin esto un adjunto rechazado frenaba el envío sin mensaje.
@@ -236,14 +213,15 @@ watch(() => form.sector_id, () => {
     form.productos = []
 })
 
-// Al cambiar de tipo: reconstruí las claves de datos específicos, o inicializá el
-// bloque de productos si es el tipo especial "Falla de Producto".
+// Al cambiar de tipo: reconstruí las claves de datos específicos, e inicializá el
+// bloque de productos: con un renglón si son obligatorios (Falla de producto),
+// vacío si son opcionales (6.2), para no mandar un renglón que nadie quiso cargar.
 watch(() => form.tipo, () => {
     const nuevos: Record<string, string | number | null> = {}
     for (const c of camposDelTipo.value) nuevos[c.id] = ''
     form.datos_especificos = nuevos
 
-    form.productos = form.tipo === 'falla_producto' ? [nuevoProducto()] : []
+    form.productos = productosDelTipo.value === 'requeridos' ? [nuevoProducto()] : []
 })
 
 // Sugerencia de prioridad según tipo de caso.
@@ -411,97 +389,25 @@ const submit = () => form.post(route('observaciones.store'), { forceFormData: tr
                     <Input v-model="form.ejecutivo_cuenta" label="Ejecutivo de cuenta a cargo" />
 
                     <!-- Productos afectados: lista repetible -->
-                    <div class="sm:col-span-2 space-y-4 pt-2">
-                        <div
-                            v-for="(producto, index) in form.productos"
-                            :key="index"
-                            class="space-y-4 rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-white/[0.02]"
-                        >
-                            <div class="flex items-center justify-between">
-                                <span class="text-theme-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                                    Producto {{ index + 1 }}
-                                </span>
-                                <button
-                                    v-if="form.productos.length > 1"
-                                    type="button"
-                                    class="inline-flex min-h-11 -mx-2 items-center px-2 cursor-pointer text-theme-xs font-medium text-error-500 hover:text-error-600 dark:text-error-400 dark:hover:text-error-300"
-                                    @click="quitarProducto(index)"
-                                >
-                                    Quitar
-                                </button>
-                            </div>
+                    <ProductosAfectados
+                        v-model="form.productos"
+                        class="sm:col-span-2 pt-2"
+                        :presentaciones="props.presentaciones"
+                        :errors="form.errors as Record<string, string>"
+                    />
+                </FormSection>
 
-                            <div class="grid sm:grid-cols-2 gap-4">
-                                <SelectorArticulo
-                                    v-model="producto.codigo"
-                                    required
-                                    label="Código de producto"
-                                    hint="Buscá por código o nombre. Si no está en el catálogo, escribilo igual."
-                                    :error="errorProducto(index, 'codigo')"
-                                    @seleccionar="a => producto.producto = a.descripcion"
-                                />
-                                <Input
-                                    v-model="producto.producto"
-                                    required
-                                    label="Nombre de producto"
-                                    :error="errorProducto(index, 'producto')"
-                                />
-                                <Input
-                                    v-model.number="producto.cantidad_afectada"
-                                    required
-                                    type="number"
-                                    min="1"
-                                    label="Cantidad afectada"
-                                    :error="errorProducto(index, 'cantidad_afectada')"
-                                />
-                                <Select
-                                    v-model="producto.tipo_presentacion"
-                                    required
-                                    label="Presentación"
-                                    hint="A qué corresponde la cantidad afectada."
-                                    :error="errorProducto(index, 'tipo_presentacion')"
-                                >
-                                    <option value="" disabled>— Seleccionar —</option>
-                                    <option v-for="(label, key) in props.presentaciones" :key="key" :value="key">{{ label }}</option>
-                                </Select>
-                                <Input
-                                    v-model="producto.lote"
-                                    required
-                                    label="Lote"
-                                    :error="errorProducto(index, 'lote')"
-                                />
-                                <InputFecha
-                                    v-model="producto.fecha_vencimiento"
-                                    required
-                                    label="Fecha de vencimiento"
-                                    :error="errorProducto(index, 'fecha_vencimiento')"
-                                />
-                                <Input
-                                    v-model="producto.numero_remito"
-                                    label="N° de remito"
-                                    :error="errorProducto(index, 'numero_remito')"
-                                />
-                                <RadioGroup
-                                    v-model="producto.tipo_comprobante"
-                                    full
-                                    label="Tipo de comprobante"
-                                    :opciones="[
-                                        { value: 'factura', label: 'Factura' },
-                                        { value: 'remito', label: 'Remito' },
-                                    ]"
-                                    :error="errorProducto(index, 'tipo_comprobante')"
-                                />
-                            </div>
-                        </div>
-
-                        <button
-                            type="button"
-                            class="inline-flex min-h-11 -mx-2 items-center px-2 cursor-pointer text-sm font-medium text-brand-500 hover:text-brand-600 dark:text-brand-300 dark:hover:text-brand-200"
-                            @click="agregarProducto"
-                        >
-                            + Agregar producto
-                        </button>
-                    </div>
+                <!-- Productos opcionales de un tipo común (hoy, 6.2 Falla de proveedor) -->
+                <FormSection v-if="!tipoEspecial && productosDelTipo === 'opcionales'" title="Productos afectados" :columns="1">
+                    <p class="text-theme-sm text-gray-500 dark:text-gray-400">
+                        Opcional. Si cargás un producto, alcanza con el código o el nombre y la cantidad.
+                    </p>
+                    <ProductosAfectados
+                        v-model="form.productos"
+                        :obligatorios="false"
+                        :presentaciones="props.presentaciones"
+                        :errors="form.errors as Record<string, string>"
+                    />
                 </FormSection>
 
                 <FormSection title="Asignación">

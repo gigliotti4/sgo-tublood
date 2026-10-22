@@ -34,6 +34,23 @@ export const esContenido = (
     entrada: ObservationHistoryEntry,
 ): entrada is ObservationHistoryEntry & { cambios: CambioContenido } => entrada.accion === 'contenido'
 
+/**
+ * Los "Datos específicos" que tenía la observación antes de un cambio de tipo
+ * (acción `tipo`, desde el 21/10/2026). El cambio los reemplaza, así que la
+ * bitácora es el único lugar donde quedan. La clave se muestra legible
+ * (`detalle_proceso` → "Detalle proceso"): la etiqueta original es del tipo
+ * viejo y la pantalla no tiene la taxonomía.
+ */
+export const datosAnteriores = (entrada: ObservationHistoryEntry): [string, string][] => {
+    if (entrada.accion !== 'tipo' || !entrada.cambios || !('datos_anteriores' in entrada.cambios)) return []
+
+    const datos = (entrada.cambios as { datos_anteriores?: Record<string, unknown> }).datos_anteriores ?? {}
+
+    return Object.entries(datos)
+        .filter(([, v]) => v !== null && v !== '')
+        .map(([k, v]) => [k.charAt(0).toUpperCase() + k.slice(1).replace(/_/g, ' '), String(v)])
+}
+
 export const comoCambioSimple = (cambios: ObservationHistoryEntry['cambios']): CambioSimple | null =>
     cambios && 'de' in cambios && 'a' in cambios ? (cambios as unknown as CambioSimple) : null
 
@@ -44,6 +61,7 @@ export const accionLabels: Record<string, string> = {
     sector: 'Derivación de sector',
     clasificacion: 'Clasificación',
     contenido: 'Corrección del texto',
+    tipo: 'Cambio de tipo',
     adjunto: 'Archivo adjunto',
     notificados: 'Usuarios a notificar',
     sistema: 'Sistema',
@@ -58,6 +76,7 @@ export const accionVariant: Record<string, 'slate' | 'blue' | 'indigo' | 'purple
     sector: 'purple',
     clasificacion: 'blue',
     contenido: 'amber',
+    tipo: 'purple',
     adjunto: 'slate',
     notificados: 'emerald',
     sistema: 'slate',

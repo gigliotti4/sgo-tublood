@@ -5,7 +5,7 @@ import Badge from '@/Components/Badge.vue'
 import Button from '@/Components/Button.vue'
 import Icon from '@/Components/Icon.vue'
 import Textarea from '@/Components/Textarea.vue'
-import { accionLabels, accionVariant, comoCambioSimple, esBaja, esClasificacion, esContenido, esNotificados, formatFechaHora, formatSize, nombreAutor } from '@/lib/bitacora'
+import { accionLabels, accionVariant, comoCambioSimple, datosAnteriores, esBaja, esClasificacion, esContenido, esNotificados, formatFechaHora, formatSize, nombreAutor } from '@/lib/bitacora'
 import { erroresDeArchivos } from '@/lib/errores'
 import type { ObservationHistoryEntry } from '@/types'
 
@@ -96,6 +96,14 @@ const enviar = () => {
                     De <span class="font-medium text-gray-800 dark:text-white/90">{{ comoCambioSimple(entrada.cambios)!.de }}</span>
                     a <span class="font-medium text-gray-800 dark:text-white/90">{{ comoCambioSimple(entrada.cambios)!.a }}</span>
                 </p>
+
+                <!-- Cambio de tipo: lo que se había cargado para el tipo viejo, que el cambio reemplazó. -->
+                <dl v-if="datosAnteriores(entrada).length" class="mt-2 space-y-1 text-theme-sm">
+                    <dt class="text-theme-xs uppercase tracking-wide text-gray-400">Datos del tipo anterior</dt>
+                    <dd v-for="[campo, valor] in datosAnteriores(entrada)" :key="campo" class="text-gray-600 dark:text-gray-300">
+                        <span class="text-gray-400">{{ campo }}:</span> <span class="whitespace-pre-line">{{ valor }}</span>
+                    </dd>
+                </dl>
 
                 <!-- Clasificación: prioridad + tipo de caso juntos -->
                 <dl v-else-if="esClasificacion(entrada)" class="mt-2 space-y-1 text-theme-sm text-gray-600 dark:text-gray-300">

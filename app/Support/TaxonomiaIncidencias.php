@@ -122,16 +122,37 @@ class TaxonomiaIncidencias
     }
 
     /**
-     * True si el tipo lleva la lista de productos afectados.
+     * Si el tipo lleva la lista de productos afectados: 'requeridos',
+     * 'opcionales' o null. Sale de la clave `productos` del tipo en
+     * config/incidencias.php.
      *
-     * Hoy solo "Falla de producto": "Disconformidad de servicio" comparte el
-     * resto del formulario pero no tiene productos. Lo consultan el portal
-     * público y la carga interna para descartar las filas vacías que manda el
-     * bloque oculto del formulario antes de validar.
+     * Hasta el 21/10/2026 era "solo `falla_producto`", comparado por clave. Ese
+     * día 6.2 "Falla de proveedor" pasó a admitirlos (opcionales), y con la
+     * marca en config el próximo tipo que los necesite es una línea, no un
+     * `||` más acá.
+     */
+    public static function productos(?string $tipoKey): ?string
+    {
+        $sector = $tipoKey === null ? null : static::sectorDeTipo($tipoKey);
+
+        return $sector === null ? null : (static::tipo($sector, $tipoKey)['productos'] ?? null);
+    }
+
+    /**
+     * True si el tipo lleva la lista de productos afectados, obligatoria u
+     * opcional. Lo consultan el portal público y la carga interna para
+     * descartar las filas vacías que manda el bloque oculto del formulario
+     * antes de validar.
      */
     public static function llevaProductos(?string $tipoKey): bool
     {
-        return $tipoKey === 'falla_producto';
+        return static::productos($tipoKey) !== null;
+    }
+
+    /** True si los productos se pueden cargar pero no son obligatorios (6.2). */
+    public static function productosOpcionales(?string $tipoKey): bool
+    {
+        return static::productos($tipoKey) === 'opcionales';
     }
 
     /** Campos "Datos específicos" de un tipo. */

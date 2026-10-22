@@ -152,7 +152,8 @@ class NoConformidad extends Model
         'reemplaza_a_id',
         // Investigación (§4.4)
         'investigacion',
-        'alcance',
+        // Desde el 21/10/2026 es solo "pedidos o procesos afectados": los
+        // productos van en `productos()`. `alcance` se borró ese día.
         'afectados',
         'evaluacion_riesgo',
         'es_grave',
@@ -168,7 +169,6 @@ class NoConformidad extends Model
         'verificacion_avisada_at',
         'causa_raiz',
         'causa_raiz_factores',
-        'conclusion',
         // Verificación de eficacia (§4.7)
         'metodo_seguimiento',
         'fecha_seguimiento',
@@ -233,7 +233,7 @@ class NoConformidad extends Model
      * encuentren incompletos"*.
      *
      * ⚠️ Son esos dos y nada más, a propósito. La etapa pide completar bastante
-     * más (contención, alcance, afectados, riesgo), pero el instructivo no los
+     * más (contención, afectados, riesgo), pero el instructivo no los
      * pone como condición para avanzar, y convertir una recomendación en un
      * bloqueo haría que la pantalla frene a alguien por un campo que su caso no
      * necesita — "productos y lotes afectados" no aplica a una NC de proceso.
@@ -359,6 +359,12 @@ class NoConformidad extends Model
     public function attachments(): HasMany
     {
         return $this->hasMany(NonConformityAttachment::class, 'non_conformity_id');
+    }
+
+    /** Los productos afectados (sección 2). Ver `NonConformityProduct`. */
+    public function productos(): HasMany
+    {
+        return $this->hasMany(NonConformityProduct::class, 'non_conformity_id');
     }
 
     public function historial(): HasMany

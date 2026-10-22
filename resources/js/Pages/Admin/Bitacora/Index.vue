@@ -9,7 +9,7 @@ import Pagination from '@/Components/Pagination.vue'
 import Select from '@/Components/Select.vue'
 import TableCard from '@/Components/TableCard.vue'
 import DataRow from '@/Components/DataRow.vue'
-import { accionLabels, accionVariant, comoCambioSimple, esBaja, esClasificacion, esContenido, esNotificados, formatFechaHora, formatSize, nombreAutor } from '@/lib/bitacora'
+import { accionLabels, accionVariant, comoCambioSimple, datosAnteriores, esBaja, esClasificacion, esContenido, esNotificados, formatFechaHora, formatSize, nombreAutor } from '@/lib/bitacora'
 import ThOrdenable from '@/Components/ThOrdenable.vue'
 import { useOrdenamiento, type OrdenVigente } from '@/composables/useOrdenamiento'
 import type { ObservationHistoryEntry, PaginatedData } from '@/types'
@@ -190,6 +190,10 @@ const limpiarFiltros = () => {
                                     <p v-if="comoCambioSimple(entrada.cambios)">
                                         De <span class="font-medium text-gray-800 dark:text-white/90">{{ comoCambioSimple(entrada.cambios)!.de }}</span>
                                         a <span class="font-medium text-gray-800 dark:text-white/90">{{ comoCambioSimple(entrada.cambios)!.a }}</span>
+                                        <!-- Cambio de tipo: los datos del tipo viejo, en una línea; el detalle está en la ficha. -->
+                                        <span v-if="datosAnteriores(entrada).length" class="block text-theme-xs text-gray-400">
+                                            Antes: {{ datosAnteriores(entrada).map(([c, v]) => `${c}: ${v}`).join(' · ') }}
+                                        </span>
                                     </p>
                                     <div v-else-if="esClasificacion(entrada)" class="space-y-0.5">
                                         <p>Prioridad: {{ entrada.cambios.prioridad.de }} → {{ entrada.cambios.prioridad.a }}</p>

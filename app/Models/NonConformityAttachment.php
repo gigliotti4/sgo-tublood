@@ -8,9 +8,17 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /** Evidencia o adjunto de una No Conformidad. Molde de `ObservationAttachment`. */
 class NonConformityAttachment extends Model
 {
+    /**
+     * La ilustración de "Riesgo involucrado" (sección 2, desde el 21/10/2026).
+     * Se muestra en su sección y no entre las evidencias sueltas.
+     */
+    public const SECCION_RIESGO = 'riesgo';
+
     protected $fillable = [
         'non_conformity_id',
         'non_conformity_history_id',
+        // Null = evidencia suelta. Ver `SECCION_RIESGO`.
+        'seccion',
         'user_id',
         'path',
         'original_name',

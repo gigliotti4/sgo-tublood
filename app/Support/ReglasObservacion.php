@@ -54,6 +54,51 @@ class ReglasObservacion
     }
 
     /**
+     * Productos que se pueden cargar pero no son obligatorios (6.2 "Falla de
+     * proveedor", y los afectados de una No Conformidad).
+     *
+     * Si se agrega un renglón, alcanza con el código **o** el nombre, y la
+     * cantidad (decisión del 21/10/2026): en una falla de proveedor muchas veces
+     * todavía no hay lote ni remito, y exigirlos como en la Falla de producto
+     * obligaba a inventarlos.
+     *
+     * @param  string  $campo  Clave del arreglo en el request (`productos`).
+     */
+    public static function productosOpcionales(string $campo = 'productos'): array
+    {
+        return [
+            $campo => ['nullable', 'array'],
+            $campo.'.*.codigo' => ['nullable', "required_without:{$campo}.*.producto", 'string', 'max:255'],
+            $campo.'.*.producto' => ['nullable', "required_without:{$campo}.*.codigo", 'string', 'max:255'],
+            $campo.'.*.cantidad_afectada' => ['required', 'integer', 'min:1'],
+            $campo.'.*.tipo_presentacion' => ['nullable', 'in:'.implode(',', array_keys(ObservationProduct::PRESENTACIONES))],
+            $campo.'.*.lote' => ['nullable', 'string', 'max:255'],
+            $campo.'.*.fecha_vencimiento' => ['nullable', 'date'],
+            $campo.'.*.numero_remito' => ['nullable', 'string', 'max:255'],
+            $campo.'.*.tipo_comprobante' => ['nullable', 'in:factura,remito'],
+        ];
+    }
+
+    /**
+     * Descarta los renglones de productos que vienen completamente vacíos.
+     *
+     * El formulario manda el bloque aunque nadie lo haya tocado; con productos
+     * opcionales, un renglón en blanco no es un error sino "no cargó ninguno", y
+     * validarlo daría "el código es obligatorio" sobre algo que la persona no
+     * quiso cargar.
+     *
+     * @param  array<int, array<string, mixed>>|null  $productos
+     * @return array<int, array<string, mixed>>
+     */
+    public static function sinRenglonesVacios(?array $productos): array
+    {
+        return array_values(array_filter(
+            $productos ?? [],
+            fn ($p) => is_array($p) && collect($p)->contains(fn ($v) => filled($v)),
+        ));
+    }
+
+    /**
      * Los archivos adjuntos.
      *
      * @param  string  $campo  `attachments` en las altas, `archivos` en la
