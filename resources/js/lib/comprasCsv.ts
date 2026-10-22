@@ -88,7 +88,8 @@ export const exportarResumen = (
             // Un producto sin ventas no tiene cobertura: celda vacía, no 0.
             r.estado === 'sv' || r.meses === Infinity ? '' : decimal(r.meses),
             decimal(r.cantComprar),
-            r.proveedores.join(' / '),
+            // Uno solo, el mismo que muestra la columna (el principal del artículo que más vende).
+            r.proveedor ?? '',
             r.pareto ?? '',
             decimal(r.importe, 2),
             decimal(r.pctFact, 2),

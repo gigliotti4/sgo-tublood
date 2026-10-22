@@ -126,6 +126,31 @@ class CalculoReposicionTest extends TestCase
         $this->assertSame(['A SA', 'B SA'], $fila['proveedores']);
     }
 
+    /**
+     * La columna y el Excel muestran UNO (pedido del 14/10/2026, en vez de "Varios"): el del artículo que
+     * más vende en el período. Empate: el primero. Sin ventas: el primero que tenga proveedor.
+     */
+    public function test_el_proveedor_de_la_fila_es_el_del_articulo_que_mas_vende(): void
+    {
+        $vende = $this->fila($this->grupo([
+            $this->item(['c' => 'RE-1', 'p' => 'B SA', 'v' => [1, 1, 1]]),
+            $this->item(['c' => 'RE-2', 'p' => 'A SA', 'v' => [9, 9, 9]]),
+        ], 'g:AGUJA'));
+        $empate = $this->fila($this->grupo([
+            $this->item(['c' => 'RE-1', 'p' => 'B SA', 'v' => [5, 5, 5]]),
+            $this->item(['c' => 'RE-2', 'p' => 'A SA', 'v' => [5, 5, 5]]),
+        ], 'g:AGUJA'));
+        $sinVentas = $this->fila($this->grupo([
+            $this->item(['c' => 'RE-1']),
+            $this->item(['c' => 'RE-2', 'p' => 'C SA']),
+        ], 'g:AGUJA'));
+
+        $this->assertSame('A SA', $vende['proveedor']);
+        $this->assertSame('B SA', $empate['proveedor']);
+        $this->assertSame('C SA', $sinVentas['proveedor']);
+        $this->assertNull($this->fila($this->grupo([$this->item()]))['proveedor']);
+    }
+
     public function test_filtrar_aplica_categoria_activo_y_cubre(): void
     {
         $groups = [

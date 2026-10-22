@@ -46,7 +46,7 @@ class AlertaCoberturaComprasCommand extends Command
                 ['Producto', 'Proveedor', 'Stock disp.', 'Prom. mensual', 'A comprar'],
                 array_map(fn ($r) => [
                     mb_strimwidth($r['grupo']['n'], 0, 45, '…'),
-                    mb_strimwidth(implode(' / ', $r['proveedores']), 0, 30, '…'),
+                    mb_strimwidth($r['proveedor'] ?? '', 0, 30, '…'),
                     number_format($r['stockTotal'], 0, ',', '.'),
                     number_format($r['promMensual'], 1, ',', '.').($r['estimada'] ? ' est.' : ''),
                     number_format($r['cantComprar'], 0, ',', '.'),
@@ -68,7 +68,7 @@ class AlertaCoberturaComprasCommand extends Command
             periodo: $resultado['periodo'],
             top: array_map(fn ($r) => [
                 'producto' => $r['grupo']['n'],
-                'proveedor' => implode(' / ', $r['proveedores']),
+                'proveedor' => $r['proveedor'] ?? '',
                 'comprar' => $r['cantComprar'],
                 'entrega' => $r['proximaEntrega'],
             ], $top),

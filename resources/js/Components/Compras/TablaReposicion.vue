@@ -63,30 +63,19 @@ const tituloAnomalia = (fila: FilaReposicion) => {
     return `${base} En negativo: ${fila.depositosNegativos.map(nombreDeposito).join(', ')}.`
 }
 
-const textoProveedor = (fila: FilaReposicion) =>
-    fila.proveedores.length > 1 ? `Varios (${fila.proveedores.length})` : (fila.proveedores[0] ?? '')
-
 /**
- * Los otros proveedores que el ERP tiene cargados para los artículos de la fila, sin los que ya se
- * muestran. Sirven para comprarle a otro cuando el principal no tiene. Es solo presentación: no entra
- * en el cálculo, así que vive acá y no en lib/compras.ts (que tiene su copia en PHP).
+ * La columna muestra UN proveedor (`fila.proveedor`: el principal del artículo que más vende) y nada
+ * más; los otros —de los demás artículos del grupo o los alternativos del ERP— se ven al desplegar la
+ * fila (pedido del 14/10/2026). El tooltip solo avisa que hay más, para que se sepa dónde buscarlos.
  */
-const alternativos = (fila: FilaReposicion) => {
-    const otros = new Set<string>()
-    for (const it of fila.items) for (const p of it.pa ?? []) if (!fila.proveedores.includes(p)) otros.add(p)
-    return [...otros]
-}
+const hayMasProveedores = (fila: FilaReposicion) =>
+    fila.proveedores.length > 1 || fila.items.some(it => it.pa?.length)
 
 const tituloProveedor = (fila: FilaReposicion) => {
-    const otros = alternativos(fila)
-    if (!fila.proveedores.length) {
-        // Varios marcados como principal en el ERP, o varios sin ninguno: no se elige por ellos.
-        return otros.length ? `Sin un proveedor principal definido en el ERP. Cargados: ${otros.join(' · ')}` : 'Sin proveedor cargado en el ERP'
+    if (!fila.proveedor) {
+        return hayMasProveedores(fila) ? 'Sin un proveedor principal definido en el ERP: desplegá la fila para ver los cargados' : 'Sin proveedor cargado en el ERP'
     }
-    // "Proveedor" y no "Principal": `p` puede venir del padrón (una corrección a mano, por ejemplo) y no
-    // coincidir con el principal del ERP, que en ese caso aparece entre los "también".
-    const base = fila.proveedores.length > 1 ? fila.proveedores.join(' · ') : `Proveedor: ${fila.proveedores[0]}`
-    return otros.length ? `${base}\nTambién en el ERP: ${otros.join(' · ')}` : base
+    return hayMasProveedores(fila) ? `${fila.proveedor}\nHay otros proveedores: desplegá la fila para verlos` : fila.proveedor
 }
 
 /** El texto del ERP de cada artículo bonificado del grupo, para el tooltip. */
@@ -333,10 +322,8 @@ const sep = 'border-l border-gray-200 dark:border-gray-700'
                             :class="sep"
                             :title="tituloProveedor(fila)"
                         >
-                            <span v-if="fila.proveedores.length > 1" class="font-semibold text-warning-600 dark:text-warning-400">{{ textoProveedor(fila) }}</span>
-                            <template v-else-if="fila.proveedores.length">{{ textoProveedor(fila) }}</template>
+                            <template v-if="fila.proveedor">{{ fila.proveedor }}</template>
                             <span v-else class="text-gray-400">–</span>
-                            <span v-if="alternativos(fila).length" class="ml-0.5 text-[10px] text-gray-400">+{{ alternativos(fila).length }}</span>
                         </td>
                     </tr>
 

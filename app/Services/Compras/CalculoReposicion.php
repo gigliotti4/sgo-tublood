@@ -109,6 +109,8 @@ class CalculoReposicion
         $stockEnv = $stockU = $reservado = $ocPend = $importe = $promMensual = 0.0;
         $anomalia = $estimada = false;
         $proveedores = [];
+        $proveedor = null;
+        $ventaDelProveedor = -INF;
         $entregas = [];
         $nMeses = $f['hasta'] - $f['desde'] + 1;
 
@@ -154,6 +156,13 @@ class CalculoReposicion
 
             if (! empty($it['p'])) {
                 $proveedores[$it['p']] = true;
+
+                // El del artículo que más vende; `>` estricto: en un empate
+                // gana el primero, igual que en compras.ts.
+                if ($ventaItem > $ventaDelProveedor) {
+                    $proveedor = $it['p'];
+                    $ventaDelProveedor = $ventaItem;
+                }
             }
 
             foreach ($it['e'] ?? [] as [$fecha, $cant]) {
@@ -196,6 +205,7 @@ class CalculoReposicion
             'anomalia' => $anomalia,
             'estimada' => $estimada,
             'proveedores' => $proveedores,
+            'proveedor' => $proveedor,
             'entregas' => $entregas,
             'proximaEntrega' => $entregas[0]['fecha'] ?? null,
             'pareto' => null,

@@ -28,7 +28,7 @@ for (const [nombre, { f: fphp, filas: filasPhp }] of Object.entries(php)) {
     id: r.grupo.id, stockU: r.stockU, reservado: r.reservado, ocPend: r.ocPend, stockTotal: r.stockTotal,
     ventaPeriodo: r.ventaPeriodo, promMensual: r.promMensual, meses: r.meses === Infinity ? 'INF' : r.meses,
     estado: r.estado, cantComprar: r.cantComprar, importe: r.importe, pareto: r.pareto, anomalia: r.anomalia,
-    estimada: r.estimada, proximaEntrega: r.proximaEntrega, proveedores: r.proveedores, items: r.items.length,
+    estimada: r.estimada, proximaEntrega: r.proximaEntrega, proveedores: r.proveedores, proveedor: r.proveedor, items: r.items.length,
   }))
 
   let difs = 0

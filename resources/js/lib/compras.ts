@@ -84,6 +84,12 @@ export interface FilaReposicion {
     estimada: boolean
     /** Proveedores distintos de los artículos del grupo (puede ser 0, 1 o varios). */
     proveedores: string[]
+    /**
+     * EL proveedor de la fila: el principal del artículo que más vendió en el período (pedido del
+     * 14/10/2026: un solo nombre, no "Varios"). Si ninguno vendió, el del primero que tenga. Es el que
+     * muestra la columna y el que va al Excel; el resto se ve al desplegar.
+     */
+    proveedor: string | null
     /** OC pendientes de todos los artículos, de la más próxima a la más lejana; sin fecha al final. */
     entregas: EntregaFila[]
     /** La entrega con fecha más próxima, o null si ninguna OC tiene fecha. */
@@ -184,6 +190,8 @@ export const computeGroup = (
     let promMensual = 0
     const negativos = new Set<string>()
     const proveedores = new Set<string>()
+    let proveedor: string | null = null
+    let ventaDelProveedor = -Infinity
     const entregas: EntregaFila[] = []
     const nMeses = f.hasta - f.desde + 1
 
@@ -223,7 +231,14 @@ export const computeGroup = (
             promMensual += ventaItem / nMeses
         }
 
-        if (it.p) proveedores.add(it.p)
+        if (it.p) {
+            proveedores.add(it.p)
+            // `>` estricto: en un empate gana el primero (mismo criterio en CalculoReposicion.php).
+            if (ventaItem > ventaDelProveedor) {
+                proveedor = it.p
+                ventaDelProveedor = ventaItem
+            }
+        }
         for (const [fecha, cant] of it.e ?? []) entregas.push({ fecha, cantidad: cant * u, codigo: it.c })
     }
 
@@ -260,6 +275,7 @@ export const computeGroup = (
         depositosNegativos: [...negativos].sort(),
         estimada,
         proveedores: [...proveedores].sort((a, b) => a.localeCompare(b, 'es')),
+        proveedor,
         entregas,
         proximaEntrega: entregas[0]?.fecha ?? null,
         pareto: null,
@@ -432,7 +448,7 @@ const valorDeOrden = (
         case 'oc': return r.ocPend
         // Sin fecha va al fondo al ordenar de la más próxima a la más lejana.
         case 'entrega': return r.proximaEntrega ?? '9999-12-31'
-        case 'proveedor': return r.proveedores.length > 1 ? `~${r.proveedores.length}` : (r.proveedores[0] ?? '')
+        case 'proveedor': return r.proveedor ?? ''
         case 'total': return r.stockTotal
         // El semáforo ordena por gravedad, no alfabéticamente.
         case 'cubre': return r.estado === 'si' ? 2 : r.estado === 'sv' ? 1 : 0

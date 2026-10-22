@@ -28,7 +28,7 @@ foreach ($escenarios as $e) {
         'stockTotal' => $r['stockTotal'], 'ventaPeriodo' => $r['ventaPeriodo'], 'promMensual' => $r['promMensual'],
         'meses' => is_infinite($r['meses']) ? 'INF' : $r['meses'], 'estado' => $r['estado'], 'cantComprar' => $r['cantComprar'],
         'importe' => $r['importe'], 'pareto' => $r['pareto'], 'anomalia' => $r['anomalia'], 'estimada' => $r['estimada'],
-        'proximaEntrega' => $r['proximaEntrega'], 'proveedores' => $r['proveedores'], 'items' => count($r['items']),
+        'proximaEntrega' => $r['proximaEntrega'], 'proveedores' => $r['proveedores'], 'proveedor' => $r['proveedor'], 'items' => count($r['items']),
     ], $filas)];
 }
 

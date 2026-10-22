@@ -115,7 +115,8 @@ class AlertaCobertura
                 // Como texto: hay códigos que empiezan con cero.
                 implode(', ', array_map(fn ($it) => (string) $it['c'], $r['items'])),
                 implode(' / ', array_map(fn ($c) => $categorias[$c] ?? $c, $r['grupo']['c'])),
-                implode(' / ', $r['proveedores']),
+                // Uno solo, igual que el tablero: el principal del artículo que más vende.
+                $r['proveedor'] ?? '',
                 round($r['stockU']),
                 round($r['reservado']),
                 round($r['ocPend']),

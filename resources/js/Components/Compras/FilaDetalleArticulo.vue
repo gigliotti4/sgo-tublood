@@ -43,7 +43,7 @@ const tituloProveedor = computed(() => {
     if (!props.item.p) {
         return otros.length ? `Sin un proveedor principal definido en el ERP. Cargados: ${otros.join(' · ')}` : 'Sin proveedor cargado en el ERP'
     }
-    return otros.length ? `Proveedor: ${props.item.p}\nTambién en el ERP: ${otros.join(' · ')}` : props.item.p
+    return otros.length ? `${props.item.p}\nTambién en el ERP: ${otros.join(' · ')}` : props.item.p
 })
 
 const td = 'whitespace-nowrap px-1.5 py-2 text-right text-[11.5px] tabular-nums'
@@ -111,10 +111,13 @@ const fueraDelPeriodo = (i: number) => i < props.filtros.desde || i > props.filt
         <td :class="sep" />
         <td />
         <td />
-        <td class="truncate px-1.5 py-2 text-left text-[11px]" :class="sep" :title="tituloProveedor">
-            <template v-if="item.p">{{ item.p }}</template>
-            <span v-else class="text-gray-400">–</span>
-            <span v-if="item.pa?.length" class="ml-0.5 text-[10px] text-gray-400">+{{ item.pa.length }}</span>
+        <!-- El desplegable es donde se ven TODOS: el del artículo y, debajo, los otros que tiene el ERP. -->
+        <td class="max-w-[150px] px-1.5 py-2 text-left text-[11px]" :class="sep" :title="tituloProveedor">
+            <div class="truncate">
+                <template v-if="item.p">{{ item.p }}</template>
+                <span v-else class="text-gray-400">–</span>
+            </div>
+            <div v-for="otro in item.pa ?? []" :key="otro" class="truncate text-[10px] text-gray-400">{{ otro }}</div>
         </td>
     </tr>
 </template>
