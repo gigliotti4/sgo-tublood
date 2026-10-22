@@ -26,6 +26,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'ventas.view', 'ventas.sync', 'ventas.montos',
             'partidas.view', 'partidas.sync',
             'compras.view', 'compras.sync',
+            'urgencias.view', 'urgencias.sync',
             'nc.view', 'nc.create', 'nc.gestionar', 'nc.aprobar',
             'configuracion.view', 'configuracion.edit',
         ];
@@ -120,6 +121,14 @@ class RolesAndPermissionsSeeder extends Seeder
         // acá. Quién ve Compras se decide asignando ESTE rol a cada usuario.
         $compras = Role::firstOrCreate(['name' => 'compras']);
         $compras->syncPermissions(['compras.view', 'compras.sync']);
+
+        // El tablero de urgencias en facturas proforma (22/10/2026), mismo
+        // criterio que Compras: muestra cuántas urgencias carga cada vendedor,
+        // así que lo ve solo quien tenga este rol (más los super-admin). Mismo
+        // ⚠️ que arriba: no sumarlo a los roles generales ni tocarlo desde la
+        // pantalla de Roles, que este seeder lo revierte en cada deploy.
+        $urgencias = Role::firstOrCreate(['name' => 'urgencias']);
+        $urgencias->syncPermissions(['urgencias.view', 'urgencias.sync']);
 
         Role::firstOrCreate(['name' => 'cliente_externo']);
 

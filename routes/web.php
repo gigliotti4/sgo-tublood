@@ -12,6 +12,7 @@ use App\Http\Controllers\Admin\PartidaController;
 use App\Http\Controllers\Admin\ProveedorController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\SectorController;
+use App\Http\Controllers\Admin\UrgenciaController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\VentaController;
 use App\Http\Controllers\ArticuloController;
@@ -186,6 +187,15 @@ Route::middleware(['auth'])->group(function () {
     });
     Route::middleware('can:compras.sync')->group(function () {
         Route::post('/compras/sync', [ComprasController::class, 'sync'])->name('compras.sync');
+    });
+
+    // Urgencias en facturas proforma: mismo esquema que Compras (dataset entero,
+    // filtros en el navegador) y rol propio. Ver UrgenciaController.
+    Route::middleware('can:urgencias.view')->group(function () {
+        Route::get('/urgencias', [UrgenciaController::class, 'index'])->name('urgencias.index');
+    });
+    Route::middleware('can:urgencias.sync')->group(function () {
+        Route::post('/urgencias/sync', [UrgenciaController::class, 'sync'])->name('urgencias.sync');
     });
 
     // Observaciones

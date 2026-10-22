@@ -332,6 +332,7 @@ const menuSections: MenuSection[] = [
             { label: 'Ventas', route: 'ventas.index', permission: 'ventas.view', icon: 'recibo' },
             { label: 'Partidas', route: 'partidas.index', permission: 'partidas.view', icon: 'caja' },
             { label: 'Compras', route: 'compras.index', permission: 'compras.view', icon: 'carrito' },
+            { label: 'Urgencias', route: 'urgencias.index', permission: 'urgencias.view', icon: 'rayo' },
         ]
     },
     {
@@ -377,6 +378,7 @@ onUnmounted(() => {
 
 // Heroicons paths (24px stroke)
 const icons: Record<string, string> = {
+    rayo: 'M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z',
     carrito: 'M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z',
     // El mismo triángulo que ya usaban el FAB y el selector de "Crear nuevo
     // registro" para No Conformidades: es el ícono con el que la sección ya se
