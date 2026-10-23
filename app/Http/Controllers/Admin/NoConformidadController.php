@@ -187,8 +187,15 @@ class NoConformidadController extends Controller
             // front, los dos criterios se desincronizarían.
             'permisos' => [
                 'editar' => $request->user()->can('update', $noConformidad),
-                'enviarAAprobacion' => $request->user()->can('enviarAAprobacion', $noConformidad),
-                'aprobar' => $request->user()->can('aprobar', $noConformidad),
+                // ⚠️ El estado se exige ACÁ además de en la Policy: `Gate::before`
+                // la saltea para los super-admin, y sin esto les mostraba
+                // "Aprobar" y "Enviar a aprobación" en una NC ya abierta. Al
+                // apretarlos el backend los rechazaba y no pasaba nada en
+                // pantalla (NC-0001-26, 23/10/2026).
+                'enviarAAprobacion' => $noConformidad->puedeTransicionarA('pendiente_aprobacion')
+                    && $request->user()->can('enviarAAprobacion', $noConformidad),
+                'aprobar' => $noConformidad->puedeTransicionarA('abierta')
+                    && $request->user()->can('aprobar', $noConformidad),
                 'gestionar' => $request->user()->can('gestionar', $noConformidad),
                 // La sección 3 tiene su propia llave: se escribe desde antes de
                 // la aprobación, así que no coincide con `gestionar`.

@@ -327,6 +327,19 @@ const confirmarCierre = () => {
                 </div>
             </div>
 
+            <!--
+                Un cambio de estado rechazado ("No se puede pasar de … a …")
+                vuelve en `errors.estado`. Hasta el 23/10/2026 solo se veía
+                dentro del modal de devolver/rechazar, así que un "Aprobar" o
+                un avance de etapa rechazado no mostraba nada.
+            -->
+            <p
+                v-if="erroresCompartidos.estado && !decision"
+                class="rounded-lg border border-error-200 bg-error-50 px-4 py-3 text-theme-sm text-error-600 dark:border-error-500/30 dark:bg-error-500/10 dark:text-error-400"
+            >
+                {{ erroresCompartidos.estado }}
+            </p>
+
             <div class="grid gap-6 lg:grid-cols-3">
                 <!-- Columna principal -->
                 <div class="space-y-6 lg:col-span-2">
@@ -434,6 +447,9 @@ const confirmarCierre = () => {
                             <Button variant="brand" :disabled="accion.processing" @click="aprobar">Aprobar</Button>
                             <Button variant="outline" @click="abrirDecision('devolver')">Devolver</Button>
                             <Button variant="danger" @click="abrirDecision('rechazar')">Rechazar</Button>
+                            <p v-if="erroresCompartidos.estado && !decision" class="w-full text-theme-sm text-error-500">
+                                {{ erroresCompartidos.estado }}
+                            </p>
                         </div>
                     </SeccionNc>
 

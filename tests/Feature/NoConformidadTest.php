@@ -320,6 +320,38 @@ class NoConformidadTest extends TestCase
         $this->assertSame('abierta', $nc->fresh()->estado);
     }
 
+    /**
+     * El bypass de `Gate::before` no mira el estado: sin el filtro del
+     * controller, a un super-admin se le ofrecían "Aprobar" y "Enviar a
+     * aprobación" en una NC ya abierta, y al apretarlos no pasaba nada
+     * (NC-0001-26, 23/10/2026).
+     */
+    public function test_al_super_admin_no_se_le_ofrece_aprobar_fuera_de_su_estado(): void
+    {
+        $admin = $this->superAdmin();
+
+        $this->actingAs($admin)
+            ->get("/no-conformidades/{$this->nc(['estado' => 'abierta'])->id}")
+            ->assertInertia(fn ($page) => $page
+                ->where('permisos.aprobar', false)
+                ->where('permisos.enviarAAprobacion', false)
+            );
+
+        $this->actingAs($admin)
+            ->get("/no-conformidades/{$this->nc(['estado' => 'pendiente_aprobacion'])->id}")
+            ->assertInertia(fn ($page) => $page
+                ->where('permisos.aprobar', true)
+                ->where('permisos.enviarAAprobacion', false)
+            );
+
+        $this->actingAs($admin)
+            ->get("/no-conformidades/{$this->nc(['estado' => 'borrador'])->id}")
+            ->assertInertia(fn ($page) => $page
+                ->where('permisos.aprobar', false)
+                ->where('permisos.enviarAAprobacion', true)
+            );
+    }
+
     // ── Bitácora (§7) ───────────────────────────────────────────────────────
 
     public function test_cada_cambio_de_estado_deja_entrada_en_la_bitacora(): void
