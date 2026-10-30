@@ -26,6 +26,7 @@ import { useOrdenamiento, type OrdenVigente } from '@/composables/useOrdenamient
 import type { Observacion, PaginatedData } from '@/types'
 import { proveedorDeProducto } from '@/lib/productos'
 import { badgeEstado, estadoLabels } from '@/lib/estados'
+import { nombreCreador } from '@/lib/bitacora'
 
 interface UsuarioOption {
     id: number
@@ -716,7 +717,10 @@ const guardar = () => {
                     <span class="font-mono text-sm text-gray-500 dark:text-gray-400">{{ observacionEnEdicion.numero }}</span>
                     <Badge variant="slate">{{ origenLabels[observacionEnEdicion.origen] ?? observacionEnEdicion.origen }}</Badge>
                     <Badge :variant="badgeEstado(observacionEnEdicion, prioridades).variant">{{ badgeEstado(observacionEnEdicion, prioridades).label }}</Badge>
-                    <span class="ml-auto text-theme-xs text-gray-400">Creada el {{ formatFecha(observacionEnEdicion.created_at) }}</span>
+                    <span class="ml-auto text-theme-xs text-gray-400">
+                        Creada el {{ formatFecha(observacionEnEdicion.created_at) }} por
+                        <span class="font-medium text-gray-600 dark:text-gray-300">{{ nombreCreador(observacionEnEdicion) }}</span>
+                    </span>
                 </div>
 
                 <!-- Dos columnas: detalle (solo lectura) a la izquierda, edición a la derecha -->

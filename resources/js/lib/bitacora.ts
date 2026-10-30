@@ -87,7 +87,17 @@ export const accionVariant: Record<string, 'slate' | 'blue' | 'indigo' | 'purple
 export const nombreAutor = (entrada: Pick<ObservationHistoryEntry, 'user'>) =>
     entrada.user ? [entrada.user.name, entrada.user.apellido].filter(Boolean).join(' ') : 'Sistema'
 
-export const formatFechaHora = (fecha: string) =>
+/**
+ * Quién cargó la observación. Sin `creador` hay dos casos distintos: entró por
+ * el portal público (origen externa, nadie logueado) o es anterior a que se
+ * guardara `created_by`, y no se puede saber.
+ */
+export const nombreCreador = (o: { creador?: { name: string; apellido: string | null } | null; origen: string }) =>
+    o.creador
+        ? [o.creador.name, o.creador.apellido].filter(Boolean).join(' ')
+        : o.origen === 'externa' ? 'Portal público' : 'Sin registro'
+
+export const formatFechaHora =(fecha: string) =>
     new Date(fecha).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
 export const formatSize = (bytes: number) => {

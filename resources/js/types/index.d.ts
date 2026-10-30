@@ -492,6 +492,8 @@ export interface Observacion {
     responsable_id: number | null
     responsable: { id: number; name: string } | null
     responsable_asignado_at: string | null
+    /** Quién la cargó desde el panel; null si entró por el portal público. */
+    creador?: { id: number; name: string; apellido: string | null } | null
     vence_at: string | null
     alerta_nivel: number
     sector_id: number | null

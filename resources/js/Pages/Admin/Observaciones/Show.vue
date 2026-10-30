@@ -14,6 +14,7 @@ import type { Observacion } from '@/types'
 import { proveedorDeProducto } from '@/lib/productos'
 import { partidaDeProducto, vencimientoDiscrepa } from '@/lib/partidas'
 import { badgeEstado } from '@/lib/estados'
+import { nombreCreador } from '@/lib/bitacora'
 
 const props = defineProps<{
     observacion: Observacion
@@ -174,6 +175,10 @@ const humanizar = (clave: string) =>
                         <div>
                             <dt class="text-theme-xs font-medium uppercase tracking-wide text-gray-400">Creada</dt>
                             <dd class="mt-0.5 text-sm text-gray-800 dark:text-white/90">{{ formatFecha(observacion.created_at) }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-theme-xs font-medium uppercase tracking-wide text-gray-400">Creada por</dt>
+                            <dd class="mt-0.5 text-sm text-gray-800 dark:text-white/90">{{ nombreCreador(observacion) }}</dd>
                         </div>
                     </dl>
                     <div class="mt-4">

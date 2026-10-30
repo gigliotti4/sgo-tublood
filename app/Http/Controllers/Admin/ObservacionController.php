@@ -593,6 +593,9 @@ class ObservacionController extends Controller
     private function eagerLoadsDeGestion(): array
     {
         return [
+            // Quién la cargó (null si entró por el portal). Columnas restringidas
+            // por el mismo motivo que `notificados`.
+            'creador:id,name,apellido',
             'historial' => fn ($query) => $query->latest()
                 ->with(['user:id,name,apellido', 'adjuntos:id,observation_history_id,original_name,size']),
             'attachments' => fn ($query) => $query->whereNull('observation_history_id')
