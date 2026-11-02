@@ -68,6 +68,11 @@ class Cliente extends Model
         return $this->hasMany(ClienteAttachment::class);
     }
 
+    public function observaciones(): HasMany
+    {
+        return $this->hasMany(Observacion::class);
+    }
+
     protected function modeloDocumento(): string
     {
         return ClienteDocumento::class;

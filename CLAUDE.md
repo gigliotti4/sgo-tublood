@@ -310,6 +310,19 @@ Tablero breve que responde **cuántas proformas carga cada vendedor como urgente
 - El Dashboard tiene **"Proveedores con más fallas"**, que cuenta **renglones de producto y no observaciones** (un caso con tres artículos del mismo proveedor le suma tres), excluye las canceladas (caso anulado o duplicado no es falla del proveedor) y **reporta aparte los renglones sin proveedor atribuible** — sin ese número el ranking mentiría por omisión, porque cuando se escribió 667 de los 4200 artículos no tenían proveedor cargado (con el principal de `PROVE_ARTI`, desde el 14/10/2026, ese número baja mucho — re-medirlo antes de citarlo). Cada barra lleva al listado filtrado por `proveedor_id`.
 - En el portal (`CargarObservacion.vue`) la sección de productos es una lista repetible (`form.productos: Producto[]`, botón "+ Agregar producto"); el controller valida con notación de array (`productos.*.campo`) y hace un loop de `$observacion->productos()->create($p)` dentro de la misma transacción que crea la observación.
 
+### API externa de solo lectura (`/api/v1`, desde el 2/11/2026)
+
+Un sistema externo consulta qué clientes tienen observaciones abiertas. Dos endpoints, ambos `GET`: `clientes-con-observaciones` (paginado de 100: `numero`, `razon_social`, `observaciones_abiertas`) y `clientes/{numero}/observaciones` (las abiertas de ese cliente; 404 JSON si el número no existe, lista vacía si no tiene abiertas). "Abierta" es `Observacion::ESTADOS_ABIERTOS`, la de siempre; las borradas quedan afuera por el soft delete.
+
+- **Auth: Sanctum con tokens Bearer**, de una entidad propia `Integracion` (tabla `integraciones`) y **no de un `User`**: un `User` puede entrar al panel, recibe roles y sale en los selectores de responsable. Cada token lleva la ability `observaciones:leer`, exigida por el alias `abilities` de `routes/api.php`.
+  - ⚠️ **Laravel 13 no registra el alias `abilities` solo**: se declara en `bootstrap/app.php`. Sin eso todas las rutas dan 500 `Target class [abilities] does not exist`.
+  - ⚠️ **`Integracion` tiene que extender `Authenticatable`**, no `Model`: el guard y `throttle:60,1` llaman `getAuthIdentifier()`.
+  - ⚠️ **`config/sanctum.php` → `'guard' => []`** a propósito: con el default `['web']` la sesión del panel también valdría como credencial. Hay un test que fija que no.
+- **Tokens por comando, sin pantalla** (hoy hay un solo consumidor): `api:token-crear {nombre} {--vence=días}` (lo muestra **una sola vez**; Sanctum guarda el hash), `api:token-revocar {nombre}` y `api:tokens` (nunca muestra el token). El token se pasa por un canal seguro, no por mail ni chat.
+- **Solo viaja lo básico**, con whitelist explícita en `Http/Resources/Api/` (nunca `toArray()` del modelo): `numero`, `tipo`, `estado`, `prioridad` (cada uno con su `_label`), `titulo`, `creada_at`, `vence_at`. **No** hay descripción, contacto de quien reclamó, productos ni responsable interno (decisión del 2/11/2026); ampliarlo es una decisión aparte. Un test verifica que ninguno de esos datos aparezca en el cuerpo.
+- ⚠️ **Se cruza por `observations.cliente_id`**, no por `contacto_numero_cliente`: un reclamo del portal cuyo número no matcheó ningún cliente local no tiene cliente y no aparece. Es lo correcto, pero hay que avisárselo al consumidor.
+- Rutas en `routes/api.php`; tests en `tests/Feature/ApiObservacionesAbiertasTest.php`.
+
 ### Dashboard — tiempos de resolución
 El KPI general (`tiempoPromedioResolucion()`) y el gráfico por sector (`tiempoResolucionPorSector()`) salen los dos de `cerradasDeLaVentana()`, el filtro compartido: si se escribiera dos veces, la tarjeta podría dejar de ser el promedio **ponderado** de las barras y la pantalla se contradiría sola (hay un test que lo fija). Se mide punta a punta (`created_at` → `cerrada_at`) sobre los últimos 90 días.
 - ⚠️ **El promedio se hace en PHP, nunca con `AVG(TIMESTAMPDIFF(...))`**: esa función es de MySQL y los tests corren en SQLite.
