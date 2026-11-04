@@ -38,6 +38,8 @@ const props = defineProps<{
     categorias: Record<string, string>
     mesesObjetivo: number[]
     mesesObjetivoDefault: number
+    /** Con qué filtros abre el tablero: `config('compras.tablero')`. */
+    filtrosBase: { ultimos_meses: number; categorias: string[]; depositos: string[]; agrupar: boolean }
     lastSync: { articulos: string | null; ordenes: string | null; pedidos: string | null; ventas: string | null }
     reservaSinConciliar: boolean
 }>()
@@ -49,9 +51,28 @@ const groups = shallowRef(props.groups)
 
 const catName = (codigo: string): string => props.categorias[codigo] ?? codigo
 
-const filtros = ref<FiltrosCompras>(
-    filtrosPorDefecto(props.mesesObjetivoDefault, Math.max(0, props.meses.length - 1)),
-)
+/**
+ * Los filtros con los que abre el tablero, y a los que vuelve "Limpiar filtros".
+ *
+ * ⚠️ Categorías y depósitos se cruzan con lo que realmente llegó. Si el depósito
+ * del default no está (p. ej. todavía no se sincronizó el stock por depósito),
+ * se cae a "todos": elegir uno que no existe suma 0 en el stock de cada
+ * producto y el tablero abriría con todo "sin stock".
+ */
+const filtrosIniciales = (): FiltrosCompras => {
+    const base = props.filtrosBase
+    const depositos = base.depositos.filter(c => props.depositos.some(d => d.c === c))
+
+    return filtrosPorDefecto(props.mesesObjetivoDefault, Math.max(0, props.meses.length - 1), {
+        ultimosMeses: base.ultimos_meses,
+        cats: base.categorias.filter(c => c in props.categorias),
+        // Todos los depósitos elegidos = "todos" (lista vacía): ver `stockDe()`.
+        depositos: depositos.length === props.depositos.length ? [] : depositos,
+        agrupar: base.agrupar,
+    })
+}
+
+const filtros = ref<FiltrosCompras>(filtrosIniciales())
 
 const orden = ref<{ key: ClaveOrden | null; dir: 'asc' | 'desc' }>({ key: null, dir: 'desc' })
 const mostrarMeses = ref(false)
@@ -59,7 +80,7 @@ const pagina = ref(0)
 const porPagina = ref(100)
 
 const limpiar = () => {
-    filtros.value = filtrosPorDefecto(props.mesesObjetivoDefault, Math.max(0, props.meses.length - 1))
+    filtros.value = filtrosIniciales()
 }
 
 const hayFiltros = computed(() => {

@@ -42,7 +42,9 @@ class CalculoReposicion
             'pareto' => 'all',
             'servicios' => false,
             'depositos' => [],
-            // Mismo default que `filtrosPorDefecto()` del front: sin agrupar.
+            // Neutro, como `filtrosPorDefecto()` del front SIN base (sin agrupar). Con
+            // qué filtros abre el tablero lo decide `config('compras.tablero')` y no
+            // pasa por acá: la alerta declara los suyos en `config('compras.alerta')`.
             'agrupar' => false,
             'bonificados' => 'all',
         ];

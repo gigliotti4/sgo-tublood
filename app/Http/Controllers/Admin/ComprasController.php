@@ -39,6 +39,7 @@ class ComprasController extends Controller
             'categorias' => config('compras.categorias'),
             'mesesObjetivo' => config('compras.meses_objetivo'),
             'mesesObjetivoDefault' => config('compras.meses_objetivo_default'),
+            'filtrosBase' => config('compras.tablero'),
             // Se muestran las cuatro por separado porque se sincronizan por
             // caminos distintos: las ventas van con `ventas:sync` (04:00) y el
             // resto con `compras:sync` (05:00). Si una queda vieja, el tablero

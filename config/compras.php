@@ -114,7 +114,20 @@ return [
 
     // Botonera "Meses de stock objetivo".
     'meses_objetivo' => [1, 1.5, 2, 3],
-    'meses_objetivo_default' => 2,
+    'meses_objetivo_default' => 1.5,
+
+    // Con qué filtros ABRE el tablero (pedido del 4/11/2026, marcados a mano sobre
+    // una captura). Son códigos del ERP: `categorias` son claves de `categorias`
+    // de arriba y `depositos` son los códigos de `compras_stock_depositos`
+    // (DEP = "Deposito unico"). El front los valida contra lo que llegó: un
+    // depósito que no esté se ignora, porque elegir uno inexistente da stock 0
+    // en todos los productos.
+    'tablero' => [
+        'ultimos_meses' => 3,
+        'categorias' => ['DIS'],
+        'depositos' => ['DEP'],
+        'agrupar' => true,
+    ],
 
     // Cuántos meses de ventas se mandan al tablero. 25 son ~2 años, que es todo
     // lo que hay en `ventas` (la sync cubre desde 2024-08).

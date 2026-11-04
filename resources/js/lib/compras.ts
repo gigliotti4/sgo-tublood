@@ -99,19 +99,38 @@ export interface FilaReposicion {
     cumPct: number
 }
 
-export const filtrosPorDefecto = (mesesObjetivo: number, ultimoMes: number): FiltrosCompras => ({
+/**
+ * Con qué filtros abre el tablero. Todo opcional: lo que falte queda en el
+ * valor neutro de `filtrosPorDefecto()`.
+ */
+export interface BaseFiltros {
+    /** Cuántos meses finales analizar (el preset "Últ. N"). 0 o ausente = todo el historial. */
+    ultimosMeses?: number
+    cats?: string[]
+    depositos?: string[]
+    agrupar?: boolean
+}
+
+/**
+ * ⚠️ Sin `base` devuelve los valores NEUTROS (todo, sin filtrar): es lo que
+ * calca `CalculoReposicion::filtros()` y lo que usa la comparación de paridad
+ * (`.claude/scripts/paridad-compras`). Con qué filtros ABRE la pantalla lo
+ * decide `config('compras.tablero')`, que llega como `base`.
+ */
+export const filtrosPorDefecto = (mesesObjetivo: number, ultimoMes: number, base: BaseFiltros = {}): FiltrosCompras => ({
     mesesObjetivo,
-    desde: 0,
+    // Mismo cálculo que el botón "Últ. N" de FiltrosCompras.vue.
+    desde: base.ultimosMeses ? Math.max(0, ultimoMes - (base.ultimosMeses - 1)) : 0,
     hasta: ultimoMes,
-    cats: [],
+    cats: base.cats ?? [],
     activo: 'all',
     stock: 'all',
     cubre: 'all',
     pareto: 'all',
     q: '',
     servicios: false,
-    depositos: [],
-    agrupar: false,
+    depositos: base.depositos ?? [],
+    agrupar: base.agrupar ?? false,
     bonificados: 'all',
 })
 
