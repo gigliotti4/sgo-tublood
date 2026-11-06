@@ -60,6 +60,15 @@ return [
     // y disparan el aviso final al gerente del responsable.
     'estados_finales' => ['cerrada'],
 
+    // Días hábiles de plazo para quien no tiene sector, o cuyo sector no tiene
+    // `dias_gestion` cargado. `null` = sin plazo (lo de siempre).
+    //
+    // ⚠️ El cliente todavía no dio el número (pedido del 6/11/2026: "plazo por
+    // defecto si el responsable no tiene sector"). Activarlo también le pone
+    // vencimiento a Compras, Finanzas, Dirección Técnica y Producción, que hoy
+    // nunca alertan: por eso arranca apagado.
+    'plazo_por_defecto_dias' => null,
+
     // Quién atiende cada tipo de reclamo que entra por el portal público.
     //
     // Define a quién le llega el mail del alta y a quién le aparece el reclamo
@@ -178,6 +187,10 @@ return [
             'falla_proveedor_externo' => [
                 'codigo' => '3.5',
                 'label' => 'Falla de proveedor externo',
+                // Retirado el 6/11/2026: pasa a E.1 "Falla de logística tercerizada"
+                // (grupo de fallos externos). Se sigue resolviendo para lo ya
+                // cargado, pero no se ofrece en altas ni cambios de tipo.
+                'obsoleto' => true,
                 'campos' => [
                     ['id' => 'nombre_proveedor_externo', 'label' => 'Nombre del proveedor', 'tipo' => 'text', 'required' => true],
                 ],
@@ -269,6 +282,9 @@ return [
             'falla_proveedor' => [
                 'codigo' => '6.2',
                 'label' => 'Falla de proveedor',
+                // Retirado el 6/11/2026: pasa a E.2 "Falla de proveedor (Compras)".
+                // Ver el comentario de 3.5.
+                'obsoleto' => true,
                 // Pedido del 21/10/2026: los productos del proveedor que falló,
                 // sin obligar (a veces la falla es de plazo o de documentación).
                 'productos' => 'opcionales',
@@ -315,9 +331,30 @@ return [
             // repetibles, que valida Admin\ObservacionController::storeInternaEspecial().
             'falla_producto' => [
                 'codigo' => '1.1',
-                'label' => 'Falla de producto',
+                // Desde el 6/11/2026 es SOLO para producto propio. Lo de reventa pasa a
+                // E.3 "Falla de calidad – distribución" (el responsable técnico es el
+                // fabricante). Ver `reclasificacion.producto_1_1`.
+                'label' => 'Falla de calidad – producto propio',
                 'especial' => true,
                 'productos' => 'requeridos',
+                // ⚠️ Estos campos solo los pide la carga INTERNA (`storeInternaEspecial`).
+                // El portal público no los muestra: no se le puede preguntar al cliente
+                // si el producto es importado o fabricado por Tublood. Por eso los
+                // reclamos que entran por el portal los traen vacíos.
+                //
+                // El origen hoy lo elige quien carga; lo ideal es que salga del
+                // maestro de productos de RP (pendiente: no existe ese dato).
+                'campos' => [
+                    ['id' => 'origen_producto', 'label' => 'Origen del producto', 'tipo' => 'select', 'required' => true, 'opciones' => ['Importado (marca propia)', 'Fabricado por TUBLOOD']],
+                    // `visible_si`: aparecen al elegir el origen. El backend descarta
+                    // lo que quedó cargado de una opción que ya no es la elegida.
+                    ['id' => 'fabricante_origen', 'label' => 'Fabricante de origen', 'tipo' => 'text', 'visible_si' => ['campo' => 'origen_producto', 'valor' => 'Importado (marca propia)']],
+                    ['id' => 'numero_despacho', 'label' => 'N.º de despacho', 'tipo' => 'text', 'visible_si' => ['campo' => 'origen_producto', 'valor' => 'Importado (marca propia)']],
+                    ['id' => 'linea_produccion', 'label' => 'Línea de producción', 'tipo' => 'text', 'visible_si' => ['campo' => 'origen_producto', 'valor' => 'Fabricado por TUBLOOD']],
+                    ['id' => 'fecha_produccion_op', 'label' => 'Fecha de producción u OP', 'tipo' => 'text', 'visible_si' => ['campo' => 'origen_producto', 'valor' => 'Fabricado por TUBLOOD']],
+                    ['id' => 'muestra_disponible', 'label' => '¿Hay muestra disponible?', 'tipo' => 'select', 'required' => true, 'opciones' => ['Sí', 'No', 'Solicitada al cliente']],
+                    ['id' => 'afecta_paciente', 'label' => '¿Puede afectar al paciente o al resultado?', 'tipo' => 'select', 'required' => true, 'opciones' => ['Sí', 'No', 'A evaluar']],
+                ],
             ],
             'disconformidad_servicio' => [
                 'codigo' => '1.2',
@@ -472,6 +509,88 @@ return [
                 ],
             ],
             'falla_proceso_apositos' => $fallaDeProceso('10.9', 'Producción de Apósitos'),
+        ],
+
+        /*
+        | Fallos externos (pedido del 6/11/2026).
+        |
+        | Antes cada sector tenía su propio "falla de proveedor" (3.5 en Logística,
+        | 6.2 en Compras, y 1.1 para productos de reventa). Se reemplazan por un
+        | solo grupo con un formulario para cada caso: el responsable técnico no es
+        | un sector de Tublood sino un tercero (transporte, proveedor o fabricante).
+        |
+        | Es el sector 11 (slug `externos`) y no una marca aparte porque el tablero
+        | los cuenta por sector, junto a los demás.
+        |
+        | ⚠️ El campo "proveedor" es obligatorio en los tres y de ahí sale el
+        | ranking "Proveedores y transportes" del tablero.
+        */
+        'externos' => [
+            'falla_logistica_tercerizada' => [
+                'codigo' => 'E.1',
+                'label' => 'Falla de logística tercerizada',
+                'campos' => [
+                    // `texto_sugerido`: la lista no es cerrada ("+ Otro"), así que
+                    // se puede escribir uno que no esté.
+                    ['id' => 'transporte', 'label' => 'Transporte / proveedor', 'tipo' => 'texto_sugerido', 'required' => true, 'opciones' => ['Sneider', 'Demonte', 'Cruz del Sur', 'Otro']],
+                    ['id' => 'motivo', 'label' => 'Motivo', 'tipo' => 'select', 'required' => true, 'opciones' => [
+                        'Demora en entrega',
+                        'No avisó (demora o novedad)',
+                        'Mercadería dañada',
+                        'Faltante o bulto perdido',
+                        'Entrega en lugar incorrecto',
+                        'Flete cobrado mal (pago en origen no respetado)',
+                        'Otro',
+                    ]],
+                    ['id' => 'numero_guia', 'label' => 'N.º de guía', 'tipo' => 'text', 'required' => true],
+                    ['id' => 'numero_remito', 'label' => 'N.º de remito', 'tipo' => 'text', 'required' => true],
+                    ['id' => 'condicion_flete', 'label' => 'Condición de flete', 'tipo' => 'select', 'opciones' => ['Pago en origen', 'Pago en destino']],
+                    ['id' => 'fecha_despacho', 'label' => 'Fecha de despacho', 'tipo' => 'date'],
+                    ['id' => 'fecha_comprometida', 'label' => 'Fecha comprometida de entrega', 'tipo' => 'date'],
+                    // Si la mercadería no llegó, queda vacía.
+                    ['id' => 'fecha_real', 'label' => 'Fecha real de entrega', 'tipo' => 'date'],
+                    ['id' => 'detalle', 'label' => 'Descripción del fallo', 'tipo' => 'textarea', 'required' => true],
+                ],
+            ],
+            'falla_proveedor_compras' => [
+                'codigo' => 'E.2',
+                'label' => 'Falla de proveedor (Compras)',
+                // Productos opcionales, como el 6.2 al que reemplaza: a veces la
+                // falla es de plazo o de documentación y no hay producto que cargar.
+                'productos' => 'opcionales',
+                'campos' => [
+                    ['id' => 'proveedor', 'label' => 'Proveedor', 'tipo' => 'proveedor', 'required' => true],
+                    ['id' => 'motivo', 'label' => 'Motivo', 'tipo' => 'select', 'required' => true, 'opciones' => [
+                        'Demora en entrega',
+                        'Producto no conforme',
+                        'Error de especificación o documentación',
+                        'Faltante',
+                        'Otro',
+                    ]],
+                    ['id' => 'numero_oc', 'label' => 'N.º de orden de compra', 'tipo' => 'text'],
+                    ['id' => 'disposicion', 'label' => 'Disposición', 'tipo' => 'select', 'opciones' => [
+                        'Devolución al proveedor', 'Uso condicional', 'Destrucción', 'Pendiente',
+                    ]],
+                    ['id' => 'impacto', 'label' => 'Impacto', 'tipo' => 'select', 'opciones' => [
+                        'Ninguno', 'Demora a cliente', 'Producción parada',
+                    ]],
+                    ['id' => 'detalle', 'label' => 'Descripción del fallo', 'tipo' => 'textarea', 'required' => true],
+                ],
+            ],
+            'falla_calidad_distribucion' => [
+                'codigo' => 'E.3',
+                'label' => 'Falla de calidad – distribución',
+                // Productos que revendemos: el responsable técnico es el fabricante.
+                'requiere_cliente' => true,
+                'productos' => 'requeridos',
+                'campos' => [
+                    ['id' => 'proveedor', 'label' => 'Proveedor / fabricante', 'tipo' => 'proveedor', 'required' => true],
+                    ['id' => 'muestra_disponible', 'label' => '¿Hay muestra disponible?', 'tipo' => 'select', 'required' => true, 'opciones' => ['Sí', 'No', 'Solicitada al cliente']],
+                    ['id' => 'afecta_paciente', 'label' => '¿Puede afectar al paciente o al resultado?', 'tipo' => 'select', 'required' => true, 'opciones' => ['Sí', 'No', 'A evaluar (lo define Calidad)']],
+                    ['id' => 'numero_reclamo_proveedor', 'label' => 'N.º de reclamo al proveedor', 'tipo' => 'text'],
+                    ['id' => 'detalle', 'label' => 'Descripción del fallo', 'tipo' => 'textarea', 'required' => true],
+                ],
+            ],
         ],
     ],
 ];

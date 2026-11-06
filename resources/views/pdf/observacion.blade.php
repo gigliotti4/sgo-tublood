@@ -154,8 +154,19 @@
         <td class="k">Fecha de creación</td>
         <td class="v">{{ $observacion->created_at?->format('d/m/Y') ?? '—' }}</td>
         <td class="k">Vence</td>
-        <td class="v">{{ $observacion->vence_at?->format('d/m/Y') ?? 'Sin plazo' }}</td>
+        <td class="v">
+            {{ $observacion->vencimiento()?->format('d/m/Y') ?? 'Sin plazo' }}
+            @if ($observacion->prorroga_hasta && $observacion->vence_at)
+                (prorrogado; plazo original {{ $observacion->vence_at->format('d/m/Y') }})
+            @endif
+        </td>
     </tr>
+    @if ($verResponsableDelFallo ?? false)
+        <tr>
+            <td class="k">Responsable del fallo</td>
+            <td class="v" colspan="3">{{ $observacion->responsableFallo?->nombre ?? 'Sin cargar' }}</td>
+        </tr>
+    @endif
 </table>
 
 <h2>Descripción</h2>

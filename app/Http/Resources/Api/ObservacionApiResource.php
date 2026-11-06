@@ -30,7 +30,8 @@ class ObservacionApiResource extends JsonResource
                 : null,
             'titulo' => $this->titulo,
             'creada_at' => $this->created_at?->toIso8601String(),
-            'vence_at' => $this->vence_at?->toIso8601String(),
+            // El plazo vigente: con una prórroga autorizada es la fecha nueva.
+            'vence_at' => $this->vencimiento()?->toIso8601String(),
         ];
     }
 }

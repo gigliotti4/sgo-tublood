@@ -29,6 +29,10 @@ class SectorSeeder extends Seeder
             // `PRODUCCIÓN` ahora matchea solo: esa gente dejaba de quedar sin
             // sector, que era un agujero conocido del import.
             'produccion' => ['nombre' => 'Producción', 'dias_gestion' => null],
+            // Fallos de terceros (transporte, proveedor, fabricante): el sector
+            // 11, desde el 6/11/2026. No son gente de Tublood, así que no hay
+            // usuarios ni plazo propio. Ver `externos` en config/incidencias.php.
+            'externos' => ['nombre' => 'Externos', 'dias_gestion' => null],
         ];
 
         foreach ($sectores as $slug => $datos) {

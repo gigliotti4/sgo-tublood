@@ -43,6 +43,14 @@ class CambioDeTipo
             ]);
         }
 
+        // Un tipo retirado no se ofrece como destino. Dejarlo donde está sí se
+        // permite (mover solo el sector o los datos de lo ya cargado).
+        if ($tipo !== $observacion->tipo && TaxonomiaIncidencias::esObsoleto($sector->slug, $tipo)) {
+            throw ValidationException::withMessages([
+                'tipo' => 'Ese tipo de incidencia ya no se usa: elegí el equivalente del grupo "Externos".',
+            ]);
+        }
+
         if (TaxonomiaIncidencias::requiereCliente($sector->slug, $tipo) && blank($observacion->contacto_numero_cliente)) {
             throw ValidationException::withMessages([
                 'tipo' => 'Ese tipo exige el N° de cliente, y esta observación no lo tiene cargado.',
@@ -52,11 +60,11 @@ class CambioDeTipo
         $eraEspecial = $this->esEspecial((string) $observacion->tipo);
         $esEspecial = TaxonomiaIncidencias::esTipoEspecial($sector->slug, $tipo);
 
-        // Cruzar hacia un reclamo de cliente que exige productos sin tenerlos
-        // dejaría una ficha vacía. Dentro de los especiales no se revisa: ya
-        // era así y no es lo que se está cambiando.
-        if ($esEspecial && ! $eraEspecial
-            && TaxonomiaIncidencias::productos($tipo) === 'requeridos'
+        // Pasar a un tipo que exige productos (1.1 y E.3) sin tenerlos dejaría
+        // una ficha vacía. Entre dos especiales no se revisa: ya era así y no es
+        // lo que se está cambiando.
+        if (TaxonomiaIncidencias::productos($tipo) === 'requeridos'
+            && ! ($esEspecial && $eraEspecial)
             && ! $observacion->productos()->exists()) {
             throw ValidationException::withMessages([
                 'tipo' => 'Ese tipo exige productos afectados, y esta observación no tiene ninguno cargado.',

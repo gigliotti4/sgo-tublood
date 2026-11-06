@@ -51,12 +51,19 @@ const props = withDefaults(defineProps<{
     presentaciones: Record<string, string>
     errors: Record<string, string | undefined>
     obligatorios?: boolean
+    /**
+     * Si la presentación es obligatoria. Sigue a `obligatorios` salvo que se
+     * indique: E.3 "Falla de calidad – distribución" exige lote y vencimiento
+     * pero no la presentación.
+     */
+    presentacionObligatoria?: boolean
     conComprobante?: boolean
     /** Prefijo de los errores del backend (`productos.0.lote`). */
     campo?: string
     disabled?: boolean
 }>(), {
     obligatorios: true,
+    presentacionObligatoria: undefined,
     conComprobante: true,
     campo: 'productos',
     disabled: false,
@@ -121,12 +128,12 @@ const puedeQuitar = () => !props.disabled && (!props.obligatorios || productos.v
                 />
                 <Select
                     v-model="producto.tipo_presentacion"
-                    :required="obligatorios"
+                    :required="presentacionObligatoria ?? obligatorios"
                     label="Presentación"
                     hint="A qué corresponde la cantidad afectada."
                     :error="error(index, 'tipo_presentacion')"
                 >
-                    <option value="" :disabled="obligatorios">— Seleccionar —</option>
+                    <option value="" :disabled="presentacionObligatoria ?? obligatorios">— Seleccionar —</option>
                     <option v-for="(label, key) in presentaciones" :key="key" :value="key">{{ label }}</option>
                 </Select>
                 <Input

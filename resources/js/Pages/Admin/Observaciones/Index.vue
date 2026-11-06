@@ -8,6 +8,8 @@ import Button from '@/Components/Button.vue'
 import AdjuntosObservacion from '@/Components/AdjuntosObservacion.vue'
 import BitacoraObservacion from '@/Components/BitacoraObservacion.vue'
 import CambioTipoObservacion from '@/Components/CambioTipoObservacion.vue'
+import ProrrogaObservacion from '@/Components/ProrrogaObservacion.vue'
+import SelectResponsableFallo from '@/Components/SelectResponsableFallo.vue'
 import { type CampoDef } from '@/Components/CampoDinamico.vue'
 import FormSection from '@/Components/FormSection.vue'
 import Icon from '@/Components/Icon.vue'
@@ -24,7 +26,7 @@ import SelectorMultipleAsync, { type OpcionAsync } from '@/Components/SelectorMu
 import Textarea from '@/Components/Textarea.vue'
 import ThOrdenable from '@/Components/ThOrdenable.vue'
 import { useOrdenamiento, type OrdenVigente } from '@/composables/useOrdenamiento'
-import type { Observacion, PaginatedData } from '@/types'
+import type { Observacion, PaginatedData, Persona } from '@/types'
 import { proveedorDeProducto } from '@/lib/productos'
 import { badgeEstado, estadoLabels } from '@/lib/estados'
 import { nombreCreador } from '@/lib/bitacora'
@@ -46,6 +48,7 @@ interface Filtros {
     tipo_caso?: string
     responsable_id?: number[]
     creado_por?: number[]
+    responsable_fallo_id?: number[]
     articulo_codigo?: string[]
     proveedor_id?: number[]
     apertura?: string
@@ -62,6 +65,10 @@ const props = defineProps<{
     tipoLabels: Record<string, string>
     prioridades: Record<string, string>
     tiposCaso: string[]
+    /** "Responsable del fallo": solo lo ven y cargan los jefes y Calidad. */
+    puedeVerResponsableFallo: boolean
+    personas: Persona[]
+    motivosProrroga: Record<string, string>
     presentaciones: Record<string, string>
     /**
      * Corregir el título y la descripción del reclamo. No viene por fila: la
@@ -97,6 +104,8 @@ const filtros = reactive({
     // "el responsable es cualquiera de estos"), no un solo valor.
     responsable_id: Array.isArray(props.filters.responsable_id) ? props.filters.responsable_id : [] as number[],
     creado_por: Array.isArray(props.filters.creado_por) ? props.filters.creado_por : [] as number[],
+    // Solo tiene efecto para jefes y Calidad: el backend lo descarta para los demás.
+    responsable_fallo_id: Array.isArray(props.filters.responsable_fallo_id) ? props.filters.responsable_fallo_id : [] as number[],
     articulo_codigo: Array.isArray(props.filters.articulo_codigo) ? props.filters.articulo_codigo : [] as string[],
     proveedor_id: Array.isArray(props.filters.proveedor_id) ? props.filters.proveedor_id : [] as number[],
     apertura: props.filters.apertura ?? '',
@@ -146,7 +155,7 @@ watch(filtros, () => {
 const limpiarFiltros = () => {
     Object.assign(filtros, {
         q: '', origen: '', prioridad: '', tipo_caso: '',
-        responsable_id: [], creado_por: [], articulo_codigo: [], proveedor_id: [], apertura: '', desde: '', hasta: '', anio: [],
+        responsable_id: [], creado_por: [], responsable_fallo_id: [], articulo_codigo: [], proveedor_id: [], apertura: '', desde: '', hasta: '', anio: [],
     })
 }
 
@@ -165,13 +174,20 @@ const formatFecha = (d: string | null) =>
 const ESTADOS_FINALES = ['cerrada', 'cancelada']
 
 /**
- * Plazo de gestión: arranca al asignar el responsable y sale del sector de esa
- * persona. Sin responsable (o sin plazo cargado en su sector) no hay vencimiento.
+ * Plazo de gestión: arranca en la PRIMERA asignación del responsable (reasignar
+ * no lo reinicia) y sale del sector de esa persona. Sin plazo cargado no hay
+ * vencimiento. Cuenta el plazo vigente: la prórroga autorizada si la hay y, si
+ * no, el original (`Observacion::vencimiento()`).
  */
-const estadoPlazo = (o: Observacion): { label: string; variant: 'red' | 'amber' } | null => {
-    if (!o.vence_at || ESTADOS_FINALES.includes(o.estado)) return null
+const estadoPlazo = (o: Observacion): { label: string; variant: 'red' | 'amber' | 'blue' } | null => {
+    const vigente = o.prorroga_hasta ?? o.vence_at
 
-    const dias = Math.ceil((new Date(o.vence_at).getTime() - Date.now()) / 86400000)
+    if (!vigente || ESTADOS_FINALES.includes(o.estado)) return null
+
+    const dias = Math.ceil((new Date(vigente).getTime() - Date.now()) / 86400000)
+
+    // En prórroga: no cuenta como vencida hasta la fecha autorizada.
+    if (o.prorroga_hasta && dias >= 0) return { label: `En prórroga hasta ${formatFecha(o.prorroga_hasta)}`, variant: 'blue' }
 
     if (dias < 0) return { label: `Vencida hace ${Math.abs(dias)} d`, variant: 'red' }
     if (dias <= 1) return { label: dias === 0 ? 'Vence hoy' : 'Vence mañana', variant: 'amber' }
@@ -204,6 +220,7 @@ const estadoOpciones = computed(() => Object.entries(estadoLabels).filter(
 
 const form = useForm({
     responsable_id: null as number | null,
+    responsable_fallo_id: null as number | null,
     sector_id: null as number | null,
     estado: '',
     prioridad: null as string | null,
@@ -218,6 +235,7 @@ const abrirEdicion = (o: Observacion) => {
     idEnEdicion.value = o.id
     form.clearErrors()
     form.responsable_id = o.responsable_id
+    form.responsable_fallo_id = o.responsable_fallo_id ?? null
     form.sector_id = o.sector_id
     form.estado = o.estado
     form.prioridad = o.prioridad
@@ -445,6 +463,15 @@ const guardar = () => {
                                 v-model="filtros.creado_por"
                                 label="Creador"
                                 :opciones="usuarios.map(u => ({ id: u.id, label: nombreCompleto(u) }))"
+                            />
+                        </div>
+
+                        <!-- Solo jefes y Calidad: a los demás ni se les dibuja ni el backend lo aplica. -->
+                        <div v-if="puedeVerResponsableFallo" class="xl:col-span-3">
+                            <SelectorMultiple
+                                v-model="filtros.responsable_fallo_id"
+                                label="Responsable del fallo"
+                                :opciones="personas.map(p => ({ id: p.id, label: p.nombre }))"
                             />
                         </div>
 
@@ -836,6 +863,17 @@ const guardar = () => {
                             </div>
                         </div>
 
+                        <!-- Plazo y prórroga: el responsable la pide desde acá; resolverla se hace en la ficha. -->
+                        <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
+                            <p class="mb-2 text-theme-xs font-medium uppercase tracking-wide text-gray-400">Plazo</p>
+                            <ProrrogaObservacion
+                                :observacion="observacionEnEdicion"
+                                :motivos="motivosProrroga"
+                                :puede-pedir="puedeEditar(observacionEnEdicion)"
+                                :puede-autorizar="false"
+                            />
+                        </div>
+
                         <!-- Adjuntos: del portal, del alta, o cargados acá mismo -->
                         <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-800">
                             <p class="mb-2 text-theme-xs font-medium uppercase tracking-wide text-gray-400">
@@ -924,6 +962,15 @@ const guardar = () => {
                                     {{ nombreCompleto(usuario) }}
                                 </option>
                             </Select>
+
+                            <!-- Quién cometió el error (no quien gestiona). Solo para jefes y Calidad. -->
+                            <SelectResponsableFallo
+                                v-if="puedeVerResponsableFallo"
+                                v-model="form.responsable_fallo_id"
+                                :personas="personas"
+                                :sector-id="form.sector_id"
+                                :error="form.errors.responsable_fallo_id"
+                            />
 
                             <SelectorUsuarios
                                 v-model="form.notificados"

@@ -254,28 +254,84 @@ class AlertasObservacionTest extends TestCase
         $this->assertNull($observacion->vence_at);
     }
 
-    public function test_reasignar_reinicia_el_reloj_y_el_nivel_de_alerta(): void
+    /**
+     * Pedido del 6/11/2026: reasignar NO reinicia el plazo. Hasta entonces sí, y
+     * era la forma de "reiniciar" un caso vencido pasándoselo a otro (0031, 0043
+     * y 0057 dejaron de figurar vencidas al reasignarse).
+     */
+    public function test_reasignar_no_reinicia_el_reloj_ni_saca_al_caso_de_vencidas(): void
     {
+        $this->travelTo('2026-07-20 09:00:00');
+
         $observacion = $this->observacion(['responsable_id' => $this->responsable(2)->id]);
         $observacion->update(['alerta_nivel' => 1]);
+        $venceAntes = $observacion->fresh()->vence_at;
+        $asignadaAntes = $observacion->fresh()->responsable_asignado_at;
 
         $this->travel(10)->days();
         $observacion->update(['responsable_id' => $this->responsable(5)->id]);
 
         $observacion->refresh();
-        $this->assertSame(0, $observacion->alerta_nivel);
-        $this->assertTrue($observacion->vence_at->isAfter(now()));
+        $this->assertEquals($venceAntes, $observacion->vence_at);
+        $this->assertEquals($asignadaAntes, $observacion->responsable_asignado_at);
+        $this->assertSame(1, $observacion->alerta_nivel);
+        // Sigue vencida pese a la reasignación.
+        $this->assertTrue($observacion->vence_at->isPast());
+        $this->assertSame(1, Observacion::vencidas()->count());
     }
 
-    public function test_desasignar_al_responsable_apaga_el_reloj(): void
+    public function test_desasignar_al_responsable_no_apaga_el_reloj(): void
     {
         $observacion = $this->observacion(['responsable_id' => $this->responsable()->id]);
+        $venceAntes = $observacion->fresh()->vence_at;
 
         $observacion->update(['responsable_id' => null]);
 
         $observacion->refresh();
+        $this->assertEquals($venceAntes, $observacion->vence_at);
+        $this->assertNotNull($observacion->responsable_asignado_at);
+    }
+
+    public function test_volver_a_asignar_despues_de_desasignar_tampoco_reinicia(): void
+    {
+        $this->travelTo('2026-07-20 09:00:00');
+        $observacion = $this->observacion(['responsable_id' => $this->responsable(2)->id]);
+        $venceAntes = $observacion->fresh()->vence_at;
+
+        $observacion->update(['responsable_id' => null]);
+        $this->travel(5)->days();
+        $observacion->update(['responsable_id' => $this->responsable(5)->id]);
+
+        $this->assertEquals($venceAntes, $observacion->fresh()->vence_at);
+    }
+
+    /** Si el primero no tenía plazo y el nuevo sí, se cuenta desde la PRIMERA asignación, no desde hoy. */
+    public function test_si_el_primero_no_tenia_plazo_se_cuenta_desde_la_primera_asignacion(): void
+    {
+        $this->travelTo('2026-07-20 09:00:00');
+        $observacion = $this->observacion(['responsable_id' => User::factory()->create()->id]);
         $this->assertNull($observacion->vence_at);
-        $this->assertNull($observacion->responsable_asignado_at);
+
+        $this->travel(10)->days();
+        $observacion->update(['responsable_id' => $this->responsable(2)->id]);
+
+        // Lunes 20/7 + 2 días hábiles = miércoles 22/7, no 10 días más tarde.
+        $this->assertSame('2026-07-22', $observacion->fresh()->vence_at->toDateString());
+    }
+
+    public function test_sin_sector_usa_el_plazo_por_defecto_si_esta_configurado(): void
+    {
+        $this->travelTo('2026-07-20 09:00:00');
+
+        // Apagado (como viene): sin sector no hay vencimiento.
+        $sinDefault = $this->observacion(['numero' => '0100-26', 'responsable_id' => User::factory()->create()->id]);
+        $this->assertNull($sinDefault->vence_at);
+
+        config(['incidencias.plazo_por_defecto_dias' => 4]);
+
+        $conDefault = $this->observacion(['numero' => '0101-26', 'responsable_id' => User::factory()->create()->id]);
+        // Lunes + 4 días hábiles = viernes.
+        $this->assertSame('2026-07-24', $conDefault->vence_at->toDateString());
     }
 
     /**

@@ -51,7 +51,7 @@ class ObservacionesAbiertasController extends Controller
         $observaciones = $cliente->observaciones()
             ->whereIn('estado', Observacion::ESTADOS_ABIERTOS)
             ->orderBy('id')
-            ->get(['id', 'numero', 'tipo', 'estado', 'prioridad', 'titulo', 'vence_at', 'created_at']);
+            ->get(['id', 'numero', 'tipo', 'estado', 'prioridad', 'titulo', 'vence_at', 'prorroga_hasta', 'created_at']);
 
         return response()->json([
             'data' => [

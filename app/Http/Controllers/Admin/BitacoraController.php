@@ -76,6 +76,8 @@ class BitacoraController extends Controller
         ]);
 
         $entradas = ObservationHistory::query()
+            // Las entradas del "responsable del fallo" son solo para jefes y Calidad.
+            ->visiblesPara($request->user())
             ->with([
                 'user:id,name,apellido',
                 'observacion:id,numero,titulo,sector_id',

@@ -25,9 +25,12 @@ class AlertasObservacionesCommand extends Command
         $avisadas = 0;
         $escaladas = 0;
 
+        // El plazo que cuenta es la prórroga autorizada si la hay, y si no el
+        // original. Misma regla que `Observacion::vencimiento()`. Un NULL en el
+        // COALESCE (sin plazo) no cumple el `<=`, así que no hace falta
+        // `whereNotNull` aparte.
         $observaciones = Observacion::query()
-            ->whereNotNull('vence_at')
-            ->where('vence_at', '<=', now())
+            ->whereRaw('COALESCE(prorroga_hasta, vence_at) <= ?', [now()])
             ->where('alerta_nivel', '<', 2)
             ->whereNotNull('responsable_id')
             // No basta con excluir `estados_finales` (solo 'cerrada'): una
@@ -59,7 +62,9 @@ class AlertasObservacionesCommand extends Command
             // El salto al gerente recién ocurre si pasó otro plazo igual sin gestión.
             $dias = $responsable->sector?->dias_gestion;
 
-            if (! $dias || now()->lt($observacion->vence_at->copy()->addWeekdays($dias))) {
+            // Contado desde el plazo vigente, no desde el original: tras una
+            // prórroga el "otro plazo igual" arranca en la fecha autorizada.
+            if (! $dias || now()->lt($observacion->vencimiento()->copy()->addWeekdays($dias))) {
                 continue;
             }
 

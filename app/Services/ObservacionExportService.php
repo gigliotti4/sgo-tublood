@@ -22,13 +22,18 @@ class ObservacionExportService
         'Proveedores',
     ];
 
-    /** @param  Collection<int, Observacion>  $observaciones */
-    public function exportar(Collection $observaciones): StreamedResponse
+    /**
+     * @param  Collection<int, Observacion>  $observaciones
+     * @param  bool  $conResponsableFallo  Agrega la columna "Responsable del fallo" al final.
+     *                                     ⚠️ Solo para quien puede verlo (jefes y Calidad): para
+     *                                     los demás la columna no existe, no va vacía.
+     */
+    public function exportar(Collection $observaciones, bool $conResponsableFallo = false): StreamedResponse
     {
         $spreadsheet = new Spreadsheet;
         $hoja = $spreadsheet->getActiveSheet();
         $hoja->setTitle('Observaciones');
-        $hoja->fromArray(self::COLUMNAS, null, 'A1');
+        $hoja->fromArray([...self::COLUMNAS, ...($conResponsableFallo ? ['Responsable del fallo'] : [])], null, 'A1');
 
         $prioridades = config('incidencias.prioridades');
 
@@ -48,13 +53,14 @@ class ObservacionExportService
                 // columna muestra la prioridad — ver Observacion::etiquetaEstado().
                 $observacion->etiquetaEstado(),
                 $observacion->created_at?->format('d/m/Y'),
-                $observacion->vence_at?->format('d/m/Y'),
+                $observacion->vencimiento()?->format('d/m/Y'),
                 $this->proveedores($observacion),
+                ...($conResponsableFallo ? [$observacion->responsableFallo?->nombre ?? ''] : []),
             ], null, "A{$fila}");
             $fila++;
         }
 
-        foreach (range('A', 'M') as $columna) {
+        foreach (range('A', $conResponsableFallo ? 'N' : 'M') as $columna) {
             $hoja->getColumnDimension($columna)->setAutoSize(true);
         }
 

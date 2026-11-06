@@ -123,7 +123,8 @@ trait DetallaElAtraso
 
     private function lineaDeAtraso(): ?string
     {
-        $vence = $this->observacion->vence_at;
+        // El plazo vigente: tras una prórroga, la fecha autorizada y no la original.
+        $vence = $this->observacion->vencimiento();
 
         if (! $vence) {
             return null;

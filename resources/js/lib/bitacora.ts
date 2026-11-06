@@ -67,6 +67,9 @@ export const accionLabels: Record<string, string> = {
     sistema: 'Sistema',
     baja: 'Baja',
     restauracion: 'Restauración',
+    prorroga_pedida: 'Prórroga pedida',
+    prorroga_resuelta: 'Prórroga resuelta',
+    responsable_fallo: 'Responsable del fallo',
 }
 
 export const accionVariant: Record<string, 'slate' | 'blue' | 'indigo' | 'purple' | 'emerald' | 'amber' | 'red'> = {
@@ -82,6 +85,9 @@ export const accionVariant: Record<string, 'slate' | 'blue' | 'indigo' | 'purple
     sistema: 'slate',
     baja: 'red',
     restauracion: 'emerald',
+    prorroga_pedida: 'amber',
+    prorroga_resuelta: 'indigo',
+    responsable_fallo: 'purple',
 }
 
 export const nombreAutor = (entrada: Pick<ObservationHistoryEntry, 'user'>) =>

@@ -80,6 +80,33 @@ class ReglasObservacion
     }
 
     /**
+     * Productos obligatorios de un tipo común (E.3 "Falla de calidad –
+     * distribución"): al menos uno, con código, nombre, cantidad, lote y
+     * vencimiento.
+     *
+     * Es la versión de `productos()` para un tipo que **no** es de los
+     * especiales: aquélla ata el "obligatorio" al tipo `falla_producto` con
+     * `required_if` y le suma institución y provincia, que acá no existen. La
+     * presentación queda opcional: el formulario de E.3 no la pide.
+     *
+     * @param  string  $campo  Clave del arreglo en el request (`productos`).
+     */
+    public static function productosRequeridos(string $campo = 'productos'): array
+    {
+        return [
+            $campo => ['required', 'array', 'min:1'],
+            $campo.'.*.producto' => ['required', 'string', 'max:255'],
+            $campo.'.*.codigo' => ['required', 'string', 'max:255'],
+            $campo.'.*.cantidad_afectada' => ['required', 'integer', 'min:1'],
+            $campo.'.*.tipo_presentacion' => ['nullable', 'in:'.implode(',', array_keys(ObservationProduct::PRESENTACIONES))],
+            $campo.'.*.lote' => ['required', 'string', 'max:255'],
+            $campo.'.*.fecha_vencimiento' => ['required', 'date'],
+            $campo.'.*.numero_remito' => ['nullable', 'string', 'max:255'],
+            $campo.'.*.tipo_comprobante' => ['nullable', 'in:factura,remito'],
+        ];
+    }
+
+    /**
      * Descarta los renglones de productos que vienen completamente vacíos.
      *
      * El formulario manda el bloque aunque nadie lo haya tocado; con productos

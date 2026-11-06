@@ -4,6 +4,7 @@ namespace App\Observers;
 
 use App\Models\Observacion;
 use App\Models\ObservationHistory;
+use App\Models\Persona;
 use App\Models\Sector;
 use App\Models\User;
 use App\Notifications\ObservacionAsignadaNotification;
@@ -35,22 +36,53 @@ class ObservacionObserver
             return;
         }
 
-        // Reasignar (o desasignar) reinicia el reloj: el plazo es de la persona
-        // que tiene la observación ahora, no de la que la tenía antes.
-        $observacion->responsable_asignado_at = null;
-        $observacion->vence_at = null;
-        $observacion->alerta_nivel = 0;
-
+        // Desasignar no toca el reloj: el caso sigue siendo del sector aunque
+        // hoy no tenga dueño, y el plazo siguió corriendo.
         if ($observacion->responsable_id === null) {
             return;
         }
 
-        $dias = User::with('sector')->find($observacion->responsable_id)?->sector?->dias_gestion;
+        $dias = $this->plazoDe($observacion->responsable_id);
 
-        $observacion->responsable_asignado_at = now();
-        // Sin sector o sin plazo cargado no hay contra qué medir: la observación
-        // queda sin vencimiento y nunca alerta.
-        $observacion->vence_at = $dias ? now()->addWeekdays($dias) : null;
+        // ⚠️ Reasignar NO reinicia el plazo (pedido del 6/11/2026). Hasta
+        // entonces sí: el plazo era "de la persona que lo tiene ahora", y eso
+        // permitía "reiniciar" un caso vencido pasándoselo a otro, que es
+        // justamente lo que escondía las demoras (0031, 0043 y 0057 dejaron de
+        // figurar vencidas al reasignarse). Ahora corre desde la PRIMERA
+        // asignación, y la única forma de extenderlo es una prórroga autorizada
+        // (`ObservationExtension`).
+        if ($observacion->responsable_asignado_at === null) {
+            $observacion->responsable_asignado_at = now();
+            $observacion->alerta_nivel = 0;
+            // Sin plazo cargado no hay contra qué medir: queda sin vencimiento y
+            // nunca alerta (ver `plazoDe()` para el plazo por defecto).
+            $observacion->vence_at = $dias ? now()->addWeekdays($dias) : null;
+
+            return;
+        }
+
+        // Reasignación. Si el primero no tenía plazo y el nuevo sí, el plazo se
+        // cuenta igual desde la primera asignación, no desde hoy.
+        if ($observacion->vence_at === null && $dias) {
+            $observacion->vence_at = $observacion->responsable_asignado_at->copy()->addWeekdays($dias);
+        }
+    }
+
+    /**
+     * Días hábiles de plazo de esta persona: los de su sector, y si no los hay
+     * el plazo por defecto de `incidencias.plazo_por_defecto_dias`.
+     *
+     * Ese default arranca en `null` (sin plazo, como hasta ahora): activarlo le
+     * pone vencimiento a quien no tiene sector y a los sectores sin plazo
+     * cargado (Compras, Finanzas, Dirección Técnica y Producción), que hoy
+     * nunca alertan. Es una decisión del cliente, no un valor que se invente.
+     */
+    private function plazoDe(int $responsableId): ?int
+    {
+        $dias = User::with('sector')->find($responsableId)?->sector?->dias_gestion
+            ?: config('incidencias.plazo_por_defecto_dias');
+
+        return $dias ? (int) $dias : null;
     }
 
     /**
@@ -241,6 +273,17 @@ class ObservacionObserver
             ]);
         }
 
+        // ⚠️ Información restringida (solo jefes y Calidad): la entrada se
+        // esconde de los demás con `ObservationHistory::scopeVisiblesPara()`. Se
+        // guardan los NOMBRES y no los ids, como en el resto: es un registro
+        // histórico y una persona puede después pasar a inactiva o renombrarse.
+        if ($observacion->wasChanged('responsable_fallo_id')) {
+            $this->registrar($observacion, ObservationHistory::ACCION_RESPONSABLE_FALLO, [
+                'de' => $this->nombrePersona($observacion->getOriginal('responsable_fallo_id')),
+                'a' => $this->nombrePersona($observacion->responsable_fallo_id),
+            ]);
+        }
+
         if ($observacion->wasChanged('sector_id')) {
             $this->registrar($observacion, ObservationHistory::ACCION_SECTOR, [
                 'de' => $this->nombreSector($observacion->getOriginal('sector_id')),
@@ -316,6 +359,15 @@ class ObservacionObserver
         }
 
         return User::find($id)?->name ?? "Usuario #{$id}";
+    }
+
+    private function nombrePersona(?int $id): string
+    {
+        if ($id === null) {
+            return 'Sin cargar';
+        }
+
+        return Persona::find($id)?->nombre ?? "Persona #{$id}";
     }
 
     private function nombreSector(?int $id): string

@@ -19,7 +19,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'roles.view', 'roles.create', 'roles.edit', 'roles.delete',
             'permissions.view',
             'clientes.view', 'clientes.sync', 'clientes.edit', 'clientes.vencimientos', 'clientes.import',
-            'observaciones.view', 'observaciones.edit', 'observaciones.delete',
+            'observaciones.view', 'observaciones.edit', 'observaciones.delete', 'observaciones.prorrogas.autorizar', 'observaciones.responsable_fallo',
             'bitacora.view',
             'articulos.view', 'articulos.edit', 'articulos.sync', 'articulos.import',
             'proveedores.view', 'proveedores.edit', 'proveedores.import', 'proveedores.sync',
@@ -144,6 +144,14 @@ class RolesAndPermissionsSeeder extends Seeder
         // usuario, basta con volver a correrlo.
         foreach (['eduran@tublood.com', 'fduran@tublood.com'] as $email) {
             User::where('email', $email)->first()?->givePermissionTo('nc.aprobar');
+        }
+
+        // Quien autoriza las prórrogas de plazo de las observaciones (pedido del
+        // 6/11/2026: le llega a Emanuel Durán). Mismo molde que `nc.aprobar`:
+        // permiso directo a una persona, no un rol, y se saltea en silencio si
+        // el usuario todavía no existe (corre en cada deploy).
+        foreach (['eduran@tublood.com'] as $email) {
+            User::where('email', $email)->first()?->givePermissionTo('observaciones.prorrogas.autorizar');
         }
 
         $user = User::firstOrCreate(

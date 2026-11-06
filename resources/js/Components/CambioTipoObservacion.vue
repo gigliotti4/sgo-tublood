@@ -3,7 +3,7 @@ import { computed, watch } from 'vue'
 import { useForm } from '@inertiajs/vue3'
 import { route } from 'ziggy-js'
 import Button from '@/Components/Button.vue'
-import CampoDinamico, { type CampoDef } from '@/Components/CampoDinamico.vue'
+import CampoDinamico, { campoVisible, type CampoDef } from '@/Components/CampoDinamico.vue'
 import Select from '@/Components/Select.vue'
 import type { Observacion } from '@/types'
 
@@ -54,9 +54,16 @@ const tiposDisponibles = computed(() =>
         .map(([key, def]) => ({ key, label: `${def.codigo} ${def.label}`, grupo: def.grupo })),
 )
 
-const camposDelTipoNuevo = computed<CampoDef[]>(() =>
-    defDelTipo(slugDeSector(form.sector_id), form.tipo)?.campos ?? [],
-)
+const camposDelTipoNuevo = computed<CampoDef[]>(() => {
+    const def = defDelTipo(slugDeSector(form.sector_id), form.tipo)
+
+    // Los tipos especiales (1.1, 1.2) no se completan acá: sus campos los pide la
+    // carga interna, y este formulario no los guarda.
+    return def?.especial ? [] : (def?.campos ?? [])
+})
+
+/** Los que corresponde mostrar ahora (algunos aparecen según lo elegido en otro). */
+const camposVisibles = computed(() => camposDelTipoNuevo.value.filter(c => campoVisible(c, form.datos_especificos)))
 
 // Al cambiar de sector el tipo deja de valer; al cambiar de tipo se rearman sus
 // campos conservando los valores que tengan la misma clave.
@@ -118,7 +125,7 @@ const guardar = () => {
                 </option>
             </Select>
             <CampoDinamico
-                v-for="campo in camposDelTipoNuevo"
+                v-for="campo in camposVisibles"
                 :key="campo.id"
                 v-model="form.datos_especificos[campo.id]"
                 :campo="campo"

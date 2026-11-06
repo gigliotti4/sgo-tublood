@@ -3,15 +3,17 @@ import { Head, Link, useForm } from '@inertiajs/vue3'
 import { computed, ref, watch } from 'vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import Button from '@/Components/Button.vue'
-import CampoDinamico, { type CampoDef } from '@/Components/CampoDinamico.vue'
+import CampoDinamico, { campoVisible, type CampoDef } from '@/Components/CampoDinamico.vue'
 import FormSection from '@/Components/FormSection.vue'
 import Input from '@/Components/Input.vue'
 import ProductosAfectados, { nuevoProducto, type ProductoForm } from '@/Components/ProductosAfectados.vue'
 import ResumenErrores from '@/Components/ResumenErrores.vue'
 import Select from '@/Components/Select.vue'
+import SelectResponsableFallo from '@/Components/SelectResponsableFallo.vue'
 import SelectorUsuarios from '@/Components/SelectorUsuarios.vue'
 import Textarea from '@/Components/Textarea.vue'
 import { erroresDeArchivos } from '@/lib/errores'
+import type { Persona } from '@/types'
 
 interface SectorOption { id: number; nombre: string; slug: string }
 interface UsuarioOption {
@@ -29,8 +31,10 @@ interface TipoDef {
     requiere_cliente?: boolean
     /** Subgrupo dentro del sector, para el <optgroup> del select de tipo. */
     grupo?: string
-    /** Lleva productos afectados: obligatorios (Falla de producto) u opcionales (6.2). */
+    /** Lleva productos afectados: obligatorios (Falla de producto, E.3) u opcionales (E.2). */
     productos?: 'requeridos' | 'opcionales'
+    /** Retirado: sigue resolviéndose para lo ya cargado, pero no se ofrece. */
+    obsoleto?: boolean
 }
 type Taxonomia = Record<string, Record<string, TipoDef>>
 
@@ -43,6 +47,9 @@ const props = defineProps<{
     tiposCaso: string[]
     prioridadSugerida: Record<string, string>
     usuarios: UsuarioOption[]
+    /** Solo jefes y Calidad ven y cargan el responsable del fallo. */
+    puedeVerResponsableFallo: boolean
+    personas: Persona[]
 }>()
 
 const form = useForm({
@@ -57,6 +64,7 @@ const form = useForm({
     contacto_nombre: '',
     contacto_email: '',
     responsable_id: null as number | null,
+    responsable_fallo_id: null as number | null,
     notificados: [] as number[],
     datos_especificos: {} as Record<string, string | number | null>,
     institucion: '',
@@ -141,7 +149,9 @@ const sectorSlug = computed(() => props.sectores.find(s => s.id === form.sector_
  * Apósitos) sin que sean sectores distintos.
  */
 const gruposDeTipos = computed(() => {
+    // Los tipos retirados (3.5 y 6.2, que pasaron a E.1 y E.2) no se ofrecen.
     const tipos = Object.entries(props.taxonomia[sectorSlug.value ?? ''] ?? {})
+        .filter(([, def]) => def.obsoleto !== true)
         .map(([key, def]) => ({
             key,
             label: `${def.codigo} ${def.label}`,
@@ -176,6 +186,9 @@ const camposDelTipo = computed<CampoDef[]>(() => {
     if (!sectorSlug.value || !form.tipo) return []
     return props.taxonomia[sectorSlug.value]?.[form.tipo]?.campos ?? []
 })
+
+/** Los campos que corresponde mostrar ahora (algunos aparecen según lo que se eligió en otro). */
+const camposVisibles = computed(() => camposDelTipo.value.filter(c => campoVisible(c, form.datos_especificos)))
 
 const nombreCompleto = (u: UsuarioOption) => [u.name, u.apellido].filter(Boolean).join(' ')
 
@@ -368,7 +381,7 @@ const submit = () => form.post(route('observaciones.store'), { forceFormData: tr
                 <!-- Datos específicos (dinámico según tipo) -->
                 <FormSection v-if="camposDelTipo.length" title="Datos específicos">
                     <CampoDinamico
-                        v-for="campo in camposDelTipo"
+                        v-for="campo in camposVisibles"
                         :key="campo.id"
                         v-model="form.datos_especificos[campo.id]"
                         :campo="campo"
@@ -397,14 +410,24 @@ const submit = () => form.post(route('observaciones.store'), { forceFormData: tr
                     />
                 </FormSection>
 
-                <!-- Productos opcionales de un tipo común (hoy, 6.2 Falla de proveedor) -->
-                <FormSection v-if="!tipoEspecial && productosDelTipo === 'opcionales'" title="Productos afectados" :columns="1">
+                <!--
+                    Productos de un tipo común: opcionales (E.2 Falla de proveedor)
+                    u obligatorios (E.3 Falla de calidad – distribución, que exige
+                    lote y vencimiento pero no la presentación).
+                -->
+                <FormSection v-if="!tipoEspecial && productosDelTipo" title="Productos afectados" :columns="1">
                     <p class="text-theme-sm text-gray-500 dark:text-gray-400">
-                        Opcional. Si cargás un producto, alcanza con el código o el nombre y la cantidad.
+                        <template v-if="productosDelTipo === 'requeridos'">
+                            Cargá al menos un producto, con su código, lote, vencimiento y cantidad.
+                        </template>
+                        <template v-else>
+                            Opcional. Si cargás un producto, alcanza con el código o el nombre y la cantidad.
+                        </template>
                     </p>
                     <ProductosAfectados
                         v-model="form.productos"
-                        :obligatorios="false"
+                        :obligatorios="productosDelTipo === 'requeridos'"
+                        :presentacion-obligatoria="false"
                         :presentaciones="props.presentaciones"
                         :errors="form.errors as Record<string, string>"
                     />
@@ -420,6 +443,15 @@ const submit = () => form.post(route('observaciones.store'), { forceFormData: tr
                         <option :value="null">— Sin asignar —</option>
                         <option v-for="u in usuarios" :key="u.id" :value="u.id">{{ nombreCompleto(u) }}</option>
                     </Select>
+
+                    <!-- Quién cometió el error. Solo para jefes y Calidad: a los demás ni llega la lista. -->
+                    <SelectResponsableFallo
+                        v-if="puedeVerResponsableFallo"
+                        v-model="form.responsable_fallo_id"
+                        :personas="personas"
+                        :sector-id="form.sector_id"
+                        :error="form.errors.responsable_fallo_id"
+                    />
 
                     <SelectorUsuarios
                         v-model="form.notificados"

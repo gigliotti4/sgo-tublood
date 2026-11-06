@@ -8,9 +8,12 @@ use App\Models\Cliente;
 use App\Models\NoConformidad;
 use App\Models\Observacion;
 use App\Models\ObservationAttachment;
+use App\Models\ObservationExtension;
 use App\Models\ObservationHistory;
 use App\Models\ObservationProduct;
 use App\Models\Partida;
+use App\Models\Persona;
+use App\Models\Proveedor;
 use App\Models\Sector;
 use App\Models\User;
 use App\Notifications\ObservacionSeguimientoNotification;
@@ -139,6 +142,11 @@ class ObservacionController extends Controller
             'responsable_id.*' => ['integer', 'exists:users,id'],
             'creado_por' => ['nullable', 'array'],
             'creado_por.*' => ['integer', 'exists:users,id'],
+            // ⚠️ Solo lo usa quien ve el responsable del fallo: a los demás se
+            // les descarta en `index()` y `export()` antes de filtrar, así no
+            // se puede deducir quién falló probando ids a mano.
+            'responsable_fallo_id' => ['nullable', 'array'],
+            'responsable_fallo_id.*' => ['integer', 'exists:personas,id'],
             'articulo_codigo' => ['nullable', 'array'],
             'articulo_codigo.*' => ['string'],
             'proveedor_id' => ['nullable', 'array'],
@@ -191,6 +199,31 @@ class ObservacionController extends Controller
         return response()->json($observaciones);
     }
 
+    /**
+     * Autocompletado del campo "Proveedor" de los fallos externos (E.2 y E.3).
+     *
+     * Es un endpoint propio y no `proveedores.buscar`: aquél pide
+     * `proveedores.view`, y cargar o reencuadrar una observación no lo exige.
+     * Devuelve solo lo que el campo necesita, no la ficha del proveedor.
+     */
+    public function buscarProveedores(Request $request): JsonResponse
+    {
+        $this->authorize('observaciones.view');
+
+        $termino = trim((string) $request->query('q', ''));
+
+        if (mb_strlen($termino) < 2) {
+            return response()->json([]);
+        }
+
+        return response()->json(
+            Proveedor::query()
+                ->buscar(mb_substr($termino, 0, 100))
+                ->limit(15)
+                ->get(['id', 'razon_social'])
+        );
+    }
+
     private function filtrarObservaciones(array $filters): Builder
     {
         return Observacion::query()
@@ -214,6 +247,7 @@ class ObservacionController extends Controller
             ->when($filters['tipo_caso'] ?? null, fn ($query, $v) => $query->where('tipo_caso', $v))
             ->when($filters['responsable_id'] ?? null, fn ($query, $v) => $query->whereIn('responsable_id', $v))
             ->when($filters['creado_por'] ?? null, fn ($query, $v) => $query->whereIn('created_by', $v))
+            ->when($filters['responsable_fallo_id'] ?? null, fn ($query, $v) => $query->whereIn('responsable_fallo_id', $v))
             ->when($filters['articulo_codigo'] ?? null, fn ($query, $v) => $query->whereHas('productos', fn ($p) => $p->whereIn('codigo', $v)))
             // De quién es el producto que falló. Sale del padrón en vivo
             // (`articulos.proveedor_id`) y no de una copia guardada en la
@@ -236,21 +270,40 @@ class ObservacionController extends Controller
 
         $filters = $request->validate($this->reglasDeFiltros());
 
+        $verResponsableDelFallo = $request->user()->veResponsableDelFallo();
+
+        // Quien no lo ve no puede filtrar por él: descartarlo acá, antes de
+        // armar la consulta, y no solo esconderlo en la pantalla.
+        if (! $verResponsableDelFallo) {
+            unset($filters['responsable_fallo_id']);
+        }
+
+        $observaciones = $this->aplicarOrden(
+            $this->filtrarObservaciones($filters)
+                ->with([
+                    'responsable:id,name', 'sector:id,nombre', 'cliente:id,numero,razon_social,mail,telefono',
+                    ...($verResponsableDelFallo ? ['responsableFallo:id,nombre,sector_id'] : []),
+                    ...self::EAGER_PRODUCTOS,
+                    ...$this->eagerLoadsDeGestion($request->user()),
+                ]),
+            $request,
+            $this->ordenables(),
+            fn (Builder $q) => $q->latest(),
+            'observations.id',
+        )->paginate(20)->withQueryString();
+
+        // `responsable_fallo_id` está en `$hidden` del modelo: solo viaja si se lo habilita.
+        if ($verResponsableDelFallo) {
+            $observaciones->getCollection()->each->makeVisible('responsable_fallo_id');
+        }
+
         return inertia('Admin/Observaciones/Index', [
-            'observaciones' => $this->aplicarOrden(
-                $this->filtrarObservaciones($filters)
-                    ->with([
-                        'responsable:id,name', 'sector:id,nombre', 'cliente:id,numero,razon_social,mail,telefono',
-                        ...self::EAGER_PRODUCTOS,
-                        ...$this->eagerLoadsDeGestion(),
-                    ]),
-                $request,
-                $this->ordenables(),
-                fn (Builder $q) => $q->latest(),
-                'observations.id',
-            )->paginate(20)->withQueryString(),
+            'observaciones' => $observaciones,
             'orden' => $this->orden($request, $this->ordenables()),
             'filters' => $filters,
+            // El desplegable "Responsable del fallo": solo para quien lo ve.
+            'personas' => $verResponsableDelFallo ? $this->personasParaElegir() : [],
+            'puedeVerResponsableFallo' => $verResponsableDelFallo,
             // Cualquiera que vea el listado puede necesitar reasignar responsable/sector
             // en las filas que sí puede editar (ver ObservacionPolicy::update).
             'usuarios' => $this->usuariosAsignables(),
@@ -263,6 +316,7 @@ class ObservacionController extends Controller
             'taxonomia' => $this->puedeCambiarTipoAlgunCaso($request) ? TaxonomiaIncidencias::taxonomia() : null,
             'prioridades' => config('incidencias.prioridades'),
             'tiposCaso' => config('incidencias.tipos_caso'),
+            'motivosProrroga' => ObservationExtension::MOTIVOS,
             // Corregir el texto del reclamo, dentro del modal de edición. No va
             // por fila: la habilidad no mira la observación (devuelve false
             // para todos y solo pasa el super-admin por `Gate::before`), así
@@ -279,6 +333,16 @@ class ObservacionController extends Controller
      * caso en `cambiarTipo()`: acá solo se evita cargarle ese config a quien
      * no lo puede usar.
      */
+    /**
+     * Las personas que se pueden elegir como "responsable del fallo": las
+     * activas, con su sector (el desplegable las agrupa por sector). Las
+     * inactivas no se ofrecen, pero siguen figurando en lo que ya tenían.
+     */
+    private function personasParaElegir()
+    {
+        return Persona::activas()->with('sector:id,nombre')->orderBy('nombre')->get(['id', 'nombre', 'sector_id', 'puesto']);
+    }
+
     private function puedeCambiarTipoAlgunCaso(Request $request): bool
     {
         $user = $request->user();
@@ -300,15 +364,24 @@ class ObservacionController extends Controller
 
         $filters = $request->validate($this->reglasDeFiltros());
 
+        $verResponsableDelFallo = $request->user()->veResponsableDelFallo();
+
+        if (! $verResponsableDelFallo) {
+            unset($filters['responsable_fallo_id']);
+        }
+
         $observaciones = $this->filtrarObservaciones($filters)
             ->with([
                 'responsable:id,name', 'sector:id,nombre', 'cliente:id,razon_social', 'creador:id,name',
+                ...($verResponsableDelFallo ? ['responsableFallo:id,nombre'] : []),
                 ...self::EAGER_PRODUCTOS,
             ])
             ->latest()
             ->get();
 
-        return (new ObservacionExportService)->exportar($observaciones);
+        // La columna "Responsable del fallo" solo existe para quien lo ve: no es
+        // una columna vacía para los demás, directamente no está en el archivo.
+        return (new ObservacionExportService)->exportar($observaciones, $verResponsableDelFallo);
     }
 
     /**
@@ -322,18 +395,26 @@ class ObservacionController extends Controller
     {
         $this->authorize('observaciones.view');
 
+        $verResponsableDelFallo = $request->user()->veResponsableDelFallo();
+
         $observacion->load([
             'responsable:id,name,apellido',
             'sector:id,nombre,dias_gestion',
             'cliente:id,numero,razon_social,mail,telefono',
+            ...($verResponsableDelFallo ? ['responsableFallo:id,nombre,sector_id,puesto'] : []),
             ...self::EAGER_PRODUCTOS,
             'baja.user:id,name,apellido',
             // Los desvíos a los que escaló este reclamo. La ficha los lista
             // para poder navegar hasta ellos: el vínculo servía de poco si solo
             // se veía desde el lado de la No Conformidad.
             'noConformidades:id,numero,estado,motivo',
-            ...$this->eagerLoadsDeGestion(),
+            ...$this->eagerLoadsDeGestion($request->user()),
         ]);
+
+        // `responsable_fallo_id` está en `$hidden`: solo viaja si se lo habilita.
+        if ($verResponsableDelFallo) {
+            $observacion->makeVisible('responsable_fallo_id');
+        }
 
         // Se resuelve acá y no con un eager load porque la clave es compuesta
         // (`codigo` + `lote`) — ver `Partida::adjuntarAProductos()`.
@@ -345,6 +426,11 @@ class ObservacionController extends Controller
             'tipoLabels' => TaxonomiaIncidencias::etiquetasTipos(),
             'prioridades' => config('incidencias.prioridades'),
             'puedeEditar' => $request->user()?->can('update', $observacion) ?? false,
+            'puedeVerResponsableFallo' => $verResponsableDelFallo,
+            'personas' => $verResponsableDelFallo ? $this->personasParaElegir() : [],
+            // Resolver una prórroga es de quien autoriza, no del responsable.
+            'puedeAutorizarProrroga' => $request->user()?->can('autorizarProrroga', $observacion) ?? false,
+            'motivosProrroga' => ObservationExtension::MOTIVOS,
             // Cambiar el tipo lo puede quien no gestiona el caso (Calidad), así
             // que es una habilidad aparte de `puedeEditar`. La taxonomía y los
             // sectores solo viajan si hace falta.
@@ -386,14 +472,23 @@ class ObservacionController extends Controller
             // Bitácora completa del caso, para el expediente. Orden
             // cronológico ascendente (al revés que la pantalla, que va de lo
             // más nuevo a lo más viejo): un PDF se lee de arriba hacia abajo.
-            'historial' => fn ($q) => $q->oldest()
+            'historial' => fn ($q) => $q->visiblesPara(auth()->user())->oldest()
                 ->with(['user:id,name,apellido', 'adjuntos:id,observation_history_id,original_name,size']),
         ]);
+
+        // El responsable del fallo solo sale en el PDF de quien puede verlo: es
+        // un expediente que después se manda afuera.
+        $verResponsableDelFallo = (bool) auth()->user()?->veResponsableDelFallo();
+
+        if ($verResponsableDelFallo) {
+            $observacion->load('responsableFallo:id,nombre');
+        }
 
         $imagenes = $this->imagenesParaPdf($observacion);
 
         $pdf = Pdf::loadView('pdf.observacion', [
             'observacion' => $observacion,
+            'verResponsableDelFallo' => $verResponsableDelFallo,
             // La sección "Archivos adjuntos" lista solo los sueltos: los que
             // cuelgan de un comentario ya aparecen junto a su entrada en la
             // Bitácora, y listarlos dos veces confunde más de lo que ayuda.
@@ -609,6 +704,9 @@ class ObservacionController extends Controller
             // vacío: el front lo tipa como Record<string, string>.
             'prioridadSugerida' => (object) config('incidencias.prioridad_sugerida'),
             'usuarios' => $this->usuariosAsignables(),
+            // "Responsable del fallo": solo lo ven y lo cargan los jefes y Calidad.
+            'puedeVerResponsableFallo' => $ver = $request->user()->veResponsableDelFallo(),
+            'personas' => $ver ? $this->personasParaElegir() : [],
         ]);
     }
 
@@ -620,18 +718,25 @@ class ObservacionController extends Controller
      *
      * @return array<string, Closure>
      */
-    private function eagerLoadsDeGestion(): array
+    private function eagerLoadsDeGestion(?User $user): array
     {
         return [
             // Quién la cargó (null si entró por el portal). Columnas restringidas
             // por el mismo motivo que `notificados`.
             'creador:id,name,apellido',
-            'historial' => fn ($query) => $query->latest()
+            // A quien no ve el responsable del fallo se le sacan las entradas que
+            // lo nombran: la bitácora es otra puerta al mismo dato.
+            'historial' => fn ($query) => $query->visiblesPara($user)->latest()
                 ->with(['user:id,name,apellido', 'adjuntos:id,observation_history_id,original_name,size']),
             'attachments' => fn ($query) => $query->whereNull('observation_history_id')
                 ->select(['id', 'observation_id', 'original_name', 'size']),
             // Columnas restringidas: esto va a props de Inertia y User tiene password.
             'notificados' => fn ($query) => $query->select(['users.id', 'name', 'apellido']),
+            // Todas las prórrogas del caso (pedidas, aprobadas y rechazadas), la
+            // más reciente primero: la ficha las lista y la pendiente habilita
+            // "Resolver" a quien autoriza.
+            'prorrogas' => fn ($query) => $query->latest('id')
+                ->with(['solicitante:id,name,apellido', 'decisor:id,name,apellido']),
         ];
     }
 
@@ -710,6 +815,10 @@ class ObservacionController extends Controller
             'prioridad' => ['required', Rule::in(array_keys(config('incidencias.prioridades')))],
             'tipo_caso' => ['required', Rule::in(config('incidencias.tipos_caso'))],
             'responsable_id' => ['nullable', 'exists:users,id'],
+            // Quién cometió el error: solo lo carga quien puede verlo.
+            ...($request->user()->veResponsableDelFallo() ? [
+                'responsable_fallo_id' => ['nullable', Rule::exists('personas', 'id')->where('activo', true)],
+            ] : []),
             // Cliente involucrado (opcional): si el N° matchea un cliente
             // sincronizado de RP Sistemas, la observación queda vinculada.
             'contacto_numero_cliente' => ['nullable', 'string', 'max:255'],
@@ -729,6 +838,14 @@ class ObservacionController extends Controller
             && ! TaxonomiaIncidencias::esTipoEspecial($sector->slug, $base['tipo'])) {
             throw ValidationException::withMessages([
                 'tipo' => 'El tipo de incidencia no corresponde al sector seleccionado.',
+            ]);
+        }
+
+        // Los tipos retirados (3.5 y 6.2, reemplazados por E.1 y E.2) siguen
+        // resolviéndose para lo ya cargado, pero no admiten altas nuevas.
+        if (TaxonomiaIncidencias::esObsoleto($sector->slug, $base['tipo'])) {
+            throw ValidationException::withMessages([
+                'tipo' => 'Ese tipo de incidencia ya no se usa: elegí el equivalente del grupo "Externos".',
             ]);
         }
 
@@ -754,7 +871,11 @@ class ObservacionController extends Controller
         $productos = [];
         if (TaxonomiaIncidencias::llevaProductos($base['tipo'])) {
             $request->merge(['productos' => ReglasObservacion::sinRenglonesVacios($request->input('productos'))]);
-            $reglas += ReglasObservacion::productosOpcionales();
+            // E.3 los exige (al menos uno, con lote y vencimiento); 6.2 y E.2
+            // los admiten sin obligar.
+            $reglas += TaxonomiaIncidencias::productos($base['tipo']) === 'requeridos'
+                ? ReglasObservacion::productosRequeridos()
+                : ReglasObservacion::productosOpcionales();
             $atributos += ReglasObservacion::atributos();
         }
 
@@ -774,6 +895,7 @@ class ObservacionController extends Controller
                 'descripcion' => $base['descripcion'],
                 'sector_id' => $sector->id,
                 'responsable_id' => $base['responsable_id'] ?? null,
+                'responsable_fallo_id' => $base['responsable_fallo_id'] ?? null,
                 'created_by' => $request->user()->id,
                 'prioridad' => $base['prioridad'],
                 'tipo_caso' => $base['tipo_caso'],
@@ -781,7 +903,7 @@ class ObservacionController extends Controller
                 'contacto_nombre' => $base['contacto_nombre'] ?? null,
                 'contacto_email' => $base['contacto_email'] ?? null,
                 'cliente_id' => $this->clienteIdDesdeNumero($base['contacto_numero_cliente'] ?? null),
-                'datos_especificos' => $especificos['datos_especificos'] ?? [],
+                'datos_especificos' => TaxonomiaIncidencias::soloVisibles($sector->slug, $base['tipo'], $especificos['datos_especificos'] ?? []),
             ]);
 
             foreach ($productos as $producto) {
@@ -809,13 +931,19 @@ class ObservacionController extends Controller
             $request->merge(['productos' => []]);
         }
 
+        // Los tipos especiales que declaran `campos` (1.1 "producto propio": origen,
+        // muestra y si puede afectar al paciente) los piden acá, en la carga
+        // interna. El portal público no: no se le puede preguntar eso al cliente.
         $data = $request->validate(
-            ReglasObservacion::productos(),
+            ReglasObservacion::productos() + TaxonomiaIncidencias::reglasValidacion($sector->slug, $base['tipo']),
             [],
-            ReglasObservacion::atributos()
+            ReglasObservacion::atributos() + TaxonomiaIncidencias::atributosValidacion($sector->slug, $base['tipo'])
         );
 
-        $this->guardar(fn () => Observacion::altaConNumero((int) now()->format('Y'), function (string $numero) use ($base, $sector, $data, $request) {
+        // Sin los campos que ya no corresponden (ver `soloVisibles()`); null si el tipo no tiene ninguno.
+        $datosEspecificos = TaxonomiaIncidencias::soloVisibles($sector->slug, $base['tipo'], $data['datos_especificos'] ?? []) ?: null;
+
+        $this->guardar(fn () => Observacion::altaConNumero((int) now()->format('Y'), function (string $numero) use ($base, $sector, $data, $datosEspecificos, $request) {
             $anio = (int) now()->format('Y');
 
             $observacion = Observacion::create([
@@ -828,6 +956,7 @@ class ObservacionController extends Controller
                 'descripcion' => $base['descripcion'],
                 'sector_id' => $sector->id,
                 'responsable_id' => $base['responsable_id'] ?? null,
+                'responsable_fallo_id' => $base['responsable_fallo_id'] ?? null,
                 'created_by' => $request->user()->id,
                 'prioridad' => $base['prioridad'],
                 'tipo_caso' => $base['tipo_caso'],
@@ -839,6 +968,7 @@ class ObservacionController extends Controller
                 'provincia' => $data['provincia'] ?? null,
                 'equipamiento' => $data['equipamiento'] ?? null,
                 'ejecutivo_cuenta' => $data['ejecutivo_cuenta'] ?? null,
+                'datos_especificos' => $datosEspecificos,
             ]);
 
             foreach ($data['productos'] ?? [] as $producto) {
@@ -902,6 +1032,14 @@ class ObservacionController extends Controller
 
         $data = $request->validate([
             'responsable_id' => ['nullable', 'exists:users,id'],
+            // El responsable del fallo solo lo carga quien puede verlo: a los
+            // demás la clave ni se valida, así que `validate()` la descarta.
+            // Una persona inactiva sigue valiendo si es la que el caso ya tiene,
+            // para poder guardar otros cambios sin tener que quitarla.
+            ...($request->user()->veResponsableDelFallo() ? [
+                'responsable_fallo_id' => ['nullable', Rule::exists('personas', 'id')
+                    ->where(fn ($q) => $q->where('activo', true)->orWhere('id', $observacion->responsable_fallo_id))],
+            ] : []),
             'sector_id' => ['nullable', 'exists:sectors,id'],
             'estado' => ['required', 'in:'.implode(',', array_keys(Observacion::ESTADOS))],
             'prioridad' => ['nullable', Rule::in(array_keys(config('incidencias.prioridades')))],

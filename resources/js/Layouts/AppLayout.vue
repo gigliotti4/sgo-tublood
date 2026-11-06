@@ -340,6 +340,7 @@ const menuSections: MenuSection[] = [
         items: [
             { label: 'Usuarios',   route: 'users.index', permission: 'users.view', icon: 'users' },
             { label: 'Sectores',   route: 'sectores.index', permission: 'users.view', icon: 'squares' },
+            { label: 'Personal',   route: 'personas.index', permission: 'users.view', icon: 'users' },
             { label: 'Roles',      route: 'roles.index',  permission: 'roles.view',  icon: 'shield' },
             { label: 'Bitácora',   route: 'bitacora.index', permission: 'bitacora.view', icon: 'search' },
             { label: 'Configuración', route: 'configuracion.index', permission: 'configuracion.view', icon: 'cog' },

@@ -10,6 +10,7 @@ import AdjuntosObservacion from '@/Components/AdjuntosObservacion.vue'
 import BitacoraObservacion from '@/Components/BitacoraObservacion.vue'
 import Badge from '@/Components/Badge.vue'
 import CambioTipoObservacion from '@/Components/CambioTipoObservacion.vue'
+import ProrrogaObservacion from '@/Components/ProrrogaObservacion.vue'
 import { type CampoDef } from '@/Components/CampoDinamico.vue'
 import Icon from '@/Components/Icon.vue'
 import type { Observacion } from '@/types'
@@ -29,6 +30,11 @@ const props = defineProps<{
     /** Escalar a un desvío pide `nc.create` **y** poder gestionar este caso. */
     puedeDerivarANc: boolean
     estadosNc: Record<string, string>
+    /** Solo jefes y Calidad ven el responsable del fallo (`User::veResponsableDelFallo`). */
+    puedeVerResponsableFallo: boolean
+    /** Viene de ObservacionPolicy::autorizarProrroga: el permiso `observaciones.prorrogas.autorizar`. */
+    puedeAutorizarProrroga: boolean
+    motivosProrroga: Record<string, string>
     /** Viene de ObservacionPolicy::cambiarTipo: responsable, Calidad o super-admin. */
     puedeCambiarTipo: boolean
     /** Solo llegan (y no son null / vacíos) si `puedeCambiarTipo`. */
@@ -374,12 +380,13 @@ const humanizar = (clave: string) =>
                             <dt class="text-theme-xs text-gray-400">Tipo de caso</dt>
                             <dd class="mt-0.5 text-gray-800 dark:text-white/90">{{ observacion.tipo_caso ?? 'Sin clasificar' }}</dd>
                         </div>
-                        <div>
-                            <dt class="text-theme-xs text-gray-400">Vence</dt>
+                        <!-- Quién cometió el error. Solo jefes y Calidad: a los demás ni les llega el dato. -->
+                        <div v-if="puedeVerResponsableFallo">
+                            <dt class="text-theme-xs text-gray-400">Responsable del fallo</dt>
                             <dd class="mt-0.5 text-gray-800 dark:text-white/90">
-                                {{ formatFecha(observacion.vence_at) }}
-                                <span v-if="!observacion.vence_at" class="block text-theme-xs text-gray-400">
-                                    El plazo arranca al asignar un responsable con sector.
+                                {{ observacion.responsable_fallo?.nombre ?? 'Sin cargar' }}
+                                <span v-if="observacion.responsable_fallo?.puesto" class="block text-theme-xs text-gray-400">
+                                    {{ observacion.responsable_fallo.puesto }}
                                 </span>
                             </dd>
                         </div>
@@ -390,6 +397,17 @@ const humanizar = (clave: string) =>
                             </dd>
                         </div>
                     </dl>
+                </div>
+
+                <!-- Plazo y prórrogas: reasignar ya no reinicia el reloj, así que acá se ven los dos plazos. -->
+                <div class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
+                    <p class="mb-3 text-theme-xs font-medium uppercase tracking-wide text-gray-400">Plazo</p>
+                    <ProrrogaObservacion
+                        :observacion="observacion"
+                        :motivos="motivosProrroga"
+                        :puede-pedir="puedeEditar"
+                        :puede-autorizar="puedeAutorizarProrroga"
+                    />
                 </div>
 
                 <!-- Cliente -->

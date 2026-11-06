@@ -26,6 +26,16 @@ class ObservacionAdminTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * Lo que la carga interna de una 1.1 "producto propio" pide desde el
+     * 6/11/2026: el origen, si hay muestra y si puede afectar al paciente.
+     */
+    private const DATOS_1_1 = [
+        'origen_producto' => 'Fabricado por TUBLOOD',
+        'muestra_disponible' => 'Sí',
+        'afecta_paciente' => 'No',
+    ];
+
     private function userWith(string ...$permissions): User
     {
         $user = User::factory()->create();
@@ -478,6 +488,7 @@ class ObservacionAdminTest extends TestCase
                 'origen' => 'interna',
                 'sector_id' => $sector->id,
                 'tipo' => 'falla_producto',
+                'datos_especificos' => self::DATOS_1_1,
                 'titulo' => 'Producto con falla',
                 'descripcion' => 'El producto llegó dañado.',
                 'prioridad' => 'alta',
@@ -523,6 +534,7 @@ class ObservacionAdminTest extends TestCase
                 'origen' => 'interna',
                 'sector_id' => $sector->id,
                 'tipo' => 'falla_producto',
+                'datos_especificos' => self::DATOS_1_1,
                 'titulo' => 'Producto con falla',
                 'descripcion' => 'El producto llegó dañado.',
                 'prioridad' => 'alta',
@@ -596,6 +608,7 @@ class ObservacionAdminTest extends TestCase
                 'origen' => 'interna',
                 'sector_id' => $sector->id,
                 'tipo' => 'falla_producto',
+                'datos_especificos' => self::DATOS_1_1,
                 'titulo' => 'Producto con falla',
                 'descripcion' => 'El producto llegó dañado.',
                 'prioridad' => 'alta',

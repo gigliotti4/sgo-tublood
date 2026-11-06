@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -59,6 +60,26 @@ class ObservationHistory extends Model
 
     public const ACCION_RESTAURACION = 'restauracion';
 
+    /**
+     * Prórroga de plazo (desde el 6/11/2026). Las escribe el controller y no el
+     * observer: la prórroga vive en su propia tabla y lo que hay que dejar
+     * dicho es el porqué (motivo, justificación, comentario de quien decide).
+     * `cambios` = `['fecha' => 'dd/mm/aaaa', 'motivo' => etiqueta, ...]`.
+     */
+    public const ACCION_PRORROGA_PEDIDA = 'prorroga_pedida';
+
+    /** `cambios` = `['decision' => 'aprobada'|'rechazada', 'fecha' => ...]`; el comentario va en `nota`. */
+    public const ACCION_PRORROGA_RESUELTA = 'prorroga_resuelta';
+
+    /**
+     * Cambió el "responsable del fallo". `cambios` = `['de' => nombre, 'a' => nombre]`.
+     *
+     * ⚠️ **Es información restringida** (solo jefes y Calidad): estas entradas
+     * se esconden de quien no puede ver el campo, en la bitácora del caso, en el
+     * PDF y en la sección Bitácora. Ver `scopeVisiblesPara()`.
+     */
+    public const ACCION_RESPONSABLE_FALLO = 'responsable_fallo';
+
     public const ACCIONES = [
         self::ACCION_COMENTARIO,
         self::ACCION_ESTADO,
@@ -72,6 +93,9 @@ class ObservationHistory extends Model
         self::ACCION_SISTEMA,
         self::ACCION_BAJA,
         self::ACCION_RESTAURACION,
+        self::ACCION_PRORROGA_PEDIDA,
+        self::ACCION_PRORROGA_RESUELTA,
+        self::ACCION_RESPONSABLE_FALLO,
     ];
 
     /**
@@ -92,6 +116,9 @@ class ObservationHistory extends Model
         self::ACCION_SISTEMA => 'Sistema',
         self::ACCION_BAJA => 'Baja',
         self::ACCION_RESTAURACION => 'Restauración',
+        self::ACCION_PRORROGA_PEDIDA => 'Prórroga pedida',
+        self::ACCION_PRORROGA_RESUELTA => 'Prórroga resuelta',
+        self::ACCION_RESPONSABLE_FALLO => 'Responsable del fallo',
     ];
 
     /** Sin `updated_at`: una entrada no se modifica. Eloquent sigue completando `created_at` solo. */
@@ -121,6 +148,24 @@ class ObservationHistory extends Model
         static::deleting(function () {
             throw new RuntimeException('El historial de una observación es inmutable: no se puede borrar una entrada.');
         });
+    }
+
+    /**
+     * Las entradas que `$user` puede leer. A quien no ve el "responsable del
+     * fallo" se le sacan las que lo nombran: la bitácora es otra puerta de
+     * entrada al mismo dato, y esconder el campo en la ficha pero dejarlo en el
+     * historial no esconde nada.
+     *
+     * `$user` es opcional por el PDF y los contextos sin sesión: sin usuario se
+     * asume el caso restringido.
+     */
+    public function scopeVisiblesPara(Builder $query, ?User $user): Builder
+    {
+        if ($user?->veResponsableDelFallo()) {
+            return $query;
+        }
+
+        return $query->where('accion', '!=', self::ACCION_RESPONSABLE_FALLO);
     }
 
     /**

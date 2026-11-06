@@ -25,12 +25,18 @@ class CambioDeTipoTest extends TestCase
 
     private Sector $logistica;
 
+    private Sector $externos;
+
+    /** Un E.1 válido: el destino de la prueba del cliente (la 0011 pasa de reclamo de cliente a falla de logística tercerizada). */
+    private const DATOS_E1 = ['transporte' => 'Sneider', 'motivo' => 'Demora en entrega', 'numero_guia' => 'G-1', 'numero_remito' => 'R-1', 'detalle' => 'Demoró.'];
+
     protected function setUp(): void
     {
         parent::setUp();
 
         $this->calidad = Sector::create(['nombre' => 'Calidad', 'slug' => 'garantia_calidad']);
         $this->logistica = Sector::create(['nombre' => 'Logística', 'slug' => 'logistica']);
+        $this->externos = Sector::create(['nombre' => 'Externos', 'slug' => 'externos']);
     }
 
     /** Un reclamo de cliente (como los que entran por el portal): disconformidad de servicio. */
@@ -61,12 +67,12 @@ class CambioDeTipoTest extends TestCase
         return $user;
     }
 
-    private function a35(array $extra = []): array
+    private function aE1(array $extra = []): array
     {
         return array_merge([
-            'sector_id' => $this->logistica->id,
-            'tipo' => 'falla_proveedor_externo',
-            'datos_especificos' => ['nombre_proveedor_externo' => 'Transporte Sneider'],
+            'sector_id' => $this->externos->id,
+            'tipo' => 'falla_logistica_tercerizada',
+            'datos_especificos' => self::DATOS_E1,
         ], $extra);
     }
 
@@ -76,16 +82,16 @@ class CambioDeTipoTest extends TestCase
         $o = $this->reclamo($responsable);
 
         $this->actingAs($responsable)
-            ->put("/observaciones/{$o->id}/tipo", $this->a35())
+            ->put("/observaciones/{$o->id}/tipo", $this->aE1())
             ->assertSessionHasNoErrors();
 
         $o->refresh();
-        $this->assertSame('falla_proveedor_externo', $o->tipo);
-        $this->assertSame($this->logistica->id, $o->sector_id);
+        $this->assertSame('falla_logistica_tercerizada', $o->tipo);
+        $this->assertSame($this->externos->id, $o->sector_id);
         // La prueba del cliente: se guarda como 3.5 y sigue siendo reclamo de cliente.
         $this->assertSame('externa', $o->origen);
         $this->assertSame('Queja/Reclamo de clientes', $o->tipo_caso);
-        $this->assertSame(['nombre_proveedor_externo' => 'Transporte Sneider'], $o->datos_especificos);
+        $this->assertSame(self::DATOS_E1, $o->datos_especificos);
     }
 
     public function test_el_cambio_queda_en_la_bitacora(): void
@@ -93,7 +99,7 @@ class CambioDeTipoTest extends TestCase
         $responsable = $this->nuevo();
         $o = $this->reclamo($responsable);
 
-        $this->actingAs($responsable)->put("/observaciones/{$o->id}/tipo", $this->a35());
+        $this->actingAs($responsable)->put("/observaciones/{$o->id}/tipo", $this->aE1());
 
         $entrada = $o->historial()->where('accion', ObservationHistory::ACCION_TIPO)->first();
 
@@ -106,10 +112,10 @@ class CambioDeTipoTest extends TestCase
         $o = $this->reclamo($this->nuevo());
 
         $this->actingAs($this->conRol('garantia_calidad'))
-            ->put("/observaciones/{$o->id}/tipo", $this->a35())
+            ->put("/observaciones/{$o->id}/tipo", $this->aE1())
             ->assertSessionHasNoErrors();
 
-        $this->assertSame('falla_proveedor_externo', $o->fresh()->tipo);
+        $this->assertSame('falla_logistica_tercerizada', $o->fresh()->tipo);
     }
 
     public function test_los_roles_de_reparto_de_reclamos_tambien_son_calidad(): void
@@ -117,10 +123,10 @@ class CambioDeTipoTest extends TestCase
         $o = $this->reclamo($this->nuevo());
 
         $this->actingAs($this->conRol('calidad_servicio'))
-            ->put("/observaciones/{$o->id}/tipo", $this->a35())
+            ->put("/observaciones/{$o->id}/tipo", $this->aE1())
             ->assertSessionHasNoErrors();
 
-        $this->assertSame('falla_proveedor_externo', $o->fresh()->tipo);
+        $this->assertSame('falla_logistica_tercerizada', $o->fresh()->tipo);
     }
 
     public function test_el_super_admin_sigue_pudiendo(): void
@@ -128,10 +134,10 @@ class CambioDeTipoTest extends TestCase
         $o = $this->reclamo($this->nuevo());
 
         $this->actingAs($this->conRol('super-admin'))
-            ->put("/observaciones/{$o->id}/tipo", $this->a35())
+            ->put("/observaciones/{$o->id}/tipo", $this->aE1())
             ->assertSessionHasNoErrors();
 
-        $this->assertSame('falla_proveedor_externo', $o->fresh()->tipo);
+        $this->assertSame('falla_logistica_tercerizada', $o->fresh()->tipo);
     }
 
     public function test_alguien_que_no_es_responsable_ni_calidad_no_puede(): void
@@ -139,7 +145,7 @@ class CambioDeTipoTest extends TestCase
         $o = $this->reclamo($this->nuevo());
 
         $this->actingAs($this->nuevo())
-            ->put("/observaciones/{$o->id}/tipo", $this->a35())
+            ->put("/observaciones/{$o->id}/tipo", $this->aE1())
             ->assertForbidden();
 
         $this->assertSame('disconformidad_servicio', $o->fresh()->tipo);
@@ -151,7 +157,7 @@ class CambioDeTipoTest extends TestCase
         $deLogistica = $this->nuevo(['sector_id' => $this->logistica->id]);
 
         $this->actingAs($deLogistica)
-            ->put("/observaciones/{$o->id}/tipo", $this->a35())
+            ->put("/observaciones/{$o->id}/tipo", $this->aE1())
             ->assertForbidden();
     }
 
@@ -164,7 +170,7 @@ class CambioDeTipoTest extends TestCase
         // El binding de la ruta no resuelve borradas: 404, y la Policy lo
         // refuerza si alguna vez se las resolviera.
         $this->actingAs($responsable)
-            ->put("/observaciones/{$o->id}/tipo", $this->a35())
+            ->put("/observaciones/{$o->id}/tipo", $this->aE1())
             ->assertNotFound();
 
         $this->assertSame('disconformidad_servicio', $o->fresh()->tipo ?? Observacion::withTrashed()->find($o->id)->tipo);
@@ -190,8 +196,8 @@ class CambioDeTipoTest extends TestCase
         $o = $this->reclamo($responsable);
 
         $this->actingAs($responsable)
-            ->put("/observaciones/{$o->id}/tipo", $this->a35(['datos_especificos' => ['nombre_proveedor_externo' => '']]))
-            ->assertSessionHasErrors('datos_especificos.nombre_proveedor_externo');
+            ->put("/observaciones/{$o->id}/tipo", $this->aE1(['datos_especificos' => ['transporte' => '']]))
+            ->assertSessionHasErrors('datos_especificos.transporte');
 
         $this->assertSame('disconformidad_servicio', $o->fresh()->tipo);
     }
@@ -202,7 +208,7 @@ class CambioDeTipoTest extends TestCase
         $o = $this->reclamo($responsable);
 
         $this->actingAs($responsable)
-            ->put("/observaciones/{$o->id}/tipo", $this->a35(['sector_id' => $this->calidad->id]))
+            ->put("/observaciones/{$o->id}/tipo", $this->aE1(['sector_id' => $this->calidad->id]))
             ->assertSessionHasErrors('tipo');
     }
 
@@ -212,7 +218,7 @@ class CambioDeTipoTest extends TestCase
         $o = $this->reclamo($responsable, [
             'origen' => 'interna',
             'tipo' => 'falla_proceso_logistica',
-            'sector_id' => $this->logistica->id,
+            'sector_id' => $this->externos->id,
             'datos_especificos' => ['detalle_proceso' => 'x'],
             'contacto_numero_cliente' => '123',
         ]);
@@ -269,7 +275,7 @@ class CambioDeTipoTest extends TestCase
             'fecha_vencimiento' => '2027-01-01',
         ]);
 
-        $this->actingAs($responsable)->put("/observaciones/{$o->id}/tipo", $this->a35());
+        $this->actingAs($responsable)->put("/observaciones/{$o->id}/tipo", $this->aE1());
 
         $this->assertSame(1, $o->productos()->count());
     }
@@ -280,7 +286,7 @@ class CambioDeTipoTest extends TestCase
         $o = $this->reclamo($responsable);
         $antes = [$o->fresh()->responsable_asignado_at, $o->fresh()->vence_at];
 
-        $this->actingAs($responsable)->put("/observaciones/{$o->id}/tipo", $this->a35());
+        $this->actingAs($responsable)->put("/observaciones/{$o->id}/tipo", $this->aE1());
 
         $despues = $o->fresh();
         $this->assertEquals($antes[0], $despues->responsable_asignado_at);

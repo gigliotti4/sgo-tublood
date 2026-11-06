@@ -23,6 +23,23 @@ export interface Sector {
     usuarios_count?: number
 }
 
+/**
+ * Una persona de un sector, tenga o no usuario del SGO. Alimenta el desplegable
+ * "Responsable del fallo" de las observaciones.
+ */
+export interface Persona {
+    id: number
+    nombre: string
+    sector_id: number | null
+    sector?: { id: number; nombre: string } | null
+    puesto: string | null
+    activo: boolean
+    user_id: number | null
+    usuario?: { id: number; name: string; apellido: string | null } | null
+    /** Cuántas observaciones la tienen como responsable del fallo. */
+    observaciones_con_fallo_count?: number
+}
+
 export interface AlertaNotificacion {
     id: string
     created_at: string
@@ -477,6 +494,23 @@ export interface PartidaDeProducto {
     articulo?: { codigo: string; descripcion: string } | null
 }
 
+/** Un pedido de prórroga de plazo y, si ya se resolvió, su resolución. */
+export interface ProrrogaObservacion {
+    id: number
+    fecha_pedida: string
+    motivo: string
+    que_se_hace: string
+    justificacion: string
+    vencimiento_previo: string | null
+    estado: 'pendiente' | 'aprobada' | 'rechazada'
+    fecha_autorizada: string | null
+    comentario: string | null
+    decidida_at: string | null
+    created_at: string
+    solicitante: { id: number; name: string; apellido: string | null } | null
+    decisor: { id: number; name: string; apellido: string | null } | null
+}
+
 export interface Observacion {
     id: number
     numero: string
@@ -494,7 +528,18 @@ export interface Observacion {
     responsable_asignado_at: string | null
     /** Quién la cargó desde el panel; null si entró por el portal público. */
     creador?: { id: number; name: string; apellido: string | null } | null
+    /** Plazo ORIGINAL. El que cuenta es `prorroga_hasta ?? vence_at` (ver `Observacion::vencimiento()`). */
     vence_at: string | null
+    /** Fin del día hasta el que está prorrogado el plazo; null si no hay prórroga aprobada. */
+    prorroga_hasta?: string | null
+    /** Pedidos de prórroga del caso, el más reciente primero. */
+    prorrogas?: ProrrogaObservacion[]
+    /**
+     * ⚠️ Solo llegan si quien mira es jefe o de Calidad (`User::veResponsableDelFallo`):
+     * para los demás ni siquiera viajan. Es quien cometió el error, no quien gestiona el caso.
+     */
+    responsable_fallo_id?: number | null
+    responsable_fallo?: { id: number; nombre: string; sector_id: number | null; puesto?: string | null } | null
     alerta_nivel: number
     sector_id: number | null
     sector: { id: number; nombre: string } | null

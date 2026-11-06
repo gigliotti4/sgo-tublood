@@ -62,6 +62,18 @@ class ObservacionPolicy
     }
 
     /**
+     * Autorizar, cambiar de fecha o rechazar una prórroga de plazo. Es del
+     * permiso `observaciones.prorrogas.autorizar` (hoy Emanuel Durán) y no del
+     * responsable: quien pide la prórroga no puede aprobársela a sí mismo.
+     *
+     * El super-admin pasa por `Gate::before`. Pedirla, en cambio, es `update`.
+     */
+    public function autorizarProrroga(User $user, Observacion $observacion): bool
+    {
+        return $user->can('observaciones.prorrogas.autorizar');
+    }
+
+    /**
      * Reencuadrar el caso en otro tipo de incidencia (y por lo tanto en otro
      * sector). Desde el 6/11/2026 lo hacen **el responsable asignado y Calidad**,
      * además del super-admin (por `Gate::before`): hasta entonces era solo

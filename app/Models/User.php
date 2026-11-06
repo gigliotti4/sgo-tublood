@@ -71,6 +71,26 @@ class User extends Authenticatable
     }
 
     /**
+     * ¿Puede ver (y filtrar) el "Responsable del fallo" de una observación?
+     *
+     * Pedido del 6/11/2026: solo los jefes y Calidad. Es información sensible
+     * —nombra a quien cometió el error—, así que **un usuario de Comercial no
+     * ve el responsable de un fallo de Depósito**.
+     *
+     * "Jefe" no es un rol sino una posición: gerente (`es_gerente`) o quien es
+     * el supervisor de alguien. Además queda el permiso
+     * `observaciones.responsable_fallo` para delegarlo a una persona puntual sin
+     * tocar código, y el super-admin lo tiene por `Gate::before`.
+     */
+    public function veResponsableDelFallo(): bool
+    {
+        return $this->can('observaciones.responsable_fallo')
+            || $this->es_gerente
+            || $this->esDeCalidadAmplio()
+            || $this->subordinados()->exists();
+    }
+
+    /**
      * Tipos de reclamo externo que le tocan a esta persona, según los roles de
      * `incidencias.roles_por_tipo`. Es lo que recorta su campana y el modal de
      * reclamos nuevos: Calidad de Producto ve las fallas de producto y Calidad

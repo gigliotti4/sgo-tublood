@@ -59,6 +59,8 @@ return [
         // papelera de canceladas/borradas. Más grave que observaciones.edit, así
         // que no lo hereda cualquiera que gestione un caso puntual.
         'observaciones.delete' => ['grupo' => 'observaciones', 'label' => 'Borrar y restaurar observaciones'],
+        'observaciones.prorrogas.autorizar' => ['grupo' => 'observaciones', 'label' => 'Autorizar prórrogas de plazo'],
+        'observaciones.responsable_fallo' => ['grupo' => 'observaciones', 'label' => 'Ver el responsable del fallo (además de jefes y Calidad)'],
 
         'bitacora.view' => ['grupo' => 'bitacora', 'label' => 'Ver la bitácora de todas las observaciones'],
 

@@ -122,6 +122,19 @@ class TaxonomiaIncidencias
     }
 
     /**
+     * True si el tipo fue retirado (`obsoleto` en config): 3.5 y 6.2 desde el
+     * 6/11/2026, reemplazados por los fallos externos E.1 y E.2.
+     *
+     * Un tipo retirado se **sigue resolviendo** —etiquetas, sector, bitácora y
+     * lo ya cargado no se rompen— pero no se ofrece en altas ni en cambios de
+     * tipo. Mismo criterio que sacar un tipo de `documentacion.entidades`.
+     */
+    public static function esObsoleto(string $sectorSlug, string $tipoKey): bool
+    {
+        return ! empty(static::tipo($sectorSlug, $tipoKey)['obsoleto']);
+    }
+
+    /**
      * Si el tipo lleva la lista de productos afectados: 'requeridos',
      * 'opcionales' o null. Sale de la clave `productos` del tipo en
      * config/incidencias.php.
@@ -191,6 +204,32 @@ class TaxonomiaIncidencias
         }
 
         return $reglas;
+    }
+
+    /**
+     * Deja solo los datos de los campos que **corresponde** mostrar.
+     *
+     * Un campo con `visible_si` ({campo, valor}) aparece únicamente si otro campo
+     * tiene ese valor (el "fabricante de origen" solo si el producto es
+     * importado). Si la persona eligió "Importado", cargó el fabricante y después
+     * cambió a "Fabricado", el formulario oculta el campo pero el valor sigue en
+     * el estado: sin este filtro viajaría y quedaría guardado un dato que
+     * contradice el origen.
+     *
+     * @param  array<string, mixed>  $datos
+     * @return array<string, mixed>
+     */
+    public static function soloVisibles(string $sectorSlug, string $tipoKey, array $datos): array
+    {
+        foreach (static::campos($sectorSlug, $tipoKey) as $campo) {
+            $condicion = $campo['visible_si'] ?? null;
+
+            if ($condicion && ($datos[$condicion['campo']] ?? null) !== $condicion['valor']) {
+                unset($datos[$campo['id']]);
+            }
+        }
+
+        return $datos;
     }
 
     /**

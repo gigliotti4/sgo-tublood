@@ -8,7 +8,9 @@ use App\Http\Controllers\Admin\ComprasController;
 use App\Http\Controllers\Admin\ConfiguracionController;
 use App\Http\Controllers\Admin\NoConformidadController;
 use App\Http\Controllers\Admin\ObservacionController as AdminObservacionController;
+use App\Http\Controllers\Admin\ObservacionProrrogaController;
 use App\Http\Controllers\Admin\PartidaController;
+use App\Http\Controllers\Admin\PersonaController;
 use App\Http\Controllers\Admin\ProveedorController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\SectorController;
@@ -82,10 +84,15 @@ Route::middleware(['auth'])->group(function () {
     // permisos en vez de un permiso propio.
     Route::middleware('can:users.view')->group(function () {
         Route::get('/sectores', [SectorController::class, 'index'])->name('sectores.index');
+        // Personal por sector, con o sin usuario: alimenta "Responsable del fallo".
+        // Mismos permisos que Sectores. No hay ruta de borrado a propósito.
+        Route::get('/personal', [PersonaController::class, 'index'])->name('personas.index');
     });
     Route::middleware('can:users.edit')->group(function () {
         Route::post('/sectores', [SectorController::class, 'store'])->name('sectores.store');
         Route::put('/sectores/{sector}', [SectorController::class, 'update'])->name('sectores.update');
+        Route::post('/personal', [PersonaController::class, 'store'])->name('personas.store');
+        Route::put('/personal/{persona}', [PersonaController::class, 'update'])->name('personas.update');
     });
 
     // Clientes
@@ -207,6 +214,9 @@ Route::middleware(['auth'])->group(function () {
         // A diferencia de `articulos.buscar`, éste es interno: pide login y
         // `observaciones.view`.
         Route::get('/observaciones/buscar', [AdminObservacionController::class, 'buscar'])->name('observaciones.buscar');
+        // Autocompletado del campo "Proveedor" de los fallos externos. Pide
+        // `observaciones.view` y no `proveedores.view`: cargar un caso no lo exige.
+        Route::get('/observaciones/proveedores', [AdminObservacionController::class, 'buscarProveedores'])->name('observaciones.proveedores');
         // El parámetro se llama {attachment} (no {archivo}) porque scopeBindings
         // busca la relación por el plural del nombre: Observacion::attachments().
         Route::get('/observaciones/{observacion}/archivos/{attachment}', [AdminObservacionController::class, 'downloadArchivo'])
@@ -225,6 +235,15 @@ Route::middleware(['auth'])->group(function () {
         // historial es inmutable.
         Route::post('/observaciones/{observacion}/bitacora', [AdminObservacionController::class, 'comentar'])
             ->middleware('can:update,observacion')->name('observaciones.bitacora.store');
+        // Prórroga de plazo (6/11/2026). Pedirla es gestionar el caso (el
+        // responsable, `update`); resolverla es del permiso
+        // `observaciones.prorrogas.autorizar` (`autorizarProrroga`): quien pide
+        // no se la aprueba a sí mismo. {prorroga} resuelve por
+        // `Observacion::prorrogas()`, que matchea el plural del parámetro.
+        Route::post('/observaciones/{observacion}/prorrogas', [ObservacionProrrogaController::class, 'store'])
+            ->middleware('can:update,observacion')->name('observaciones.prorrogas.store');
+        Route::put('/observaciones/{observacion}/prorrogas/{prorroga}', [ObservacionProrrogaController::class, 'decidir'])
+            ->middleware('can:autorizarProrroga,observacion')->name('observaciones.prorrogas.decidir')->scopeBindings();
         // Va después de /observaciones/nuevo y /observaciones/crear en el archivo,
         // pero igual se restringe a numérico para que no se las coma.
         // withTrashed(): tiene que poder abrirse desde la pantalla de Bajas.

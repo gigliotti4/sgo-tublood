@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\GeneraNumeroCorrelativo;
 use App\Models\Concerns\GuardaAdjuntos;
 use App\Observers\ObservacionObserver;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -77,9 +78,11 @@ class Observacion extends Model
         'contacto_numero_cliente',
         'cliente_id',
         'responsable_id',
+        'responsable_fallo_id',
         'created_by',
         'responsable_asignado_at',
         'vence_at',
+        'prorroga_hasta',
         'cerrada_at',
         'cerrada_por',
         'alerta_nivel',
@@ -96,10 +99,20 @@ class Observacion extends Model
         'datos_especificos',
     ];
 
+    /**
+     * ⚠️ `responsable_fallo_id` **nunca viaja por defecto**: solo lo ven los
+     * jefes y Calidad (`User::veResponsableDelFallo()`), y esta columna es un
+     * atributo más del modelo que Inertia serializaría entero a cualquier
+     * pantalla. Quien tiene permiso lo habilita con `makeVisible()`; ver
+     * `ObservacionController::mostrarResponsableDelFallo()`.
+     */
+    protected $hidden = ['responsable_fallo_id'];
+
     protected $casts = [
         'datos_especificos' => 'array',
         'responsable_asignado_at' => 'datetime',
         'vence_at' => 'datetime',
+        'prorroga_hasta' => 'datetime',
         'cerrada_at' => 'datetime',
         'alerta_nivel' => 'integer',
     ];
@@ -107,6 +120,55 @@ class Observacion extends Model
     public function estaFinalizada(): bool
     {
         return in_array($this->estado, config('incidencias.estados_finales', []), true);
+    }
+
+    /**
+     * El plazo que cuenta: la prórroga autorizada si la hay, y si no el plazo
+     * original. `vence_at` no se pisa nunca, así se ve cuánto se estiró el caso.
+     *
+     * Lo leen las alertas, los avisos de atraso, el listado, el Excel y la API.
+     * ⚠️ En SQL es `COALESCE(prorroga_hasta, vence_at)` (ver
+     * `AlertasObservacionesCommand` y `scopeVencidas()`): si se cambia esta
+     * regla, cambia en los dos lugares.
+     */
+    public function vencimiento(): ?Carbon
+    {
+        return $this->prorroga_hasta ?? $this->vence_at;
+    }
+
+    /**
+     * ¿Está en prórroga ahora? Es derivado, no un estado: abierta y con una
+     * prórroga autorizada que todavía no llegó a su fecha. Pasada esa fecha
+     * vuelve a figurar vencida y se puede pedir otra.
+     */
+    public function enProrroga(): bool
+    {
+        return $this->prorroga_hasta !== null
+            && $this->prorroga_hasta->isFuture()
+            && in_array($this->estado, self::ESTADOS_ABIERTOS, true);
+    }
+
+    /**
+     * Abiertas con el plazo efectivo ya cumplido. Lo usa el tablero y todo lo que
+     * cuente "vencidas hoy"; las alertas filtran por su cuenta porque además
+     * miran `alerta_nivel`.
+     */
+    public function scopeVencidas(Builder $query): Builder
+    {
+        return $query->whereIn('estado', self::ESTADOS_ABIERTOS)
+            ->whereRaw('COALESCE(prorroga_hasta, vence_at) < ?', [now()]);
+    }
+
+    public function prorrogas(): HasMany
+    {
+        return $this->hasMany(ObservationExtension::class, 'observation_id');
+    }
+
+    /** La prórroga que espera decisión, si la hay. Solo puede haber una por vez. */
+    public function prorrogaPendiente(): HasOne
+    {
+        return $this->hasOne(ObservationExtension::class, 'observation_id')
+            ->where('estado', ObservationExtension::ESTADO_PENDIENTE);
     }
 
     /**
@@ -228,6 +290,16 @@ class Observacion extends Model
     public function responsable(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Quién cometió el error (no quien gestiona el caso: ése es `responsable`).
+     * Es una persona del sector, tenga o no usuario. ⚠️ Solo se carga para
+     * quien puede verlo: ver `$hidden`.
+     */
+    public function responsableFallo(): BelongsTo
+    {
+        return $this->belongsTo(Persona::class, 'responsable_fallo_id');
     }
 
     /** Quién la cargó desde el panel; null si entró por el portal público. */
