@@ -40,6 +40,8 @@ export interface Caso {
     ti: string | null
     mo: string | null
     cl: string | null
+    /** Número del cliente: se cruza contra los remitos. */
+    cn: string | null
     tc: string | null
     cr: string | null
     /** Sector de quien la cargó; null si entró por el formulario del cliente. */

@@ -15,6 +15,7 @@ use App\Http\Controllers\Admin\PersonaController;
 use App\Http\Controllers\Admin\ProveedorController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\SectorController;
+use App\Http\Controllers\Admin\TableroExportController;
 use App\Http\Controllers\Admin\UrgenciaController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\VentaController;
@@ -209,6 +210,10 @@ Route::middleware(['auth'])->group(function () {
     // El tablero de gestión vive en el Dashboard (pedido del cliente); esta URL
     // queda para no romper links. Los objetivos que lo alimentan, con rol propio `tablero`.
     Route::get('/tablero', fn () => redirect()->route('dashboard'))->name('tablero.index');
+    // Excel de lo que se está viendo en el tablero, con fecha de corte. POST porque
+    // viajan los ids de las observaciones filtradas (cientos): no entran en una URL.
+    Route::post('/dashboard/exportar', TableroExportController::class)
+        ->middleware('can:tablero.view')->name('tablero.exportar');
     Route::middleware('can:objetivos.view')->group(function () {
         Route::get('/objetivos', [IndicadorController::class, 'index'])->name('objetivos.index');
         Route::get('/objetivos/export', [IndicadorController::class, 'export'])->name('objetivos.export');

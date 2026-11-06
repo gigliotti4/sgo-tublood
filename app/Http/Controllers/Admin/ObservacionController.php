@@ -70,7 +70,7 @@ class ObservacionController extends Controller
      * artículo: sin la FK, Eloquent no puede resolver el `belongsTo` anidado y
      * el proveedor llega siempre `null`, sin error.
      */
-    private const EAGER_PRODUCTOS = [
+    public const EAGER_PRODUCTOS = [
         'productos',
         'productos.articulo:codigo,descripcion,pm,proveedor_id',
         'productos.articulo.proveedor:id,razon_social',

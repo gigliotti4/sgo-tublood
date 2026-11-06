@@ -468,7 +468,7 @@ const icons: Record<string, string> = {
 
         <!-- SIDEBAR -->
         <aside
-            class="fixed top-0 left-0 z-50 flex h-full flex-col border-r border-gray-200 bg-white transition-all duration-300 dark:border-gray-800 dark:bg-gray-900"
+            class="fixed top-0 left-0 z-50 flex h-full flex-col border-r border-gray-200 bg-white transition-all duration-300 dark:border-gray-800 dark:bg-gray-900 print:hidden"
             :class="[
                 sidebarCollapsed ? 'lg:w-[90px] w-[290px]' : 'w-[290px]',
                 mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
@@ -603,11 +603,11 @@ const icons: Record<string, string> = {
 
         <!-- MAIN -->
         <div
-            class="flex min-w-0 flex-1 flex-col transition-all duration-300"
+            class="flex min-w-0 flex-1 flex-col transition-all duration-300 print:pl-0!"
             :class="sidebarCollapsed ? 'lg:pl-[90px]' : 'lg:pl-[290px]'"
         >
             <!-- Header -->
-            <header class="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b border-gray-200 bg-white px-4 dark:border-gray-800 dark:bg-gray-900 lg:px-6">
+            <header class="sticky top-0 z-30 print:hidden flex h-16 shrink-0 items-center gap-3 border-b border-gray-200 bg-white px-4 dark:border-gray-800 dark:bg-gray-900 lg:px-6">
                 <!-- Sidebar toggle -->
                 <button
                     class="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:border-gray-800 dark:text-gray-400 dark:hover:bg-white/[0.05] dark:hover:text-gray-200 lg:hidden"
@@ -836,7 +836,7 @@ const icons: Record<string, string> = {
             </Transition>
 
             <!-- Content -->
-            <main class="flex-1 overflow-auto p-4 md:p-6">
+            <main class="flex-1 overflow-auto p-4 md:p-6 print:overflow-visible print:p-0">
                 <div class="mx-auto w-full max-w-[1536px]">
                     <slot />
                 </div>

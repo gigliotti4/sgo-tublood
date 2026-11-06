@@ -34,6 +34,9 @@ Schedule::command('partidas:sync')->dailyAt('04:30')->when($erpConfigurado);
 // Las facturas proforma del tablero de urgencias. Una vez por día alcanza: el
 // tablero mira meses, y el botón "Sincronizar" trae lo de hoy si hace falta.
 Schedule::command('proformas:sync')->dailyAt('04:20')->when($erpConfigurado);
+// Los remitos de venta: el denominador de la tasa de fallos del tablero de gestión
+// y la medida de pedidos con la que escala el objetivo de armado.
+Schedule::command('remitos:sync')->dailyAt('04:25')->when($erpConfigurado);
 
 // Compras corre después de `ventas:sync` (04:00) para que el tablero abra con
 // las ventas del día ya cargadas. Hasta el 29/9/2026 tenía un guard propio

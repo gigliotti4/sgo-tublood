@@ -70,9 +70,12 @@ class TableroService
                 'observations.datos_especificos', 'observations.created_at', 'observations.cerrada_at',
                 'observations.vence_at', 'observations.prorroga_hasta',
                 'creadores.name as creador', 'creadores.apellido as creador_apellido',
-                'creadores.sector_id as creador_sector_id', 'clientes.razon_social as cliente',
+                'creadores.sector_id as creador_sector_id', 'clientes.razon_social as cliente', 'clientes.numero as cliente_numero',
                 'personas.nombre as responsable_fallo',
             ]);
+
+        // En crudo (sin modelos): son ~18.000 filas y el Dashboard las lee en cada carga.
+        $remitos = DB::table('remitos')->get(['cliente_numero', 'fecha']);
 
         $filas = $obs->map(function (Observacion $o) use ($sectorDeTipo, $etiquetas, $idExternos, $verResponsable) {
             $sectorId = $o->sector_id ?? ($sectorDeTipo[$o->tipo] ?? null);
@@ -96,6 +99,8 @@ class TableroService
                 'ti' => $o->titulo,
                 'mo' => $datos['motivo'] ?? null,
                 'cl' => $o->cliente,
+                // El número de cliente: con él se cruza contra los remitos.
+                'cn' => $o->cliente_numero === null ? null : (string) $o->cliente_numero,
                 'tc' => $o->tipo_caso,
                 'cr' => $creador,
                 'cs' => $o->creador_sector_id,
@@ -105,6 +110,8 @@ class TableroService
                 'rf' => $verResponsable ? $o->responsable_fallo : null,
             ];
         })->values();
+
+        $numerosDeCliente = $obs->pluck('cliente_numero')->filter()->map(fn ($n) => (string) $n)->unique()->values()->all();
 
         $codigos = fn (array $tipos) => collect($tipos)
             ->map(fn ($clave) => explode(' ', $etiquetas[$clave] ?? '', 2)[0])
@@ -131,11 +138,18 @@ class TableroService
                     'estado' => $i->estado,
                     'valores' => $i->valores->pluck('valor', 'mes'),
                 ])->values(),
-            // Los pedidos del mes escalan los objetivos que dependen de ellos (armado).
-            // Se usan las proformas como medida: son los pedidos que entran por mes.
+            // Remitos por mes: el denominador de la tasa de fallos y la medida con la que
+            // escala el objetivo de armado ("1 % de los pedidos armados"). Ver `RemitoSyncService`.
             // ⚠️ Agrupado en PHP y no con DATE_FORMAT: es de MySQL y los tests corren en SQLite.
-            'pedidosPorMes' => DB::table('proformas')->pluck('fecha')
-                ->countBy(fn ($fecha) => substr((string) $fecha, 0, 7)),
+            'remitosPorMes' => $remitos->countBy(fn ($r) => substr((string) $r->fecha, 0, 7)),
+            // Remitos de cada cliente que aparece en el tablero, por mes. Solo esos: son
+            // ~230 clientes por mes con remitos y a la pantalla le sirven los del ranking.
+            'remitosPorCliente' => $remitos->whereIn('cliente_numero', $numerosDeCliente)
+                ->groupBy('cliente_numero')
+                ->map(fn ($filas) => $filas->countBy(fn ($r) => substr((string) $r->fecha, 0, 7))),
+            // Sospechas de carga mal hecha (sector, proveedor como cliente, reclamo sin cliente).
+            'calidadDeCarga' => (new CalidadDeCarga)->alertas(),
+            'reglasDeCarga' => CalidadDeCarga::REGLAS,
             'puedeVerResponsableFallo' => $verResponsable,
             'hoy' => now()->toDateString(),
         ];

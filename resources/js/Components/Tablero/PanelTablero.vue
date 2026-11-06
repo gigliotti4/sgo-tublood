@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, reactive } from 'vue'
+import { computed, nextTick, reactive, ref } from 'vue'
 import { Link } from '@inertiajs/vue3'
 import { route } from 'ziggy-js'
+import InputFecha from '@/Components/InputFecha.vue'
 import BarrasH from '@/Components/Tablero/BarrasH.vue'
 import BarrasVerticales from '@/Components/Tablero/BarrasVerticales.vue'
 import GraficoLineas from '@/Components/Tablero/GraficoLineas.vue'
@@ -23,8 +24,14 @@ const props = defineProps<{
     sectores: { id: number; nombre: string; slug: string }[]
     observaciones: Caso[]
     indicadores: IndicadorT[]
-    pedidosPorMes: Record<string, number>
+    /** Remitos de venta por mes: denominador de la tasa y medida de pedidos del armado. */
+    remitosPorMes: Record<string, number>
+    /** Remitos de cada cliente del tablero, por mes (clave: número de cliente). */
+    remitosPorCliente: Record<string, Record<string, number>>
     puedeVerResponsableFallo: boolean
+    /** Sospechas de carga mal hecha: se calculan, no se guardan. */
+    calidadDeCarga: { regla: string; id: number; numero: string; titulo: string; detalle: string }[]
+    reglasDeCarga: Record<string, string>
     hoy: string
 }>()
 
@@ -163,11 +170,11 @@ const tot = computed(() => base.value.length)
 const P = (x: number) => `${Math.round(x * 100)}%`
 const pct = (a: number, b: number) => (b ? `${Math.round((a / b) * 100)}%` : '—')
 
-const evalP = (i: IndicadorT) => evaluarTipo(i, props.observaciones.filter(okO), perMeses.value, PARCIAL, props.pedidosPorMes)
+const evalP = (i: IndicadorT) => evaluarTipo(i, props.observaciones.filter(okO), perMeses.value, PARCIAL, props.remitosPorMes)
 const cumpl = (sectorId: number | null) =>
-    indiceSector(indsDe(sectorId), perMeses.value, PARCIAL, props.observaciones.filter(okO), props.pedidosPorMes)
+    indiceSector(indsDe(sectorId), perMeses.value, PARCIAL, props.observaciones.filter(okO), props.remitosPorMes)
 const idxM = (sectorId: number | null, m: string) =>
-    indiceMes(indsDe(sectorId), m, props.observaciones.filter(okO), props.pedidosPorMes)
+    indiceMes(indsDe(sectorId), m, props.observaciones.filter(okO), props.remitosPorMes)
 
 // Tipos de fallo que tienen dato para evaluar.
 const evaluables = computed(() => props.indicadores.filter(i => evalP(i).conDato))
@@ -289,9 +296,25 @@ const filasResp = computed(() => sectoresIndice.value.filter(s => rf.value.some(
     return { s, n: L3.length, personas: contar(L3.filter(o => o.rf), o => o.rf), sinCargar: L3.filter(o => !o.rf).length }
 }))
 
-const pedidosDelMes = (m: string) => props.pedidosPorMes[m] ?? 0
+const remitosDelMes = (m: string) => props.remitosPorMes[m] ?? 0
+const remitosDelPeriodo = computed(() => perMeses.value.reduce((a, m) => a + remitosDelMes(m), 0))
 const fallosDelMes = (m: string) => props.observaciones.filter(o => o.m === m && okO(o) && !!xf(o) && (ST.sector === null || o.s === ST.sector)).length
-const tasa = (f: number, p: number) => (p ? `${((f / p) * 100).toFixed(1)}` : '—')
+/** Fallos cada 100 remitos. Sin remitos no hay tasa (no es 0). */
+const tasa = (f: number, r: number) => (r ? (f / r * 100).toFixed(1).replace('.', ',') : '—')
+
+// Número de cliente por nombre corto: con él se cruza contra los remitos del cliente.
+const numeroDeCliente = computed(() => {
+    const m = new Map<string, string>()
+
+    props.observaciones.forEach(o => { if (o.cl && o.cn) m.set(corto(o.cl), o.cn) })
+
+    return m
+})
+const remitosDeCliente = (nombre: string, meses: string[]) => {
+    const n = numeroDeCliente.value.get(nombre)
+
+    return n ? meses.reduce((a, m) => a + (props.remitosPorCliente[n]?.[m] ?? 0), 0) : 0
+}
 
 const selK = computed<'cli' | 'prov' | 'resp' | null>(() => (ST.cli ? 'cli' : ST.prov ? 'prov' : ST.resp ? 'resp' : null))
 const sel = computed(() => {
@@ -340,6 +363,60 @@ const porTipoExterno = computed(() => {
     return [...m.entries()]
 })
 
+// ── Exportar con fecha de corte ────────────────────────────────────
+const corte = ref(props.hoy)
+const exportando = ref(false)
+const errorExport = ref('')
+
+/** Los filtros de la vista, en texto: van a la hoja "Corte" del Excel y al encabezado impreso. */
+const filtrosTexto = computed(() => {
+    const f: string[] = []
+
+    if (ST.sector !== null) f.push(`Sector: ${secNombre(ST.sector)}`)
+    if (ST.origen !== 'Todos') f.push(`Origen del fallo: ${ST.origen}`)
+
+    return [...f, ...activos.value.map(a => a[1])]
+})
+
+const exportar = async () => {
+    exportando.value = true
+    errorExport.value = ''
+
+    try {
+        // Laravel acepta el token de la cookie XSRF en este header.
+        const xsrf = decodeURIComponent((document.cookie.split('; ').find(c => c.startsWith('XSRF-TOKEN=')) ?? '').slice(11))
+        const r = await fetch(route('tablero.exportar'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-XSRF-TOKEN': xsrf, 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ ids: L.value.map(o => o.i), corte: corte.value, periodo: perTxt.value, filtros: filtrosTexto.value }),
+        })
+
+        if (!r.ok) throw new Error(r.status === 422 ? 'No hay observaciones para exportar con estos filtros.' : 'No se pudo generar el Excel.')
+
+        const url = URL.createObjectURL(await r.blob())
+        const a = document.createElement('a')
+
+        a.href = url
+        a.download = `tablero-${corte.value}.xlsx`
+        a.click()
+        URL.revokeObjectURL(url)
+    } catch (e) {
+        errorExport.value = e instanceof Error ? e.message : 'No se pudo generar el Excel.'
+    } finally {
+        exportando.value = false
+    }
+}
+
+const imprimir = () => window.print()
+
+const fechaLarga = (d: string) => d.split('-').reverse().join('/')
+
+// ── 8. Calidad de la carga ──────────────────────────────────────────
+const verTodasLasAlertas = ref(false)
+const alertasPorRegla = computed(() => Object.entries(props.reglasDeCarga).map(([regla, titulo]) => ({
+    regla, titulo, items: props.calidadDeCarga.filter(a => a.regla === regla),
+})))
+
 // ── 7. Tiempos de resolución ────────────────────────────────────────
 const TR = computed(() => SECTORES.value.map(s => {
     const Lx = L.value.filter(o => o.s === s.id)
@@ -363,8 +440,24 @@ const abrirTiempos = async (id: number) => {
 
 <template>
     <div class="tb-root">
+        <!-- Exportar la vista con fecha de corte (Excel desde el servidor; PDF = imprimir) -->
+        <div class="tb-noprint tb-toolbar">
+            <div class="tb-corte">
+                <InputFecha v-model="corte" label="Fecha de corte" />
+            </div>
+            <button class="tb-btn" :disabled="exportando || !L.length" @click="exportar">{{ exportando ? 'Generando…' : `Excel (${L.length})` }}</button>
+            <button class="tb-btn" @click="imprimir">PDF / Imprimir</button>
+            <span v-if="errorExport" class="red" style="font-size: 12px">{{ errorExport }}</span>
+        </div>
+
+        <!-- Solo al imprimir: de cuándo es esta hoja y con qué filtros -->
+        <div class="tb-printonly">
+            <h2>Tablero de gestión · SGO</h2>
+            <p>Período: {{ perTxt }} · Fecha de corte: {{ fechaLarga(corte) }} · Filtros: {{ filtrosTexto.join(' · ') || 'ninguno' }}</p>
+        </div>
+
         <!-- Filtros: afectan a todo el tablero -->
-        <div class="tb-filters">
+        <div class="tb-filters tb-noprint">
             <div>
                 <label>Período</label>
                 <div class="tb-seg">
@@ -616,23 +709,26 @@ const abrirTiempos = async (id: number) => {
             </div>
         </div>
 
-        <!-- Fallos frente al total de pedidos -->
+        <!-- Fallos frente al total de remitos -->
         <div class="tb-card tb-mt tb-remito">
             <div class="tb-head"><div>
-                <h2>Fallos frente al total de pedidos · {{ perTxt }}</h2>
-                <p class="hint">Tasa = fallos cada 100 pedidos. Los pedidos son las proformas del ERP; por cliente y por sector falta traer el dato de RP</p>
+                <h2>Fallos frente al total de remitos · {{ perTxt }}</h2>
+                <p class="hint">Tasa = fallos cada 100 remitos de venta (series VR8, VRM y VR6 del ERP). Un cliente o un sector con muchos fallos puede mover mucho volumen o tener un problema: la tasa los distingue</p>
             </div></div>
             <div class="tb-grid tb-g3">
                 <div>
                     <h2 style="font-size: 14px">Total TUBLOOD</h2>
                     <table>
-                        <thead><tr><th></th><th>Fallos</th><th>Pedidos</th><th>Tasa</th></tr></thead>
+                        <thead><tr><th></th><th>Fallos</th><th>Remitos</th><th>Tasa %</th></tr></thead>
                         <tbody>
                             <tr v-for="m in perMeses" :key="m">
                                 <td>{{ cap(MNL(m)) }}{{ m === PARCIAL ? ' (parcial)' : '' }}</td>
                                 <td><b>{{ fallosDelMes(m) }}</b></td>
-                                <td>{{ pedidosDelMes(m) || '—' }}</td>
-                                <td>{{ tasa(fallosDelMes(m), pedidosDelMes(m)) }}</td>
+                                <td>{{ remitosDelMes(m) || '—' }}</td>
+                                <td>{{ tasa(fallosDelMes(m), remitosDelMes(m)) }}</td>
+                            </tr>
+                            <tr v-if="multi">
+                                <td><b>Período</b></td><td><b>{{ L.length }}</b></td><td><b>{{ remitosDelPeriodo || '—' }}</b></td><td><b>{{ tasa(L.length, remitosDelPeriodo) }}</b></td>
                             </tr>
                         </tbody>
                     </table>
@@ -640,24 +736,34 @@ const abrirTiempos = async (id: number) => {
                 <div>
                     <h2 style="font-size: 14px">Por sector</h2>
                     <table>
-                        <thead><tr><th>Sector</th><th>Fallos</th><th>Pedidos</th><th>Tasa</th></tr></thead>
+                        <thead><tr><th>Sector</th><th>Fallos</th><th>Remitos</th><th>Tasa %</th></tr></thead>
                         <tbody>
-                            <tr v-for="s in sectoresIndice" :key="s.id"><td>{{ s.nombre }}</td><td><b>{{ L.filter(o => o.s === s.id).length }}</b></td><td class="tb-note">a traer de RP</td><td class="tb-note">—</td></tr>
+                            <tr v-for="s in sectoresIndice" :key="s.id">
+                                <td>{{ s.nombre }}</td>
+                                <td><b>{{ L.filter(o => o.s === s.id).length }}</b></td>
+                                <td>{{ remitosDelPeriodo || '—' }}</td>
+                                <td>{{ tasa(L.filter(o => o.s === s.id).length, remitosDelPeriodo) }}</td>
+                            </tr>
                         </tbody>
                     </table>
+                    <p class="tb-note">Un remito no es de un sector: cada sector se compara con el total de remitos.</p>
                 </div>
                 <div>
                     <h2 style="font-size: 14px">Por cliente (los que más fallos tienen)</h2>
                     <table>
-                        <thead><tr><th>Cliente</th><th>Fallos</th><th>Pedidos</th><th>Tasa</th></tr></thead>
+                        <thead><tr><th>Cliente</th><th>Fallos</th><th>Remitos</th><th>Tasa %</th></tr></thead>
                         <tbody>
-                            <tr v-for="[k, v] in topClientes" :key="k" class="tb-rowlink" @click="pick('cli', k)"><td>{{ k }}</td><td><b>{{ v }}</b></td><td class="tb-note">a traer de RP</td><td class="tb-note">—</td></tr>
+                            <tr v-for="[k, v] in topClientes" :key="k" class="tb-rowlink" @click="pick('cli', k)">
+                                <td>{{ k }}</td><td><b>{{ v }}</b></td>
+                                <td>{{ remitosDeCliente(k, perMeses) || '—' }}</td>
+                                <td>{{ tasa(v, remitosDeCliente(k, perMeses)) }}</td>
+                            </tr>
                             <tr v-if="!topClientes.length"><td colspan="4" class="tb-note">Sin datos</td></tr>
                         </tbody>
                     </table>
                 </div>
             </div>
-            <p class="tb-note">Con los pedidos se ve si un cliente o un sector tiene muchos fallos porque mueve mucho volumen o porque algo anda mal: 4 fallos sobre 200 (2 %) no es lo mismo que 4 sobre 10 (40 %).</p>
+            <p class="tb-note">4 fallos sobre 200 remitos (2 %) no es lo mismo que 4 sobre 10 (40 %). Los remitos se sincronizan una vez por día.</p>
         </div>
 
         <!-- Detalle de lo que se tocó -->
@@ -681,12 +787,20 @@ const abrirTiempos = async (id: number) => {
                     <BarrasH :entries="MESES.map(m => [cap(MNL(m)) + (m === PARCIAL ? ' (parcial)' : ''), selAll.filter(o => o.m === m).length] as [string, number])" />
                 </div>
                 <div v-if="sel.k === 'cli'" class="tb-remito">
-                    <h2 style="font-size: 14px">Fallos cada 100 pedidos</h2>
-                    <p class="hint">Necesita la cantidad de pedidos o remitos del cliente, desde RP</p>
+                    <h2 style="font-size: 14px">Fallos cada 100 remitos</h2>
+                    <p class="hint">Remitos de venta del cliente, por mes</p>
                     <table>
-                        <thead><tr><th>Período</th><th>Fallos</th><th>Pedidos</th><th>Tasa</th></tr></thead>
-                        <tbody><tr v-for="m in MESES" :key="m"><td>{{ cap(MN(m)) }}</td><td>{{ selAll.filter(o => o.m === m).length }}</td><td class="tb-note">a traer de RP</td><td class="tb-note">—</td></tr></tbody>
+                        <thead><tr><th>Período</th><th>Fallos</th><th>Remitos</th><th>Tasa %</th></tr></thead>
+                        <tbody>
+                            <tr v-for="m in MESES" :key="m">
+                                <td>{{ cap(MN(m)) }}</td>
+                                <td>{{ selAll.filter(o => o.m === m).length }}</td>
+                                <td>{{ remitosDeCliente(ST.cli ?? '', [m]) || '—' }}</td>
+                                <td>{{ tasa(selAll.filter(o => o.m === m).length, remitosDeCliente(ST.cli ?? '', [m])) }}</td>
+                            </tr>
+                        </tbody>
                     </table>
+                    <p class="tb-note">4 fallos sobre 200 remitos (2 %) no es lo mismo que 4 sobre 10 (40 %).</p>
                 </div>
                 <div v-else>
                     <h2 style="font-size: 14px">Por cliente</h2>
@@ -812,6 +926,22 @@ const abrirTiempos = async (id: number) => {
                 <b>{{ t.d }}</b>
             </div>
         </div>
+
+        <!-- 8. Calidad de la carga -->
+        <div id="s8" class="tb-sect"><span class="sn">8</span><div><h2>Calidad de la carga</h2><p class="hint" style="margin: 0">Sospechas que ensucian los números · se calculan solas y desaparecen al corregir el caso · son para revisar, no errores probados</p></div></div>
+        <div class="tb-grid tb-g3">
+            <div v-for="g in alertasPorRegla" :key="g.regla" class="tb-card">
+                <div class="tb-head"><h2>{{ g.titulo }}</h2><span class="tb-sem" :class="g.items.length ? 's-warn' : 's-ok'">{{ g.items.length }}</span></div>
+                <p v-if="!g.items.length" class="tb-note">Sin alertas.</p>
+                <ul v-else class="tb-alertas">
+                    <li v-for="a in (verTodasLasAlertas ? g.items : g.items.slice(0, 6))" :key="a.id">
+                        <Link :href="route('observaciones.show', a.id)"><b>{{ a.numero }}</b></Link> {{ a.titulo.slice(0, 50) }}
+                        <span class="tb-note">{{ a.detalle }}</span>
+                    </li>
+                </ul>
+                <button v-if="g.items.length > 6" class="tb-back" style="margin-top: 8px" @click="verTodasLasAlertas = !verTodasLasAlertas">{{ verTodasLasAlertas ? 'Ver menos' : `Ver las ${g.items.length}` }}</button>
+            </div>
+        </div>
     </div>
 </template>
 
@@ -927,7 +1057,26 @@ const abrirTiempos = async (id: number) => {
 .tb-tb.light i { opacity: 0.3; }
 .tb-tb em { font-style: normal; font-size: 11px; margin-left: 6px; white-space: nowrap; }
 .tb-root a.sel { font-weight: 700; background: var(--tb-soft); padding: 0 4px; border-radius: 4px; }
+.tb-toolbar { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; justify-content: flex-end; margin-bottom: 12px; }
+.tb-corte { width: 170px; }
+.tb-btn { border: 1px solid var(--tb-line); background: var(--tb-card); color: var(--tb-ink); border-radius: 10px; padding: 10px 14px; cursor: pointer; font: inherit; font-size: 13px; font-weight: 500; }
+.tb-btn:hover:not(:disabled) { border-color: var(--tb-navy); color: var(--tb-navy); }
+.tb-btn:disabled { opacity: 0.5; cursor: default; }
+.tb-alertas { list-style: none; margin: 8px 0 0; padding: 0; font-size: 13px; }
+.tb-alertas li { padding: 6px 0; border-bottom: 1px solid var(--tb-line); }
+.tb-alertas .tb-note { display: block; margin-top: 2px; }
+.tb-printonly { display: none; }
 .tb-remito { border: 1px dashed #93c5fd; border-radius: 12px; padding: 12px; background: rgba(147, 197, 253, 0.08); }
+@media print {
+    .tb-noprint { display: none !important; }
+    .tb-printonly { display: block; margin-bottom: 12px; }
+    .tb-printonly h2 { font-size: 18px; }
+    .tb-printonly p { font-size: 12px; margin: 2px 0 0; }
+    .tb-root { --tb-card: #fff; --tb-ink: #1f2937; --tb-muted: #6b7280; --tb-line: #e5e7eb; --tb-track: #eef0f6; --tb-head: #fafafc; }
+    .tb-card, .tb-sect { break-inside: avoid; }
+    .tb-tw { max-height: none !important; overflow: visible !important; }
+    .tb-grid { gap: 10px; }
+}
 @media (max-width: 1100px) {
     .tb-k6 { grid-template-columns: repeat(3, 1fr); }
     .tb-g2, .tb-g2e, .tb-g3 { grid-template-columns: 1fr; }

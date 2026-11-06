@@ -27,8 +27,12 @@ class ObservacionExportService
      * @param  bool  $conResponsableFallo  Agrega la columna "Responsable del fallo" al final.
      *                                     ⚠️ Solo para quien puede verlo (jefes y Calidad): para
      *                                     los demás la columna no existe, no va vacía.
+     * @param  array<string, string>|null  $corte  Etiqueta => valor. Si viene, el libro lleva una
+     *                                             segunda hoja "Corte" con la fecha de corte y los
+     *                                             filtros de la vista exportada: sin eso un Excel del
+     *                                             tablero no dice de cuándo ni de qué es.
      */
-    public function exportar(Collection $observaciones, bool $conResponsableFallo = false): StreamedResponse
+    public function exportar(Collection $observaciones, bool $conResponsableFallo = false, ?array $corte = null): StreamedResponse
     {
         $spreadsheet = new Spreadsheet;
         $hoja = $spreadsheet->getActiveSheet();
@@ -62,6 +66,17 @@ class ObservacionExportService
 
         foreach (range('A', $conResponsableFallo ? 'N' : 'M') as $columna) {
             $hoja->getColumnDimension($columna)->setAutoSize(true);
+        }
+
+        if ($corte !== null) {
+            $hojaCorte = $spreadsheet->createSheet();
+            $hojaCorte->setTitle('Corte');
+            $hojaCorte->fromArray([['Dato', 'Valor'], ...collect($corte)->map(fn ($v, $k) => [$k, $v])->values()->all()], null, 'A1');
+            $hojaCorte->getStyle('A1:B1')->getFont()->setBold(true);
+            $hojaCorte->getColumnDimension('A')->setAutoSize(true);
+            $hojaCorte->getColumnDimension('B')->setAutoSize(true);
+            // La de observaciones tiene que quedar primera y activa.
+            $spreadsheet->setActiveSheetIndex(0);
         }
 
         $writer = new Xlsx($spreadsheet);
