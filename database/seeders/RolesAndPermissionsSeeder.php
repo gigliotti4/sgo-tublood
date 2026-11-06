@@ -27,6 +27,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'partidas.view', 'partidas.sync',
             'compras.view', 'compras.sync',
             'urgencias.view', 'urgencias.sync',
+            'tablero.view', 'objetivos.view', 'objetivos.edit',
             'nc.view', 'nc.create', 'nc.gestionar', 'nc.aprobar',
             'configuracion.view', 'configuracion.edit',
         ];
@@ -129,6 +130,15 @@ class RolesAndPermissionsSeeder extends Seeder
         // pantalla de Roles, que este seeder lo revierte en cada deploy.
         $urgencias = Role::firstOrCreate(['name' => 'urgencias']);
         $urgencias->syncPermissions(['urgencias.view', 'urgencias.sync']);
+
+        // El tablero de gestión y los objetivos (6/11/2026): compara a cada
+        // sector contra su objetivo, así que lo ve solo quien tenga este rol
+        // (más los super-admin). Mismo ⚠️ que Compras y Urgencias: no sumarlo a
+        // los roles generales ni tocarlo desde la pantalla de Roles.
+        // `objetivos.edit` (subir la planilla, cargar valores) queda sin asignar
+        // a ningún rol, igual que `ventas.montos`: lo delega quien administra.
+        $tablero = Role::firstOrCreate(['name' => 'tablero']);
+        $tablero->syncPermissions(['tablero.view', 'objetivos.view']);
 
         Role::firstOrCreate(['name' => 'cliente_externo']);
 

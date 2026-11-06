@@ -30,6 +30,7 @@ return [
         'ventas' => 'Ventas',
         'compras' => 'Compras',
         'no_conformidades' => 'No Conformidades',
+        'tablero' => 'Tablero de gestión y objetivos',
     ],
 
     'etiquetas' => [
@@ -85,6 +86,10 @@ return [
         'nc.create' => ['grupo' => 'no_conformidades', 'label' => 'Crear No Conformidades'],
         'nc.gestionar' => ['grupo' => 'no_conformidades', 'label' => 'Gestionar (investigación, plan de acción, cierre)'],
         'nc.aprobar' => ['grupo' => 'no_conformidades', 'label' => 'Aprobar, devolver o rechazar la apertura'],
+
+        'tablero.view' => ['grupo' => 'tablero', 'label' => 'Ver el tablero de gestión'],
+        'objetivos.view' => ['grupo' => 'tablero', 'label' => 'Ver los objetivos de gestión'],
+        'objetivos.edit' => ['grupo' => 'tablero', 'label' => 'Cargar y editar los objetivos (planilla y valores mensuales)'],
     ],
 
 ];

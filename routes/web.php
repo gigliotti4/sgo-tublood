@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\BitacoraController;
 use App\Http\Controllers\Admin\ClienteController;
 use App\Http\Controllers\Admin\ComprasController;
 use App\Http\Controllers\Admin\ConfiguracionController;
+use App\Http\Controllers\Admin\IndicadorController;
 use App\Http\Controllers\Admin\NoConformidadController;
 use App\Http\Controllers\Admin\ObservacionController as AdminObservacionController;
 use App\Http\Controllers\Admin\ObservacionProrrogaController;
@@ -203,6 +204,21 @@ Route::middleware(['auth'])->group(function () {
     });
     Route::middleware('can:urgencias.sync')->group(function () {
         Route::post('/urgencias/sync', [UrgenciaController::class, 'sync'])->name('urgencias.sync');
+    });
+
+    // El tablero de gestión vive en el Dashboard (pedido del cliente); esta URL
+    // queda para no romper links. Los objetivos que lo alimentan, con rol propio `tablero`.
+    Route::get('/tablero', fn () => redirect()->route('dashboard'))->name('tablero.index');
+    Route::middleware('can:objetivos.view')->group(function () {
+        Route::get('/objetivos', [IndicadorController::class, 'index'])->name('objetivos.index');
+        Route::get('/objetivos/export', [IndicadorController::class, 'export'])->name('objetivos.export');
+    });
+    Route::middleware('can:objetivos.edit')->group(function () {
+        Route::post('/objetivos', [IndicadorController::class, 'store'])->name('objetivos.store');
+        Route::post('/objetivos/previsualizar', [IndicadorController::class, 'previsualizar'])->name('objetivos.previsualizar');
+        Route::post('/objetivos/aplicar', [IndicadorController::class, 'aplicar'])->name('objetivos.aplicar');
+        Route::put('/objetivos/{indicador}', [IndicadorController::class, 'update'])->name('objetivos.update');
+        Route::put('/objetivos/{indicador}/valores', [IndicadorController::class, 'valores'])->name('objetivos.valores');
     });
 
     // Observaciones

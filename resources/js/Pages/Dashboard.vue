@@ -2,6 +2,7 @@
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { Head, Link, router } from '@inertiajs/vue3'
 import { computed } from 'vue'
+import PanelTablero from '@/Components/Tablero/PanelTablero.vue'
 import { route } from 'ziggy-js'
 import VueApexCharts from 'vue3-apexcharts'
 import type { ApexOptions } from 'apexcharts'
@@ -47,6 +48,8 @@ interface UltimaObservacion {
 }
 
 const props = defineProps<{
+    /** El tablero de gestión: solo llega a quien tiene `tablero.view`. */
+    tablero: InstanceType<typeof PanelTablero>['$props'] | null
     stats: {
         total: number
         abiertas: number
@@ -344,6 +347,11 @@ const statCards = computed<StatCard[]>(() => [
             <p class="mt-0.5 text-theme-sm text-gray-500 dark:text-gray-400">Resumen del sistema</p>
         </div>
 
+        <PanelTablero v-if="tablero" v-bind="tablero" class="mb-10" />
+
+        <!-- Las estadísticas de siempre las reemplaza el tablero para quien lo ve;
+             "Asignadas a mí" y "Últimas observaciones" quedan debajo para todos. -->
+        <template v-if="!tablero">
         <!-- Stat cards -->
         <div class="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5 md:gap-6">
             <!-- `group` + `relative`: el panel de abajo se despliega al pasar el
@@ -508,6 +516,8 @@ const statCards = computed<StatCard[]>(() => [
                 sin proveedor atribuible (el código no coincide con ningún artículo, o el artículo todavía no tiene proveedor cargado).
             </p>
         </div>
+
+        </template>
 
         <!-- Asignadas a mí -->
         <div class="mb-6 overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">

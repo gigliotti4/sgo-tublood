@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\NoConformidad;
 use App\Models\Observacion;
 use App\Models\ObservationProduct;
+use App\Services\TableroService;
 use App\Support\TaxonomiaIncidencias;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -34,7 +35,7 @@ class DashboardController extends Controller
      */
     private const TOPE_HOVER = 15;
 
-    public function index()
+    public function index(TableroService $tablero)
     {
         $asignadasAMi = Observacion::query()
             ->where('responsable_id', auth()->id())
@@ -43,6 +44,9 @@ class DashboardController extends Controller
             ->get(['id', 'numero', 'tipo', 'estado', 'titulo', 'created_at']);
 
         return inertia('Dashboard', [
+            // El tablero de gestión (objetivos, semáforo, índice) va arriba, solo para
+            // quien tenga `tablero.view`. El resto de la pantalla es de todos.
+            'tablero' => auth()->user()->can('tablero.view') ? $tablero->datos(auth()->user()) : null,
             'stats' => [
                 'total' => Observacion::count(),
                 'abiertas' => Observacion::whereIn('estado', self::ESTADOS_ABIERTOS)->count(),
