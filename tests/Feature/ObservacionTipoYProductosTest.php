@@ -94,13 +94,18 @@ class ObservacionTipoYProductosTest extends TestCase
         $this->assertSame(['detalle_proceso' => 'Se armó el miércoles.'], $entrada->cambios['datos_anteriores']);
     }
 
-    public function test_quien_no_es_super_admin_no_cambia_el_tipo(): void
+    /**
+     * Desde el 6/11/2026 el responsable y Calidad también pueden (ver
+     * CambioDeTipoTest). Lo que sigue sin poder es cualquier otra persona,
+     * aunque tenga los permisos de ver y editar.
+     */
+    public function test_quien_no_es_responsable_ni_calidad_no_cambia_el_tipo(): void
     {
         $deposito = $this->sector('deposito', 'Depósito');
-        $responsable = $this->userWith('observaciones.view', 'observaciones.edit');
-        $observacion = $this->interna($deposito, ['responsable_id' => $responsable->id]);
+        $ajeno = $this->userWith('observaciones.view', 'observaciones.edit');
+        $observacion = $this->interna($deposito, ['responsable_id' => User::factory()->create()->id]);
 
-        $this->actingAs($responsable)
+        $this->actingAs($ajeno)
             ->put("/observaciones/{$observacion->id}/tipo", ['sector_id' => $deposito->id, 'tipo' => 'falla_wms'])
             ->assertForbidden();
 
@@ -130,8 +135,12 @@ class ObservacionTipoYProductosTest extends TestCase
         $this->assertSame('falla_proceso_dep', $observacion->fresh()->tipo);
     }
 
-    /** Un reclamo de cliente tiene otro formulario: no se cruza a una incidencia interna, ni al revés. */
-    public function test_no_se_cruza_entre_reclamo_de_cliente_e_incidencia_interna(): void
+    /**
+     * Desde el 6/11/2026 SÍ se cruza entre reclamo de cliente e incidencia
+     * interna (antes el backend lo rechazaba). La regla que queda: entrar a un
+     * reclamo que exige productos sin tenerlos se rechaza.
+     */
+    public function test_se_cruza_entre_reclamo_de_cliente_e_incidencia_interna(): void
     {
         $calidad = $this->sector('garantia_calidad', 'Calidad');
         $deposito = $this->sector('deposito', 'Depósito');
@@ -139,18 +148,26 @@ class ObservacionTipoYProductosTest extends TestCase
         $interna = $this->interna($deposito, ['numero' => '0002-26']);
         $admin = $this->superAdmin();
 
+        // Reclamo de cliente -> incidencia interna.
         $this->actingAs($admin)
             ->put("/observaciones/{$reclamo->id}/tipo", [
                 'sector_id' => $deposito->id, 'tipo' => 'falla_proceso_dep',
                 'datos_especificos' => ['detalle_proceso' => 'x'],
             ])
-            ->assertSessionHasErrors('tipo');
+            ->assertSessionHasNoErrors();
 
+        $this->assertSame('falla_proceso_dep', $reclamo->fresh()->tipo);
+
+        // Incidencia interna -> reclamo con productos requeridos, sin productos.
         $this->actingAs($admin)
             ->put("/observaciones/{$interna->id}/tipo", ['sector_id' => $calidad->id, 'tipo' => 'falla_producto'])
             ->assertSessionHasErrors('tipo');
 
-        // Entre los dos reclamos de cliente, sí.
+        $this->assertSame('falla_proceso_dep', $interna->fresh()->tipo);
+
+        // Entre los dos reclamos de cliente, también.
+        $reclamo = $this->interna($calidad, ['numero' => '0003-26', 'tipo' => 'falla_producto', 'datos_especificos' => []]);
+
         $this->actingAs($admin)
             ->put("/observaciones/{$reclamo->id}/tipo", ['sector_id' => $calidad->id, 'tipo' => 'disconformidad_servicio'])
             ->assertSessionHasNoErrors();

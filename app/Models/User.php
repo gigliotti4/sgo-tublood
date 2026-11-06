@@ -59,6 +59,18 @@ class User extends Authenticatable
     }
 
     /**
+     * `esDeCalidad()` más quienes tienen alguno de los roles que reparten los
+     * reclamos externos (`calidad_producto`, `calidad_servicio`). Es el criterio
+     * de "Calidad" para quien puede reencuadrar un caso: esas personas son del
+     * equipo aunque su sector no esté cargado.
+     */
+    public function esDeCalidadAmplio(): bool
+    {
+        return $this->esDeCalidad()
+            || $this->hasAnyRole(array_values(TaxonomiaIncidencias::rolesPorTipo()));
+    }
+
+    /**
      * Tipos de reclamo externo que le tocan a esta persona, según los roles de
      * `incidencias.roles_por_tipo`. Es lo que recorta su campana y el modal de
      * reclamos nuevos: Calidad de Producto ve las fallas de producto y Calidad

@@ -241,10 +241,11 @@ Route::middleware(['auth'])->group(function () {
         // reportó el cliente. Ver ObservacionPolicy::editarContenido().
         Route::put('/observaciones/{observacion}/contenido', [AdminObservacionController::class, 'actualizarContenido'])
             ->middleware('can:editarContenido,observacion')->name('observaciones.contenido');
-        // Cambiar el tipo de incidencia: misma llave (solo super-admin), ruta
-        // propia porque reencuadra el caso. Ver ObservacionController::cambiarTipo().
+        // Cambiar el tipo de incidencia: el responsable, Calidad y el
+        // super-admin (desde el 6/11/2026; antes solo super-admin). Ruta propia
+        // porque reencuadra el caso. Ver ObservacionPolicy::cambiarTipo().
         Route::put('/observaciones/{observacion}/tipo', [AdminObservacionController::class, 'cambiarTipo'])
-            ->middleware('can:editarContenido,observacion')->name('observaciones.tipo');
+            ->middleware('can:cambiarTipo,observacion')->name('observaciones.tipo');
     });
     Route::middleware('can:observaciones.edit')->group(function () {
         // Selector "Crear nuevo registro" (interna / No Conformidad). La externa es solo portal público.

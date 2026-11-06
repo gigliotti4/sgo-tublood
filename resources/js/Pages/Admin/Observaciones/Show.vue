@@ -9,6 +9,8 @@ import Modal from '@/Components/Modal.vue'
 import AdjuntosObservacion from '@/Components/AdjuntosObservacion.vue'
 import BitacoraObservacion from '@/Components/BitacoraObservacion.vue'
 import Badge from '@/Components/Badge.vue'
+import CambioTipoObservacion from '@/Components/CambioTipoObservacion.vue'
+import { type CampoDef } from '@/Components/CampoDinamico.vue'
 import Icon from '@/Components/Icon.vue'
 import type { Observacion } from '@/types'
 import { proveedorDeProducto } from '@/lib/productos'
@@ -27,7 +29,14 @@ const props = defineProps<{
     /** Escalar a un desvío pide `nc.create` **y** poder gestionar este caso. */
     puedeDerivarANc: boolean
     estadosNc: Record<string, string>
+    /** Viene de ObservacionPolicy::cambiarTipo: responsable, Calidad o super-admin. */
+    puedeCambiarTipo: boolean
+    /** Solo llegan (y no son null / vacíos) si `puedeCambiarTipo`. */
+    taxonomia: Record<string, Record<string, { codigo: string; label: string; campos?: CampoDef[]; especial?: boolean; grupo?: string; obsoleto?: boolean }>> | null
+    sectores: { id: number; nombre: string; slug: string }[]
 }>()
+
+const cambiandoTipo = ref(false)
 
 const formatFecha = (d: string | null) =>
     d ? new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'
@@ -169,7 +178,25 @@ const humanizar = (clave: string) =>
                 <div class="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-white/[0.03]">
                     <dl class="grid gap-4 sm:grid-cols-2">
                         <div>
-                            <dt class="text-theme-xs font-medium uppercase tracking-wide text-gray-400">Tipo</dt>
+                            <dt class="flex items-center gap-2 text-theme-xs font-medium uppercase tracking-wide text-gray-400">
+                                Tipo
+                                <!--
+                                    Lo ve el responsable, Calidad y el super-admin
+                                    (`ObservacionPolicy::cambiarTipo`). Calidad no
+                                    gestiona el caso, así que no llega al modal del
+                                    listado y entra por acá.
+                                -->
+                                <button
+                                    v-if="puedeCambiarTipo && taxonomia"
+                                    type="button"
+                                    class="cursor-pointer normal-case text-gray-400 transition-colors hover:text-brand-500 dark:hover:text-brand-300"
+                                    title="Cambiar el tipo de la observación"
+                                    @click="cambiandoTipo = true"
+                                >
+                                    <Icon name="pencil" class="h-3.5 w-3.5" />
+                                    <span class="sr-only">Cambiar el tipo de la observación</span>
+                                </button>
+                            </dt>
                             <dd class="mt-0.5 text-sm text-gray-800 dark:text-white/90">{{ tipoLabels[observacion.tipo] ?? observacion.tipo }}</dd>
                         </div>
                         <div>
@@ -421,6 +448,16 @@ const humanizar = (clave: string) =>
                     <Button :disabled="derivarForm.processing" @click="derivarANc">Derivar</Button>
                 </div>
             </div>
+        </Modal>
+
+        <Modal :show="cambiandoTipo" title="Cambiar el tipo" size="lg" @close="cambiandoTipo = false">
+            <CambioTipoObservacion
+                v-if="cambiandoTipo && taxonomia"
+                :observacion="observacion"
+                :taxonomia="taxonomia"
+                :sectores="sectores"
+                @cerrar="cambiandoTipo = false"
+            />
         </Modal>
 
     </AppLayout>

@@ -7,7 +7,8 @@ import Badge from '@/Components/Badge.vue'
 import Button from '@/Components/Button.vue'
 import AdjuntosObservacion from '@/Components/AdjuntosObservacion.vue'
 import BitacoraObservacion from '@/Components/BitacoraObservacion.vue'
-import CampoDinamico, { type CampoDef } from '@/Components/CampoDinamico.vue'
+import CambioTipoObservacion from '@/Components/CambioTipoObservacion.vue'
+import { type CampoDef } from '@/Components/CampoDinamico.vue'
 import FormSection from '@/Components/FormSection.vue'
 import Icon from '@/Components/Icon.vue'
 import Input from '@/Components/Input.vue'
@@ -68,7 +69,7 @@ const props = defineProps<{
      * Ver ObservacionPolicy::editarContenido().
      */
     puedeCorregirTexto: boolean
-    /** Taxonomía de incidencias, para cambiar el tipo. Solo llega si `puedeCorregirTexto`. */
+    /** Taxonomía de incidencias, para cambiar el tipo. Solo llega a quien puede cambiarlo (responsable, Calidad, super-admin). */
     taxonomia: Record<string, Record<string, TipoDef>> | null
     aniosDisponibles: number[]
     /** Validado contra la whitelist del backend: `sort` es null en el orden por defecto. */
@@ -264,66 +265,12 @@ const guardarTexto = () => {
 
 // ── Cambio de tipo (dentro del modal de edición) ────────────────────────────
 //
-// Mismo esquema que la corrección del texto: solo super-admin, su propia ruta
-// (`observaciones.tipo`) y su propio botón. Al elegir el tipo nuevo se piden sus
-// "Datos específicos", precargados con lo que coincida por clave; lo anterior lo
-// guarda la bitácora. Ver ObservacionController::cambiarTipo().
+// Desde el 6/11/2026 lo hace el responsable (que es quien llega a este modal),
+// Calidad (desde la ficha de detalle) y el super-admin. El formulario es el
+// componente compartido `CambioTipoObservacion`; acá solo se decide cuándo se
+// muestra. Ver ObservacionController::cambiarTipo().
 
 const cambiandoTipo = ref(false)
-
-const tipoForm = useForm({
-    sector_id: null as number | null,
-    tipo: '',
-    datos_especificos: {} as Record<string, string | number | null>,
-})
-
-const slugDeSector = (id: number | null) => props.sectores.find(s => s.id === id)?.slug ?? ''
-
-const defDelTipo = (slug: string, tipo: string): TipoDef | undefined => props.taxonomia?.[slug]?.[tipo]
-
-// Un reclamo de cliente solo pasa a otro reclamo de cliente y una incidencia
-// interna a otra interna: el backend lo rechaza igual, acá ni se ofrece.
-const tiposDisponibles = computed(() => {
-    const actual = observacionEnEdicion.value
-    if (!actual || !props.taxonomia) return []
-
-    const eraEspecial = Object.values(props.taxonomia).some(tipos => tipos[actual.tipo]?.especial === true)
-
-    return Object.entries(props.taxonomia[slugDeSector(tipoForm.sector_id)] ?? {})
-        .filter(([, def]) => (def.especial === true) === eraEspecial)
-        .map(([key, def]) => ({ key, label: `${def.codigo} ${def.label}`, grupo: def.grupo }))
-})
-
-const camposDelTipoNuevo = computed<CampoDef[]>(() =>
-    defDelTipo(slugDeSector(tipoForm.sector_id), tipoForm.tipo)?.campos ?? [],
-)
-
-const abrirCambioTipo = (o: Observacion) => {
-    tipoForm.sector_id = o.sector_id
-    tipoForm.tipo = o.tipo
-    tipoForm.datos_especificos = { ...(o.datos_especificos ?? {}) }
-    tipoForm.clearErrors()
-    cambiandoTipo.value = true
-}
-
-// Al cambiar de sector el tipo deja de valer; al cambiar de tipo se rearman sus
-// campos conservando los valores que tengan la misma clave.
-watch(() => tipoForm.sector_id, (nuevo, viejo) => {
-    if (viejo !== undefined && nuevo !== viejo && !tiposDisponibles.value.some(t => t.key === tipoForm.tipo)) tipoForm.tipo = ''
-})
-watch(() => tipoForm.tipo, () => {
-    const previos = tipoForm.datos_especificos
-    tipoForm.datos_especificos = Object.fromEntries(camposDelTipoNuevo.value.map(c => [c.id, previos[c.id] ?? '']))
-})
-
-const guardarTipo = () => {
-    if (!observacionEnEdicion.value) return
-
-    tipoForm.put(route('observaciones.tipo', { observacion: observacionEnEdicion.value.id }), {
-        preserveScroll: true,
-        onSuccess: () => { cambiandoTipo.value = false },
-    })
-}
 
 /**
  * Abre el modal directo cuando se llega con `?editar=<id>`.
@@ -730,13 +677,17 @@ const guardar = () => {
                             <div>
                                 <div class="flex items-center gap-2">
                                     <p class="text-theme-xs font-medium uppercase tracking-wide text-gray-400">Tipo</p>
-                                    <!-- Solo super-admin, igual que el lápiz del título. -->
+                                    <!--
+                                        La taxonomía solo llega si esta persona puede
+                                        cambiar tipos (responsable, Calidad o super-admin):
+                                        el backend lo vuelve a chequear por caso.
+                                    -->
                                     <button
-                                        v-if="puedeCorregirTexto && taxonomia && !cambiandoTipo"
+                                        v-if="taxonomia && !cambiandoTipo"
                                         type="button"
                                         class="cursor-pointer text-gray-400 transition-colors hover:text-brand-500 dark:hover:text-brand-300"
                                         title="Cambiar el tipo de la observación"
-                                        @click="abrirCambioTipo(observacionEnEdicion)"
+                                        @click="cambiandoTipo = true"
                                     >
                                         <Icon name="pencil" class="h-3.5 w-3.5" />
                                         <span class="sr-only">Cambiar el tipo de la observación</span>
@@ -768,36 +719,15 @@ const guardar = () => {
                             </div>
                         </div>
 
-                        <!-- Cambio de tipo: los datos que se reemplazan quedan en la bitácora. -->
-                        <form v-if="cambiandoTipo" class="space-y-3 rounded-xl border border-warning-200 p-4 dark:border-warning-500/30" @submit.prevent="guardarTipo">
-                            <p class="rounded-lg bg-warning-50 px-3 py-2 text-theme-xs text-warning-700 dark:bg-warning-500/10 dark:text-warning-400">
-                                Cambiar el tipo reemplaza sus datos específicos. Los anteriores quedan en la bitácora.
-                            </p>
-                            <div class="grid gap-3 sm:grid-cols-2">
-                                <Select v-model="tipoForm.sector_id" label="Sector" required :error="tipoForm.errors.sector_id">
-                                    <option v-for="s in sectores" :key="s.id" :value="s.id">{{ s.nombre }}</option>
-                                </Select>
-                                <Select v-model="tipoForm.tipo" label="Tipo de incidencia" required :error="tipoForm.errors.tipo">
-                                    <option value="" disabled>— Seleccionar —</option>
-                                    <option v-for="t in tiposDisponibles" :key="t.key" :value="t.key">
-                                        {{ t.label }}{{ t.grupo ? ` (${t.grupo})` : '' }}
-                                    </option>
-                                </Select>
-                                <CampoDinamico
-                                    v-for="campo in camposDelTipoNuevo"
-                                    :key="campo.id"
-                                    v-model="tipoForm.datos_especificos[campo.id]"
-                                    :campo="campo"
-                                    :error="(tipoForm.errors as Record<string, string>)[`datos_especificos.${campo.id}`]"
-                                />
-                            </div>
-                            <div class="flex justify-end gap-2">
-                                <Button variant="outline" type="button" @click="cambiandoTipo = false">Cancelar</Button>
-                                <Button type="submit" :disabled="tipoForm.processing || !tipoForm.tipo">
-                                    {{ tipoForm.processing ? 'Guardando...' : 'Cambiar tipo' }}
-                                </Button>
-                            </div>
-                        </form>
+                        <!-- Cambio de tipo: se monta al abrirlo, así arranca siempre desde lo que tiene el caso. -->
+                        <CambioTipoObservacion
+                            v-if="cambiandoTipo && taxonomia"
+                            :key="observacionEnEdicion.id"
+                            :observacion="observacionEnEdicion"
+                            :taxonomia="taxonomia"
+                            :sectores="sectores"
+                            @cerrar="cambiandoTipo = false"
+                        />
 
                         <div v-if="!corrigiendoTexto">
                             <p class="text-theme-xs font-medium uppercase tracking-wide text-gray-400">Descripción</p>

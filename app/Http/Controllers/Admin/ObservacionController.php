@@ -14,6 +14,7 @@ use App\Models\Partida;
 use App\Models\Sector;
 use App\Models\User;
 use App\Notifications\ObservacionSeguimientoNotification;
+use App\Services\CambioDeTipo;
 use App\Services\ObservacionExportService;
 use App\Support\Configuracion;
 use App\Support\ReglasObservacion;
@@ -257,8 +258,9 @@ class ObservacionController extends Controller
             'presentaciones' => ObservationProduct::PRESENTACIONES,
             'tipoLabels' => TaxonomiaIncidencias::etiquetasTipos(),
             // Para cambiar el tipo desde el modal: solo viaja a quien puede
-            // hacerlo (super-admin), así el resto no carga la taxonomía entera.
-            'taxonomia' => $request->user()?->can('editarContenido', new Observacion) ? TaxonomiaIncidencias::taxonomia() : null,
+            // hacerlo (super-admin, Calidad o quien tiene casos a su cargo),
+            // así el resto no carga la taxonomía entera.
+            'taxonomia' => $this->puedeCambiarTipoAlgunCaso($request) ? TaxonomiaIncidencias::taxonomia() : null,
             'prioridades' => config('incidencias.prioridades'),
             'tiposCaso' => config('incidencias.tipos_caso'),
             // Corregir el texto del reclamo, dentro del modal de edición. No va
@@ -269,6 +271,26 @@ class ObservacionController extends Controller
             'puedeCorregirTexto' => $request->user()?->can('editarContenido', new Observacion) ?? false,
             'aniosDisponibles' => Observacion::query()->select('anio')->distinct()->orderByDesc('anio')->pluck('anio'),
         ]);
+    }
+
+    /**
+     * ¿Puede esta persona cambiarle el tipo a alguna observación? Decide si el
+     * listado le manda la taxonomía entera. La habilidad real se chequea por
+     * caso en `cambiarTipo()`: acá solo se evita cargarle ese config a quien
+     * no lo puede usar.
+     */
+    private function puedeCambiarTipoAlgunCaso(Request $request): bool
+    {
+        $user = $request->user();
+
+        if (! $user) {
+            return false;
+        }
+
+        // Con una observación vacía solo pasan el super-admin y Calidad: el
+        // resto depende de ser el responsable de un caso puntual.
+        return $user->can('cambiarTipo', new Observacion)
+            || Observacion::where('responsable_id', $user->id)->exists();
     }
 
     /** Mismos filtros que index(), pero devuelve todo el resultado como .xlsx en vez de paginar. */
@@ -323,6 +345,14 @@ class ObservacionController extends Controller
             'tipoLabels' => TaxonomiaIncidencias::etiquetasTipos(),
             'prioridades' => config('incidencias.prioridades'),
             'puedeEditar' => $request->user()?->can('update', $observacion) ?? false,
+            // Cambiar el tipo lo puede quien no gestiona el caso (Calidad), así
+            // que es una habilidad aparte de `puedeEditar`. La taxonomía y los
+            // sectores solo viajan si hace falta.
+            'puedeCambiarTipo' => $puedeCambiarTipo = $request->user()?->can('cambiarTipo', $observacion) ?? false,
+            'taxonomia' => $puedeCambiarTipo ? TaxonomiaIncidencias::taxonomia() : null,
+            'sectores' => $puedeCambiarTipo
+                ? Sector::where('activo', true)->orderBy('nombre')->get(['id', 'nombre', 'slug'])
+                : [],
             // Escalar a un desvío pide las dos cosas: poder crear una NC y
             // poder gestionar ESTA observación. La Policy lo vuelve a chequear.
             'puedeDerivarANc' => ($request->user()?->can('nc.create') ?? false)
@@ -975,9 +1005,9 @@ class ObservacionController extends Controller
     }
 
     /**
-     * Reencuadra el caso en otro tipo de incidencia. **Solo super-admin**
-     * (pedido del 21/10/2026), con la misma llave que corregir el texto:
-     * `ObservacionPolicy::editarContenido()`.
+     * Reencuadra el caso en otro tipo de incidencia: el responsable, Calidad y el
+     * super-admin (desde el 6/11/2026; antes solo super-admin, pedido del
+     * 21/10/2026). La llave es `ObservacionPolicy::cambiarTipo()`.
      *
      * Se elige sector + tipo como en el alta, y se piden los "Datos
      * específicos" del tipo nuevo con las mismas reglas: un cambio no puede
@@ -985,19 +1015,17 @@ class ObservacionController extends Controller
      * aceptado. Los datos del tipo viejo los guarda el observer en la bitácora
      * (acción `tipo`), porque acá se reemplazan.
      *
-     * ⚠️ **No se cruza la frontera de los reclamos de cliente.** Falla de
-     * producto y Disconformidad de servicio (los "especiales") tienen otro
-     * formulario —productos, institución, provincia— y otro circuito de avisos
-     * por rol. Pasar un reclamo de cliente a una incidencia interna (o al revés)
-     * dejaría datos sin lugar donde mostrarse, así que solo se permite moverse
-     * dentro del mismo grupo.
+     * Las reglas viven en `CambioDeTipo`, que comparte con la reclasificación
+     * masiva. En particular **se puede cruzar entre reclamos de cliente e
+     * incidencias internas** (antes no), y `origen` y `tipo_caso` no se tocan:
+     * la observación sigue figurando como reclamo de cliente.
      *
      * Los productos ya cargados no se tocan: este modal no los edita, y la ficha
      * los sigue mostrando aunque el tipo nuevo no los pida.
      */
-    public function cambiarTipo(Request $request, Observacion $observacion)
+    public function cambiarTipo(Request $request, Observacion $observacion, CambioDeTipo $cambio)
     {
-        $this->authorize('editarContenido', $observacion);
+        $this->authorize('cambiarTipo', $observacion);
 
         $base = $request->validate([
             'sector_id' => ['required', 'exists:sectors,id'],
@@ -1006,43 +1034,16 @@ class ObservacionController extends Controller
 
         $sector = Sector::findOrFail($base['sector_id']);
 
-        if (! TaxonomiaIncidencias::tipo($sector->slug, $base['tipo'])) {
-            throw ValidationException::withMessages([
-                'tipo' => 'El tipo de incidencia no corresponde al sector seleccionado.',
-            ]);
+        $esEspecial = $cambio->comprobar($observacion, $sector, $base['tipo']);
+
+        $datos = null;
+
+        if (! $esEspecial) {
+            $reglas = $cambio->reglasDeDatos($sector, $base['tipo']);
+            $datos = $request->validate($reglas['reglas'], [], $reglas['atributos'])['datos_especificos'] ?? [];
         }
 
-        $sectorActual = TaxonomiaIncidencias::sectorDeTipo((string) $observacion->tipo);
-        $eraEspecial = $sectorActual !== null && TaxonomiaIncidencias::esTipoEspecial($sectorActual, (string) $observacion->tipo);
-        $esEspecial = TaxonomiaIncidencias::esTipoEspecial($sector->slug, $base['tipo']);
-
-        if ($eraEspecial !== $esEspecial) {
-            throw ValidationException::withMessages([
-                'tipo' => $eraEspecial
-                    ? 'Un reclamo de cliente solo puede pasar a otro reclamo de cliente (Falla de producto o Disconformidad de servicio).'
-                    : 'Una incidencia interna no puede pasar a un reclamo de cliente: esos tienen otro formulario.',
-            ]);
-        }
-
-        if (TaxonomiaIncidencias::requiereCliente($sector->slug, $base['tipo']) && blank($observacion->contacto_numero_cliente)) {
-            throw ValidationException::withMessages([
-                'tipo' => 'Ese tipo exige el N° de cliente, y esta observación no lo tiene cargado.',
-            ]);
-        }
-
-        $datos = $esEspecial
-            ? $observacion->datos_especificos
-            : $request->validate(
-                TaxonomiaIncidencias::reglasValidacion($sector->slug, $base['tipo']),
-                [],
-                TaxonomiaIncidencias::atributosValidacion($sector->slug, $base['tipo']),
-            )['datos_especificos'] ?? [];
-
-        $observacion->update([
-            'tipo' => $base['tipo'],
-            'sector_id' => $sector->id,
-            'datos_especificos' => $datos,
-        ]);
+        $cambio->aplicar($observacion, $sector, $base['tipo'], $datos);
 
         // `back()`: se dispara desde el modal de edición, que vive sobre el
         // listado filtrado. Mismo criterio que `update()`.

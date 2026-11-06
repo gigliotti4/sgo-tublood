@@ -60,4 +60,27 @@ class ObservacionPolicy
     {
         return false;
     }
+
+    /**
+     * Reencuadrar el caso en otro tipo de incidencia (y por lo tanto en otro
+     * sector). Desde el 6/11/2026 lo hacen **el responsable asignado y Calidad**,
+     * además del super-admin (por `Gate::before`): hasta entonces era solo
+     * super-admin, y un reclamo que el cliente cargó mal quedaba trabado en el
+     * tipo equivocado hasta que alguien con ese acceso lo corrigiera.
+     *
+     * Es una habilidad propia y **no** `editarContenido`, que sigue siendo solo
+     * super-admin y solo para título y descripción: cambiar el tipo mueve el
+     * caso de sector, pero no reescribe lo que reportó el cliente.
+     *
+     * Calidad es el rol `garantia_calidad`, su sector, o los dos roles de
+     * reparto de reclamos (`calidad_producto`, `calidad_servicio`).
+     */
+    public function cambiarTipo(User $user, Observacion $observacion): bool
+    {
+        if ($observacion->trashed()) {
+            return false;
+        }
+
+        return $user->id === $observacion->responsable_id || $user->esDeCalidadAmplio();
+    }
 }
