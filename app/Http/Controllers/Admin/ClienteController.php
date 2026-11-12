@@ -10,12 +10,14 @@ use App\Models\Cliente;
 use App\Models\ClienteAttachment;
 use App\Services\ClienteExportService;
 use App\Services\ClienteImportService;
+use App\Services\RpSistemas\ClienteSyncService;
 use App\Support\Documentacion;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Response;
@@ -72,7 +74,9 @@ class ClienteController extends Controller
             ->paginate(50)
             ->withQueryString();
 
-        $lastSync = Cliente::max('synced_at');
+        // El latido de la sync, no `max(synced_at)`: la sync solo escribe lo que
+        // cambió, así que esa columna dice "cuándo cambió algo", no "cuándo corrió".
+        $lastSync = Cache::get(ClienteSyncService::CLAVE_ULTIMA_SYNC) ?? Cliente::max('synced_at');
 
         return inertia('Admin/Clientes/Index', [
             'clientes' => $clientes,

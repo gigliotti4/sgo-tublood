@@ -7,6 +7,8 @@ use App\Models\Cliente;
 use App\Services\RpSistemas\ClienteSyncService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
@@ -193,6 +195,94 @@ class ClienteSyncTest extends TestCase
 
         $this->assertSame(1250, $this->sincronizar($filas));
         $this->assertSame(1250, Cliente::count());
+    }
+
+    // ── Escribe solo lo que cambió ──────────────────────────────────────────
+
+    /** Marca una fila como "vista hace tiempo": si la sync la toca, esa fecha cambia. */
+    private function envejecer(string $numero): void
+    {
+        DB::table('clientes')->where('numero', $numero)->update(['synced_at' => '2020-01-01 00:00:00', 'updated_at' => '2020-01-01 00:00:00']);
+    }
+
+    private function syncedAt(string $numero): string
+    {
+        return (string) DB::table('clientes')->where('numero', $numero)->value('synced_at');
+    }
+
+    /**
+     * Reescribir los ~3.800 clientes en cada corrida eran ~560 MB diarios de log
+     * binario de MySQL para refrescar una fecha. Sin novedades, no se escribe nada.
+     */
+    public function test_una_corrida_sin_novedades_no_escribe_nada(): void
+    {
+        $this->sincronizar([$this->fila('1'), $this->fila('2')]);
+        $this->envejecer('1');
+        $this->envejecer('2');
+
+        $this->sincronizar([$this->fila('1'), $this->fila('2')]);
+
+        $this->assertSame('2020-01-01 00:00:00', $this->syncedAt('1'));
+        $this->assertSame('2020-01-01 00:00:00', $this->syncedAt('2'));
+    }
+
+    public function test_escribe_solo_el_cliente_que_cambio(): void
+    {
+        $this->sincronizar([$this->fila('1'), $this->fila('2')]);
+        $this->envejecer('1');
+        $this->envejecer('2');
+
+        $this->sincronizar([$this->fila('1', 'Empresa SA', ['mail' => 'nuevo@empresa.com']), $this->fila('2')]);
+
+        $this->assertSame('nuevo@empresa.com', Cliente::where('numero', '1')->value('mail'));
+        $this->assertSame('2026-11-12 10:00:00', $this->syncedAt('1'));
+        $this->assertSame('2020-01-01 00:00:00', $this->syncedAt('2'), 'el que no cambió no se toca');
+    }
+
+    /** El cambio de provincia o de vendedor sale de otra tabla del ERP y no mueve `FECHA_MODI`: igual se ve. */
+    public function test_un_cambio_de_vendedor_o_provincia_tambien_se_detecta(): void
+    {
+        $this->sincronizar([$this->fila('1')]);
+        $this->envejecer('1');
+
+        $this->sincronizar([$this->fila('1', 'Empresa SA', ['nombre_vendedor' => 'OTRO VENDEDOR', 'descripcion_provincia' => 'Cordoba'])]);
+
+        $cliente = Cliente::where('numero', '1')->first();
+        $this->assertSame('OTRO VENDEDOR', $cliente->nombre_vendedor);
+        $this->assertSame('Cordoba', $cliente->descripcion_provincia);
+    }
+
+    /** El cliente nuevo entra aunque todos los demás estén iguales. */
+    public function test_un_cliente_nuevo_entra_y_los_iguales_no_se_tocan(): void
+    {
+        $this->sincronizar([$this->fila('1')]);
+        $this->envejecer('1');
+
+        $this->sincronizar([$this->fila('1'), $this->fila('2', 'Cliente Nuevo')]);
+
+        $this->assertSame('Cliente Nuevo', Cliente::where('numero', '2')->value('razon_social'));
+        $this->assertSame('2020-01-01 00:00:00', $this->syncedAt('1'));
+    }
+
+    /** El ERP manda ".0000" y la columna guarda 2 decimales: un 10,5 % no puede reescribirse en cada corrida. */
+    public function test_el_porcentaje_de_descuento_no_provoca_reescrituras(): void
+    {
+        $this->sincronizar([$this->fila('1', 'Empresa SA', ['porcen_descuen' => '10.5000'])]);
+        $this->envejecer('1');
+
+        $this->sincronizar([$this->fila('1', 'Empresa SA', ['porcen_descuen' => '10.5000'])]);
+
+        $this->assertSame('2020-01-01 00:00:00', $this->syncedAt('1'));
+        $this->assertEquals(10.5, (float) Cliente::where('numero', '1')->value('porcen_descuen'));
+    }
+
+    /** Una corrida sin novedades no toca filas, así que el latido es lo único que dice que la sync está viva. */
+    public function test_cada_corrida_deja_su_latido_aunque_no_escriba_nada(): void
+    {
+        $this->sincronizar([$this->fila('1')]);
+        (new ClienteSyncService)->escribir([$this->fila('1')], Carbon::parse('2026-11-12 10:05:00'));
+
+        $this->assertSame('2026-11-12 10:05:00', Cache::get(ClienteSyncService::CLAVE_ULTIMA_SYNC));
     }
 
     // ── Guarda contra lecturas incompletas ──────────────────────────────────

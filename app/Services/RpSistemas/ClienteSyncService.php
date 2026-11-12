@@ -5,6 +5,7 @@ namespace App\Services\RpSistemas;
 use App\Exceptions\RpSistemasException;
 use App\Models\Cliente;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -36,6 +37,20 @@ class ClienteSyncService
 {
     /** Filas por upsert: ~3.800 clientes × 21 columnas pasan el tope de 65.535 parámetros de MySQL. */
     private const CHUNK = 500;
+
+    /** Dónde queda la hora de la última corrida que terminó bien (ver `escribir()`). */
+    public const CLAVE_ULTIMA_SYNC = 'clientes.ultima_sync';
+
+    /**
+     * Las columnas que manda el ERP: lo que se compara y lo que el `upsert` pisa.
+     * Es la lista que hay que **no** engordar con campos propios del panel.
+     */
+    private const COLUMNAS_DEL_ERP = [
+        'razon_social', 'nombre_fantasia', 'cuit', 'codigo_iva', 'descripcion_iva',
+        'telefono', 'mail', 'contacto', 'domicilio', 'localidad', 'codigo_provincia',
+        'descripcion_provincia', 'porcen_descuen', 'usuario_web', 'codigo_vendedor',
+        'nombre_vendedor', 'codigo_postal',
+    ];
 
     /**
      * La población que devolvía la API: activos (`A`) y suspendidos (`S`). Los
@@ -120,10 +135,22 @@ class ClienteSyncService
     }
 
     /**
-     * Guarda las filas leídas. Público para probarlo sin SQL Server.
+     * Guarda las filas leídas, **escribiendo solo las que cambiaron**. Público
+     * para probarlo sin SQL Server.
+     *
+     * ⚠️ Antes se reescribían las ~3.800 en cada corrida (el `upsert` siempre
+     * cambia `synced_at`), y con el log binario de MySQL en formato ROW eso eran
+     * ~2 MB por corrida × 288 corridas por día = ~560 MB diarios para refrescar un
+     * campo de fecha (medido el 12/11/2026: 0,05 MB por corrida antes del cambio a
+     * SQL, 1,95 MB después). Ahora se lee todo del ERP igual —así un cambio de
+     * provincia o de vendedor, que no mueve `FECHA_MODI`, igual se ve— pero se
+     * compara contra lo guardado y una corrida sin novedades no escribe nada.
+     *
+     * Consecuencia: **`synced_at` es "cuándo cambió por última vez", no "cuándo se
+     * vio"**. El latido de la sync vive aparte (`CLAVE_ULTIMA_SYNC`).
      *
      * @param  list<array<string, mixed>>  $filas
-     * @return int Cantidad de clientes escritos
+     * @return int Cantidad de clientes procesados (leídos del ERP)
      *
      * @throws RpSistemasException
      */
@@ -131,41 +158,77 @@ class ClienteSyncService
     {
         $this->comprobarQueNoVengaIncompleto(count($filas));
 
-        $total = 0;
+        $mapeadas = [];
 
-        foreach (array_chunk($filas, self::CHUNK) as $bloque) {
-            $lote = array_map(fn ($fila) => $this->mapear($fila, $syncedAt), $bloque);
+        foreach ($filas as $fila) {
+            $cliente = $this->mapear($fila, $syncedAt);
+            $mapeadas[$cliente['numero']] = $cliente;
+        }
 
+        $locales = DB::table('clientes')->get(['numero', ...self::COLUMNAS_DEL_ERP])->keyBy('numero');
+
+        $cambiados = array_values(array_filter(
+            $mapeadas,
+            fn ($cliente) => $this->cambio($cliente, $locales->get($cliente['numero'])),
+        ));
+
+        foreach (array_chunk($cambiados, self::CHUNK) as $bloque) {
             // No incluir 'fecha_vencimiento' ni 'mail_nuevo' aquí: son campos
             // propios (no gestionados por el ERP) que se editan a mano o los
             // carga el propio cliente desde el portal, y la sync nunca debe
             // pisar. Tampoco `tipo_cliente`, `tiene_legajo`, `habilitado`, `notas`
             // ni `documentacion_completa`. Ojo que 'mail' sí está: ese es el del
             // ERP y se sobrescribe.
-            Cliente::upsert(
-                $lote,
-                ['numero'],
-                [
-                    'razon_social', 'nombre_fantasia', 'cuit', 'codigo_iva',
-                    'descripcion_iva', 'telefono', 'mail', 'contacto',
-                    'domicilio', 'localidad', 'codigo_provincia', 'descripcion_provincia',
-                    'porcen_descuen', 'usuario_web', 'codigo_vendedor', 'nombre_vendedor',
-                    'codigo_postal', 'synced_at', 'updated_at',
-                ]
-            );
-
-            $total += count($lote);
+            Cliente::upsert($bloque, ['numero'], [...self::COLUMNAS_DEL_ERP, 'synced_at', 'updated_at']);
         }
 
-        // Los que no se vieron esta vez: inactivos o dados de baja en el ERP.
+        // Los que no vinieron esta vez: inactivos o dados de baja en el ERP.
         // Quedan como están (la sync nunca borra), pero conviene que se note.
-        $sinVer = Cliente::where('synced_at', '<', $syncedAt->toDateTimeString())->count();
+        $sinVer = $locales->keys()->diff(array_keys($mapeadas))->count();
 
         if ($sinVer > 0) {
             Log::info("RpSistemas: {$sinVer} clientes locales no figuran entre los activos del ERP (inactivos o dados de baja)");
         }
 
-        return $total;
+        // El latido: la pantalla de Clientes muestra "Última sincronización", y con
+        // escritura selectiva `max(synced_at)` ya no lo dice (una corrida sin
+        // novedades no toca ninguna fila). Una sync trabada sigue notándose.
+        Cache::forever(self::CLAVE_ULTIMA_SYNC, $syncedAt->toDateTimeString());
+
+        Log::info('RpSistemas: clientes escritos en esta corrida — '.count($cambiados).' de '.count($mapeadas));
+
+        return count($mapeadas);
+    }
+
+    /** ¿Hay que escribir este cliente? Es nuevo, o alguna columna del ERP es distinta de la guardada. */
+    private function cambio(array $nuevo, ?object $actual): bool
+    {
+        if ($actual === null) {
+            return true;
+        }
+
+        foreach (self::COLUMNAS_DEL_ERP as $columna) {
+            if (! $this->igual($columna, $nuevo[$columna] ?? null, $actual->{$columna} ?? null)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function igual(string $columna, mixed $nuevo, mixed $guardado): bool
+    {
+        if ($nuevo === null || $guardado === null) {
+            return $nuevo === $guardado;
+        }
+
+        // El ERP manda ".0000" y la columna es decimal(8,2): se compara ya redondeado,
+        // o el cliente con 10,5 % se reescribiría en cada corrida.
+        if ($columna === 'porcen_descuen') {
+            return round((float) $nuevo, 2) === round((float) $guardado, 2);
+        }
+
+        return (string) $nuevo === (string) $guardado;
     }
 
     /**
