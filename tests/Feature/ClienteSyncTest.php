@@ -5,81 +5,132 @@ namespace Tests\Feature;
 use App\Exceptions\RpSistemasException;
 use App\Models\Cliente;
 use App\Services\RpSistemas\ClienteSyncService;
-use App\Services\RpSistemas\RpSistemasClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
+/**
+ * Sync de clientes desde la tabla `CLIENTES` del ERP.
+ *
+ * Desde el 12/11/2026 se lee por SQL y no por `clientes.php`, cuya paginación
+ * quedó rota (la página 2 viene vacía y recorriéndolas todas aparecen 1.968 de
+ * 3.784 clientes): el sync anterior solo actualizaba 100 clientes por corrida y
+ * el 3827 nunca entró. La lectura (`leer()`) necesita SQL Server y se verifica
+ * contra el ERP real; acá se prueba lo que no lo necesita: el mapeo y la
+ * escritura.
+ */
 class ClienteSyncTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function makeResponse(array $datos, array $paginado): array
-    {
-        return [[
-            'datos_recibidos' => [],
-            'info' => [
-                'servicio' => 'clientes.php',
-                'estado' => 200,
-                'datos' => $datos,
-                'datos_paginado' => [$paginado],
-            ],
-        ]];
-    }
-
-    private function makeCliente(string $numero, string $razon = 'Empresa SA'): array
+    /** Una fila como la devuelve `leer()`: las columnas de `CLIENTES` ya con su alias. */
+    private function fila(string $numero, string $razon = 'Empresa SA', array $extra = []): array
     {
         return [
             'numero' => $numero,
             'razon' => $razon,
-            'nombre_fantasia' => '',
+            'nombre_fantasia' => null,
             'cuit' => '30-12345678-9',
-            'codigo_iva' => 1,
-            'descripcion_iva' => 'IVA Responsable Inscripto',
+            'iva' => '1',
             'telefono' => '01112345678',
             'mail' => 'test@empresa.com',
-            'contacto' => '',
+            'contacto' => null,
             'domicilio' => 'Av. Test 123',
             'localidad' => 'Buenos Aires',
             'codigo_provincia' => 'BA',
             'descripcion_provincia' => 'Buenos Aires',
-            'porcen_descuen' => 10.00,
-            'usuario_web' => 'C1',
-            'codigo_vendedor' => '',
-            'nombre_vendedor' => '',
-            'código_postal' => '1000',
+            'porcen_descuen' => '.0000',
+            'usuario_web' => 'C'.$numero,
+            'codigo_vendedor' => '07',
+            'nombre_vendedor' => 'TUBLOOD SA',
+            'codigo_postal' => '1000',
+            ...$extra,
         ];
     }
 
-    private function paginado(bool $tieneSiguiente, int $pagina = 1): array
+    private function sincronizar(array $filas): int
     {
-        return [
-            'total_registros' => '2',
-            'total_paginas' => '2',
-            'pagina_actual' => (string) $pagina,
-            'tamano_pagina' => '1',
-            'tiene_pagina_siguiente' => $tieneSiguiente ? '1' : '0',
-            'tiene_pagina_anterior' => $pagina > 1 ? '1' : '0',
-        ];
+        return (new ClienteSyncService)->escribir($filas, Carbon::parse('2026-11-12 10:00:00'));
     }
 
-    public function test_sync_inserta_clientes_correctamente(): void
-    {
-        Http::fake([
-            '*/clientes.php' => Http::response(
-                $this->makeResponse([$this->makeCliente('1', 'Empresa Uno')], $this->paginado(false)),
-                200
-            ),
-        ]);
+    // ── Mapeo ──────────────────────────────────────────────────────────────
 
-        $service = new ClienteSyncService(new RpSistemasClient);
-        $total = $service->sync();
+    public function test_mapea_los_campos_del_erp_a_las_columnas_locales(): void
+    {
+        $c = (new ClienteSyncService)->mapear($this->fila('3827', 'CAROLINA ALEJANDRA MANERA ', [
+            'iva' => '5', 'codigo_provincia' => 'COR', 'descripcion_provincia' => 'Cordoba', 'codigo_postal' => '5917',
+        ]), Carbon::parse('2026-11-12 10:00:00'));
+
+        $this->assertSame('3827', $c['numero']);
+        // El espacio final se conserva: así lo guarda el ERP y así lo mostraba la API.
+        $this->assertSame('CAROLINA ALEJANDRA MANERA ', $c['razon_social']);
+        $this->assertSame('5', $c['codigo_iva']);
+        $this->assertSame('Responsable Monotributo', $c['descripcion_iva']);
+        $this->assertSame('COR', $c['codigo_provincia']);
+        $this->assertSame('Cordoba', $c['descripcion_provincia']);
+        $this->assertSame('C3827', $c['usuario_web']);
+        $this->assertSame('07', $c['codigo_vendedor']);
+        $this->assertSame('5917', $c['codigo_postal']);
+        $this->assertSame(0.0, $c['porcen_descuen']);
+    }
+
+    public function test_las_cinco_condiciones_de_iva_conocidas(): void
+    {
+        $esperado = [
+            '1' => 'Responsable Inscripto', '2' => 'Responsable No Inscripto', '3' => 'Exento',
+            '4' => 'Consumidor Final', '5' => 'Responsable Monotributo',
+        ];
+
+        foreach ($esperado as $codigo => $descripcion) {
+            $c = (new ClienteSyncService)->mapear($this->fila('1', 'X', ['iva' => $codigo]), Carbon::now());
+
+            $this->assertSame($descripcion, $c['descripcion_iva'], "IVA {$codigo}");
+        }
+    }
+
+    /** Un código que el mapa no conoce no se inventa: queda sin descripción. */
+    public function test_un_codigo_de_iva_nuevo_queda_sin_descripcion(): void
+    {
+        $c = (new ClienteSyncService)->mapear($this->fila('1', 'X', ['iva' => '9']), Carbon::now());
+
+        $this->assertSame('9', $c['codigo_iva']);
+        $this->assertNull($c['descripcion_iva']);
+    }
+
+    public function test_los_vacios_del_erp_quedan_en_null(): void
+    {
+        $c = (new ClienteSyncService)->mapear($this->fila('1', 'X', [
+            'nombre_fantasia' => '', 'contacto' => '   ', 'codigo_postal' => null, 'porcen_descuen' => null, 'iva' => null,
+        ]), Carbon::now());
+
+        $this->assertNull($c['nombre_fantasia']);
+        $this->assertNull($c['contacto']);
+        $this->assertNull($c['codigo_postal']);
+        $this->assertNull($c['porcen_descuen']);
+        $this->assertNull($c['codigo_iva']);
+        $this->assertNull($c['descripcion_iva']);
+    }
+
+    /** `NUM_CLIENTE` es un int en SQL Server; localmente es el texto con el que se cruza. */
+    public function test_el_numero_de_cliente_se_guarda_como_texto(): void
+    {
+        $c = (new ClienteSyncService)->mapear($this->fila('1', 'X', ['numero' => 3827]), Carbon::now());
+
+        $this->assertSame('3827', $c['numero']);
+    }
+
+    // ── Escritura ──────────────────────────────────────────────────────────
+
+    public function test_inserta_clientes_correctamente(): void
+    {
+        $total = $this->sincronizar([$this->fila('1', 'Empresa Uno')]);
 
         $this->assertSame(1, $total);
         $this->assertDatabaseHas('clientes', [
             'numero' => '1',
             'razon_social' => 'Empresa Uno',
             'codigo_postal' => '1000',
+            'descripcion_iva' => 'Responsable Inscripto',
         ]);
     }
 
@@ -87,7 +138,7 @@ class ClienteSyncTest extends TestCase
      * El ERP manda los datos comerciales; la clasificación documental es del
      * panel y la sync (cada 5 minutos) no la puede pisar.
      */
-    public function test_sync_actualiza_datos_del_erp_pero_preserva_los_campos_propios(): void
+    public function test_actualiza_datos_del_erp_pero_preserva_los_campos_propios(): void
     {
         $cliente = Cliente::create([
             'numero' => '1',
@@ -97,18 +148,11 @@ class ClienteSyncTest extends TestCase
             'tiene_legajo' => true,
             'habilitado' => false,
             'notas' => 'Pidió prórroga.',
+            'mail_nuevo' => 'nuevo@cliente.com',
             'documentacion_completa' => true,
         ]);
 
-        Http::fake([
-            '*/clientes.php' => Http::response(
-                $this->makeResponse([$this->makeCliente('1', 'Nombre Nuevo SA')], $this->paginado(false)),
-                200
-            ),
-        ]);
-
-        $service = new ClienteSyncService(new RpSistemasClient);
-        $service->sync();
+        $this->sincronizar([$this->fila('1', 'Nombre Nuevo SA')]);
 
         $cliente->refresh();
         $this->assertSame('Nombre Nuevo SA', $cliente->razon_social);
@@ -117,138 +161,71 @@ class ClienteSyncTest extends TestCase
         $this->assertTrue($cliente->tiene_legajo);
         $this->assertFalse($cliente->habilitado);
         $this->assertSame('Pidió prórroga.', $cliente->notas);
+        $this->assertSame('nuevo@cliente.com', $cliente->mail_nuevo);
         $this->assertTrue($cliente->documentacion_completa);
     }
 
-    public function test_sync_es_idempotente(): void
+    public function test_es_idempotente(): void
     {
-        Http::fake([
-            '*/clientes.php' => Http::response(
-                $this->makeResponse([$this->makeCliente('1', 'Empresa Uno')], $this->paginado(false)),
-                200
-            ),
-        ]);
-
-        $service = new ClienteSyncService(new RpSistemasClient);
-        $service->sync();
-        $service->sync();
+        $this->sincronizar([$this->fila('1', 'Empresa Uno')]);
+        $this->sincronizar([$this->fila('1', 'Empresa Uno')]);
 
         $this->assertSame(1, Cliente::count());
     }
 
-    public function test_sync_pagina_hasta_fin(): void
+    /**
+     * El caso que originó el cambio: el 3827 nunca entraba porque el sync solo
+     * veía los 100 clientes de la primera página. Ahora entra con todos los demás.
+     */
+    public function test_un_cliente_nuevo_entra_junto_con_los_que_ya_estaban(): void
     {
-        Http::fake([
-            '*/clientes.php' => Http::sequence()
-                ->push($this->makeResponse([$this->makeCliente('1', 'Empresa Uno')], $this->paginado(true, 1)), 200)
-                ->push($this->makeResponse([$this->makeCliente('2', 'Empresa Dos')], $this->paginado(false, 2)), 200),
-        ]);
+        $this->sincronizar([$this->fila('3825'), $this->fila('3826')]);
+        $this->sincronizar([$this->fila('3825'), $this->fila('3826'), $this->fila('3827', 'CAROLINA ALEJANDRA MANERA ')]);
 
-        $service = new ClienteSyncService(new RpSistemasClient);
-        $total = $service->sync();
-
-        $this->assertSame(2, $total);
-        $this->assertSame(2, Cliente::count());
+        $this->assertSame(3, Cliente::count());
+        $this->assertSame('CAROLINA ALEJANDRA MANERA ', Cliente::where('numero', '3827')->value('razon_social'));
     }
 
-    public function test_sync_lanza_excepcion_cuando_api_retorna_estado_400(): void
+    /** ~3.800 filas × 21 columnas pasarían el tope de 65.535 parámetros de MySQL en un solo upsert. */
+    public function test_escribe_por_bloques_cuando_son_muchos(): void
     {
-        Http::fake([
-            '*/clientes.php' => Http::response([[
-                'datos_recibidos' => [],
-                'info' => [
-                    'servicio' => 'clientes.php',
-                    'estado' => 400,
-                    'msj' => 'Error al realizar la operacion.',
-                ],
-            ]], 200),
-        ]);
+        $filas = array_map(fn ($n) => $this->fila((string) $n), range(1, 1250));
+
+        $this->assertSame(1250, $this->sincronizar($filas));
+        $this->assertSame(1250, Cliente::count());
+    }
+
+    // ── Guarda contra lecturas incompletas ──────────────────────────────────
+
+    /** Terminar "bien" con cero filas es justo el fallo silencioso que dejó el sync estancado. */
+    public function test_una_lectura_vacia_falla_en_vez_de_terminar_bien(): void
+    {
+        $this->expectException(RpSistemasException::class);
+        $this->expectExceptionMessage('no devolvió ningún cliente');
+
+        $this->sincronizar([]);
+    }
+
+    public function test_una_lectura_mucho_mas_corta_que_lo_guardado_falla(): void
+    {
+        $this->sincronizar(array_map(fn ($n) => $this->fila((string) $n), range(1, 100)));
 
         $this->expectException(RpSistemasException::class);
-        $this->expectExceptionMessage('Error al realizar la operacion.');
+        $this->expectExceptionMessage('vino incompleta');
 
-        $service = new ClienteSyncService(new RpSistemasClient);
-        $service->sync();
+        // Con 100 guardados, 10 filas es el 10 %: no es una baja normal.
+        $this->sincronizar(array_map(fn ($n) => $this->fila((string) $n), range(1, 10)));
     }
 
-    // ── Texto doble-codificado que manda el ERP ────────────────────────
-
-    /**
-     * `clientes.php` devuelve el texto leído como Latin-1 y vuelto a codificar
-     * ("AsociaciÃ³n"). Se repara al entrar — ver `Support\Mojibake`.
-     */
-    public function test_sync_repara_el_texto_doble_codificado_del_erp(): void
+    /** Un puñado de clientes que pasan a inactivos en el ERP es normal y no frena la sync. */
+    public function test_una_baja_chica_no_frena_la_sync(): void
     {
-        $roto = $this->makeCliente('1', 'AsociaciÃ³n Mutual de FarmacÃ©uticos');
-        $roto['domicilio'] = 'Rodriguez PeÃ±a 237';
-        $roto['localidad'] = 'NeuquÃ©n';
-        $roto['contacto'] = 'JosÃ© Luis';
+        $this->sincronizar(array_map(fn ($n) => $this->fila((string) $n), range(1, 100)));
 
-        Http::fake([
-            '*/clientes.php' => Http::response(
-                $this->makeResponse([$roto], $this->paginado(false)),
-                200
-            ),
-        ]);
+        $total = $this->sincronizar(array_map(fn ($n) => $this->fila((string) $n), range(1, 96)));
 
-        (new ClienteSyncService(new RpSistemasClient))->sync();
-
-        $this->assertDatabaseHas('clientes', [
-            'numero' => '1',
-            'razon_social' => 'Asociación Mutual de Farmacéuticos',
-            'domicilio' => 'Rodriguez Peña 237',
-            'localidad' => 'Neuquén',
-            'contacto' => 'José Luis',
-        ]);
-    }
-
-    /**
-     * El modo de falla peligroso: convertir a ciegas destruiría el texto que ya
-     * viene bien, y la sync corre cada 5 minutos.
-     */
-    public function test_sync_no_rompe_el_texto_que_el_erp_manda_bien(): void
-    {
-        $sano = $this->makeCliente('1', 'BAÑO TERMOSTATICO SRL');
-        $sano['localidad'] = 'Neuquén';
-        $sano['domicilio'] = 'AGÜERO 123';
-
-        Http::fake([
-            '*/clientes.php' => Http::response(
-                $this->makeResponse([$sano], $this->paginado(false)),
-                200
-            ),
-        ]);
-
-        (new ClienteSyncService(new RpSistemasClient))->sync();
-
-        $this->assertDatabaseHas('clientes', [
-            'numero' => '1',
-            'razon_social' => 'BAÑO TERMOSTATICO SRL',
-            'localidad' => 'Neuquén',
-            'domicilio' => 'AGÜERO 123',
-        ]);
-    }
-
-    /** Correr la sync dos veces no puede volver a mover el texto ya reparado. */
-    public function test_sync_repetida_deja_el_texto_igual(): void
-    {
-        Http::fake([
-            '*/clientes.php' => Http::response(
-                $this->makeResponse(
-                    [$this->makeCliente('1', 'AsociaciÃ³n Mutual')],
-                    $this->paginado(false)
-                ),
-                200
-            ),
-        ]);
-
-        $service = new ClienteSyncService(new RpSistemasClient);
-        $service->sync();
-        $service->sync();
-
-        $this->assertSame(
-            'Asociación Mutual',
-            Cliente::where('numero', '1')->value('razon_social')
-        );
+        $this->assertSame(96, $total);
+        // La sync nunca borra: los 4 que ya no vienen quedan como estaban.
+        $this->assertSame(100, Cliente::count());
     }
 }

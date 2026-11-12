@@ -2,13 +2,13 @@
 
 namespace App\Jobs;
 
-use App\Exceptions\RpSistemasException;
 use App\Services\RpSistemas\ClienteSyncService;
-use App\Services\RpSistemas\RpSistemasClient;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
+/** Sincroniza los clientes del ERP (lectura por SQL: ver `ClienteSyncService`). */
 class SyncClientesJob implements ShouldQueue
 {
     use Queueable;
@@ -17,16 +17,13 @@ class SyncClientesJob implements ShouldQueue
 
     public int $timeout = 300;
 
-    public function handle(RpSistemasClient $client): void
+    public function handle(ClienteSyncService $service): void
     {
-        $service = new ClienteSyncService($client);
-
         try {
             $total = $service->sync();
             Log::info("SyncClientesJob: completado — {$total} clientes sincronizados");
-        } catch (RpSistemasException $e) {
-            Log::error('SyncClientesJob: error de API RP Sistemas', [
-                'servicio' => $e->servicio,
+        } catch (Throwable $e) {
+            Log::error('SyncClientesJob: error leyendo los clientes del ERP', [
                 'message' => $e->getMessage(),
             ]);
             throw $e;

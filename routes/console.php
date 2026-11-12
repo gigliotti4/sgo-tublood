@@ -8,7 +8,6 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-Schedule::command('clientes:sync')->everyFiveMinutes();
 // Proveedores y ventas no vienen por la API: se leen de las vistas SQL que RP
 // Sistemas habilita para Power BI. El padrón de proveedores cambia poco; las
 // ventas se reemplazan enteras, así que van de noche y después de artículos.
@@ -17,6 +16,12 @@ Schedule::command('clientes:sync')->everyFiveMinutes();
 // driver `pdo_sqlsrv` (hoy: hosting compartido y cualquier máquina sin la
 // extensión) fallarían en cada corrida y llenarían el log de errores.
 $erpConfigurado = fn () => filled(config('database.connections.erp.host'));
+
+// Los clientes también salen de SQL desde el 12/11/2026: el listado paginado de
+// `clientes.php` quedó roto (la página 2 viene vacía) y el sync de entonces solo
+// actualizaba 100 clientes por corrida. Cada 5 minutos: es una sola consulta de
+// ~3.800 filas y un cliente recién cargado en RP tiene que aparecer enseguida.
+Schedule::command('clientes:sync')->everyFiveMinutes()->when($erpConfigurado);
 
 // El catálogo de artículos también sale de SQL desde el 30/9/2026: hasta
 // entonces entraba por la API HTTP y era la única sync sin este guard. Va

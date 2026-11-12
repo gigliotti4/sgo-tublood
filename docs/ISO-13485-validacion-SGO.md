@@ -35,6 +35,7 @@ son acciones humanas), y no reemplaza el registro de los desvíos de producción
 | 6/11/2026 | `bc05f16` | Objetivos de gestión (planilla en dos pasos) y tablero en el Dashboard | Tablas nuevas; no toca observaciones | `ObjetivosTableroTest` |
 | 6/11/2026 | (este cambio) | Alertas de calidad de carga y Excel/PDF del tablero con fecha de corte | Solo lectura sobre observaciones | `CalidadDeCargaYExportTableroTest` |
 | 6/11/2026 | (este cambio) | Remitos de venta del ERP: tasa de fallos cada 100 remitos y escala del objetivo de armado | Tabla nueva `remitos` (espejo de solo lectura del ERP); no toca observaciones | `RemitosTableroTest` |
+| 12/11/2026 | (este cambio) | Sync de clientes por SQL: la paginación de `clientes.php` de RP estaba rota y solo se actualizaban 100 de 3.784 clientes por corrida | Los datos de clientes se refrescan (llevaban hasta 20 días sin actualizarse); no borra nada ni toca los campos propios del panel ni las observaciones | `ClienteSyncTest` |
 
 Los cambios anteriores al 6/11/2026 están en el historial de Git (`git log`); este registro empieza acá.
 

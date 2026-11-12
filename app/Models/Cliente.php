@@ -12,7 +12,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * Cliente espejado de RP Sistemas.
  *
  * Los datos del ERP son de solo lectura: los pisa `ClienteSyncService` cada 5
- * minutos. Los campos propios del panel (`tipo_cliente`, `tiene_legajo`,
+ * minutos, leyendo la tabla `CLIENTES` del ERP por SQL (no por `clientes.php`,
+ * cuya paginación está rota desde el 23/10/2026). Los campos propios del panel (`tipo_cliente`, `tiene_legajo`,
  * `habilitado`, `notas`, `mail_nuevo`, y los derivados `fecha_vencimiento` /
  * `documentacion_completa`) quedan **fuera** de la lista de columnas de ese
  * `upsert()` a propósito.
